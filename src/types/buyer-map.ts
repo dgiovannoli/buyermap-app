@@ -20,6 +20,7 @@ export interface BuyerMapData {
   confidenceScore: number;
   confidenceExplanation: string;
   quotes: Quote[];
+  effectiveConfidence?: number;
 }
 
 export interface UploadedFiles {

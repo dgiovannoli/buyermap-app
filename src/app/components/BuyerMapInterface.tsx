@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react';
 import { BuyerMapData, UploadedFiles, ActiveTab, ComparisonOutcome } from '@/types/buyer-map';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 import { createClientComponent } from '@/lib/supabase-client';
 import AuthModal from './AuthModal';
 
@@ -22,6 +22,7 @@ const ModernBuyerMapLanding = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const supabase = createClientComponent();
+  const [windowWidth, setWindowWidth] = useState<number>(0);
 
   const getEffectiveConfidence = useCallback((item: BuyerMapData): number => {
     const activeQuotes = item.quotes.filter(quote => !rejectedQuotes.has(quote.id));
@@ -36,15 +37,15 @@ const ModernBuyerMapLanding = () => {
       'Misaligned': 0
     };
     
-    const filteredData = data.map(item => ({
+    const filteredData = data.map((item: BuyerMapData) => ({
       ...item,
       effectiveConfidence: getEffectiveConfidence(item)
     }));
     
-    const totalWeighted = filteredData.reduce((sum, item) => {
+    const totalWeighted = filteredData.reduce((sum: number, item: BuyerMapData & { effectiveConfidence: number }) => {
       return sum + (outcomeWeights[item.comparisonOutcome] * (item.effectiveConfidence / 100));
     }, 0);
-    
+
     const maxPossible = filteredData.length * 2;
     const score = Math.round((totalWeighted / maxPossible) * 100);
     setOverallScore(score);
@@ -59,13 +60,13 @@ const ModernBuyerMapLanding = () => {
     getUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (event: string, session: Session | null) => {
         setUser(session?.user ?? null);
       }
     );
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabase.auth]);
 
   useEffect(() => {
     if (currentStep === 3) {
@@ -129,9 +130,11 @@ const ModernBuyerMapLanding = () => {
   }, [currentStep, calculateOverallScore]);
 
   const handleQuoteRejection = (quoteId: number): void => {
-    const newRejected = new Set(rejectedQuotes);
-    newRejected.add(quoteId);
-    setRejectedQuotes(newRejected);
+    setRejectedQuotes((prev: Set<number>) => {
+      const newRejected = new Set(prev);
+      newRejected.add(quoteId);
+      return newRejected;
+    });
     calculateOverallScore(buyerMapData);
   };
 
@@ -139,9 +142,9 @@ const ModernBuyerMapLanding = () => {
     if (!files) return;
 
     if (type === 'deck') {
-      setUploadedFiles(prev => ({ ...prev, deck: files[0] }));
+      setUploadedFiles((prev: UploadedFiles) => ({ ...prev, deck: files[0] }));
     } else {
-      setUploadedFiles(prev => ({ 
+      setUploadedFiles((prev: UploadedFiles) => ({ 
         ...prev, 
         interviews: [...prev.interviews, ...Array.from(files)] 
       }));
@@ -150,23 +153,25 @@ const ModernBuyerMapLanding = () => {
 
   const removeFile = (type: 'deck' | 'interviews', index?: number): void => {
     if (type === 'deck') {
-      setUploadedFiles(prev => ({ ...prev, deck: null }));
+      setUploadedFiles((prev: UploadedFiles) => ({ ...prev, deck: null }));
     } else if (typeof index === 'number') {
-      setUploadedFiles(prev => ({
+      setUploadedFiles((prev: UploadedFiles) => ({
         ...prev,
-        interviews: prev.interviews.filter((_, i) => i !== index)
+        interviews: prev.interviews.filter((_: File, i: number) => i !== index)
       }));
     }
   };
 
   const toggleRowExpansion = (id: number): void => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRows(newExpanded);
+    setExpandedRows((prev: Set<number>) => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(id)) {
+        newExpanded.delete(id);
+      } else {
+        newExpanded.add(id);
+      }
+      return newExpanded;
+    });
   };
 
   const getOutcomeColor = (outcome: ComparisonOutcome): string => {
@@ -191,15 +196,15 @@ const ModernBuyerMapLanding = () => {
   };
 
   const getFilteredData = (): BuyerMapData[] => {
-    const sorted = [...buyerMapData].sort((a, b) => getEffectiveConfidence(a) - getEffectiveConfidence(b));
+    const sorted = [...buyerMapData].sort((a: BuyerMapData, b: BuyerMapData) => getEffectiveConfidence(a) - getEffectiveConfidence(b));
     
     switch (activeTab) {
       case 'aligned':
-        return sorted.filter(item => item.comparisonOutcome === 'Aligned');
+        return sorted.filter((item: BuyerMapData) => item.comparisonOutcome === 'Aligned');
       case 'insights':
-        return sorted.filter(item => item.comparisonOutcome === 'New Data Added');
+        return sorted.filter((item: BuyerMapData) => item.comparisonOutcome === 'New Data Added');
       case 'misaligned':
-        return sorted.filter(item => item.comparisonOutcome === 'Misaligned');
+        return sorted.filter((item: BuyerMapData) => item.comparisonOutcome === 'Misaligned');
       case 'all':
       default:
         return sorted;
@@ -208,9 +213,9 @@ const ModernBuyerMapLanding = () => {
 
   const getTabCounts = (): Record<Exclude<ActiveTab, 'all'>, number> => {
     return {
-      aligned: buyerMapData.filter(item => item.comparisonOutcome === 'Aligned').length,
-      insights: buyerMapData.filter(item => item.comparisonOutcome === 'New Data Added').length,
-      misaligned: buyerMapData.filter(item => item.comparisonOutcome === 'Misaligned').length
+      aligned: buyerMapData.filter((item: BuyerMapData) => item.comparisonOutcome === 'Aligned').length,
+      insights: buyerMapData.filter((item: BuyerMapData) => item.comparisonOutcome === 'New Data Added').length,
+      misaligned: buyerMapData.filter((item: BuyerMapData) => item.comparisonOutcome === 'Misaligned').length
     };
   };
 
@@ -225,6 +230,21 @@ const ModernBuyerMapLanding = () => {
     setActiveTab(tab);
   };
 
+  // Add/replace styles for main container and panels
+  const mainContainerStyles = `main-container grid gap-8 md:gap-10 lg:gap-16 px-4 md:px-8 lg:px-16 py-8 md:py-16`;
+  const leftPanelStyles = `left-panel flex flex-col justify-center space-y-4 md:space-y-6 lg:space-y-8 w-full md:w-auto`;
+  const rightPanelStyles = `right-panel w-full md:w-auto`;
+
+  useEffect(() => {
+    // Only run on client
+    if (typeof window !== 'undefined') {
+      setWindowWidth(window.innerWidth);
+      const handleResize = () => setWindowWidth(window.innerWidth);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
   if (currentStep === 1) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white overflow-hidden">
@@ -236,137 +256,126 @@ const ModernBuyerMapLanding = () => {
         </div>
 
         {/* Hero Section - Perfect 2 Column Split */}
-        <div className="relative max-w-7xl mx-auto px-6 py-20">
-          <div className="grid grid-cols-2 gap-16 items-center min-h-screen">
-            {/* Left Column - Hero Copy & CTA */}
-            <div className="space-y-8">
-              {/* Badge/Tag */}
-              <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-                <span className="text-sm font-medium text-blue-300">✨ BuyerMap Analysis</span>
-              </div>
-              
-              {/* Hero Headline */}
-              <div>
-                <h1 className="text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
-                  Validate Your ICP Assumptions
-                </h1>
-                <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-                  Compare your sales messaging against real customer interviews
-                </p>
-              </div>
+        <div className={mainContainerStyles} style={{
+          gridTemplateColumns: '1fr',
+          ...(windowWidth >= 768 && windowWidth < 1024 ? { gridTemplateColumns: '1fr 1fr' } : {}),
+          ...(windowWidth >= 1024 ? { gridTemplateColumns: '2fr 3fr' } : {})
+        }}>
+          {/* Left Panel */}
+          <div className={leftPanelStyles} style={{
+            maxWidth: '480px',
+            margin: '0 auto',
+            gap: '1rem',
+            padding: '1.5rem 0',
+          }}>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-2 md:mb-3 lg:mb-4 bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+              Validate Your ICP Assumptions
+            </h1>
+            <p className="text-base md:text-lg lg:text-xl text-gray-400 mb-2 md:mb-3 lg:mb-4 leading-snug">
+              Compare your sales messaging against real customer interviews
+            </p>
+            <button
+              onClick={() => setCurrentStep(2)}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 md:px-10 md:py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200 mb-2"
+              style={{ minHeight: 48 }}
+            >
+              Create Your BuyerMap Report
+            </button>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              Free to try • Export or save with account
+            </p>
+          </div>
 
-              {/* Main CTA */}
-              <div className="space-y-4">
-                <button
-                  onClick={() => setCurrentStep(2)}
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200"
-                >
-                  Create Your BuyerMap Report
-                </button>
-                
-                <p className="text-sm text-gray-500 text-center">
-                  Free to try • Export or save with account
-                </p>
-              </div>
+          {/* Right Panel (Demo Preview) */}
+          <div className={rightPanelStyles} style={{
+            minWidth: 0,
+            padding: '2rem 1.5rem',
+            background: 'rgba(255,255,255,0.08)',
+            borderRadius: '2rem',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem',
+          }}>
+            {/* Demo Hero Score */}
+            <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white p-8">
+              <h3 className="text-sm font-medium mb-2 opacity-90">Overall Alignment Score</h3>
+              <div className="text-5xl font-bold mb-3">92%</div>
+              <p className="text-sm opacity-90">Highly aligned with buyer reality</p>
             </div>
 
-            {/* Right Column - Demo Preview */}
-            <div className="relative">
-              {/* Glassmorphism Container */}
-              <div className="relative bg-white/10 backdrop-blur-lg rounded-3xl overflow-hidden border border-white/20 shadow-2xl transform hover:scale-105 transition-transform duration-500">
-                {/* Demo Hero Score */}
-                <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white p-8">
-                  <h3 className="text-sm font-medium mb-2 opacity-90">Overall Alignment Score</h3>
-                  <div className="text-5xl font-bold mb-3">73%</div>
-                  <p className="text-sm opacity-90">Generally aligned, with room for refinement</p>
+            {/* Demo Tab Navigation */}
+            <div className="border-b border-white/10 px-6 py-2">
+              <nav className="-mb-px flex space-x-6">
+                <div className="py-3 border-b-2 border-white/50 text-sm font-medium text-white">
+                  All Results (8)
+                </div>
+                <div className="py-3 text-sm text-gray-400">
+                  Misalignments (4)
+                </div>
+                <div className="py-3 text-sm text-gray-400">
+                  New Insights (3)
+                </div>
+                <div className="py-3 text-sm text-gray-400">
+                  Validated (1)
+                </div>
+              </nav>
+            </div>
+
+            {/* Demo Content */}
+            <div className="p-6">
+              <div className="grid grid-cols-2 gap-8 items-start">
+                {/* Left Column - Theme Details */}
+                <div className="space-y-3">
+                  <div className="text-xs text-blue-300 font-medium">COMPETITIVE POSITIONING</div>
+                  <h4 className="text-lg font-bold text-white">Speed vs Security Messaging</h4>
+                  <p className="text-sm text-gray-300">
+                    Customers choose us primarily for faster deployment (3x faster than competitors)
+                  </p>
+                  {/* Messaging Recommendation */}
+                  <div className="bg-blue-500/20 border-l-4 border-blue-400 rounded-r-lg p-3 mt-4">
+                    <h5 className="font-semibold text-blue-200 mb-1 text-xs flex items-center">
+                      💡 Messaging Recommendation:
+                    </h5>
+                    <p className="text-xs text-blue-300">
+                      Lead with enterprise security first, position speed as efficiency benefit for implementation
+                    </p>
+                  </div>
                 </div>
 
-                {/* Demo Tab Navigation */}
-                <div className="border-b border-white/10 px-6 py-2">
-                  <nav className="-mb-px flex space-x-6">
-                    <div className="py-3 border-b-2 border-white/50 text-sm font-medium text-white">
-                      All Results (3)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      Misalignments (2)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      New Insights (1)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      Validated (0)
-                    </div>
-                  </nav>
-                </div>
-
-                {/* Demo Content */}
-                <div className="p-6">
-                  <div className="grid grid-cols-2 gap-8 items-start">
-                    {/* Left Column - Theme Details */}
-                    <div className="space-y-3">
-                      <div className="text-xs text-blue-300 font-medium">PAIN POINTS</div>
-                      <h4 className="text-lg font-bold text-white">Evidence Review Burden</h4>
-                      <p className="text-sm text-gray-300">
-                        Attorneys spend 87+ workdays/year on manual evidence review
-                      </p>
-                      
-                      {/* Messaging Recommendation */}
-                      <div className="bg-blue-500/20 border-l-4 border-blue-400 rounded-r-lg p-3 mt-4">
-                        <h5 className="font-semibold text-blue-200 mb-1 text-xs flex items-center">
-                          💡 Messaging Recommendation:
-                        </h5>
-                        <p className="text-xs text-blue-300">
-                          Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days
-                        </p>
+                {/* Right Column - Reality & Metrics */}
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-300">
+                    Security and compliance are the #1 decision factor, speed is nice-to-have
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/30 text-blue-200">
+                      Misaligned
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-12 bg-white/20 rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full bg-green-400" style={{ width: '92%' }}></div>
                       </div>
-                    </div>
-
-                    {/* Right Column - Reality & Metrics */}
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-300">
-                        Attorneys actually spend 60-120 workdays depending on case complexity and firm size
-                      </p>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/30 text-blue-200">
-                          New Data Added
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-12 bg-white/20 rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full bg-green-400" style={{ width: '85%' }}></div>
-                          </div>
-                          <span className="text-sm font-bold text-white">85%</span>
-                        </div>
-                      </div>
-                      
-                      <button className="text-blue-300 text-sm font-medium hover:text-blue-200 transition-colors">
-                        Show Details ▼
-                      </button>
+                      <span className="text-sm font-bold text-white">92%</span>
                     </div>
                   </div>
-
-                  {/* Supporting Evidence Section */}
-                  <div className="mt-6 pt-4 border-t border-white/10">
-                    <h5 className="font-semibold text-white mb-3 text-sm">Supporting Evidence:</h5>
-                    <div className="bg-white/5 rounded-lg p-3">
-                      <p className="text-sm text-gray-300 italic mb-2">
-                        &quot;In complex cases, I easily spend 3-4 months just reviewing evidence&quot;
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        <strong>Maria Santos</strong>, Criminal Defense Attorney • Interview #2
-                      </p>
-                    </div>
-                  </div>
+                  <button className="text-blue-300 text-sm font-medium hover:text-blue-200 transition-colors">
+                    Show Details ▼
+                  </button>
                 </div>
               </div>
 
-              {/* Floating Elements */}
-              <div className="absolute -bottom-6 -left-4 bg-green-500 rounded-xl shadow-lg px-4 py-3 transform -rotate-2">
-                <p className="text-xs text-white font-medium">✓ 3 insights validated</p>
-              </div>
-              
-              <div className="absolute -top-4 -right-4 bg-gradient-to-r from-red-400 to-orange-500 text-white rounded-xl px-4 py-2 shadow-lg transform rotate-3">
-                <p className="text-xs font-bold">2 misalignments found</p>
+              {/* Supporting Evidence Section */}
+              <div className="mt-6 pt-4 border-t border-white/10">
+                <h5 className="font-semibold text-white mb-3 text-sm">Supporting Evidence:</h5>
+                <div className="bg-white/5 rounded-lg p-3">
+                  <p className="text-sm text-gray-300 italic mb-2">
+                    &quot;Speed doesn&apos;t matter if we can&apos;t pass SOC 2 audit&quot;
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    <strong>Sarah Chen</strong>, IT Director • Interview #4
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -571,7 +580,7 @@ const ModernBuyerMapLanding = () => {
                 
                 {uploadedFiles.interviews.length > 0 && (
                   <div className="space-y-2 mb-4">
-                    {uploadedFiles.interviews.map((file, index) => (
+                    {uploadedFiles.interviews.map((file: File, index: number) => (
                       <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">{file.name}</span>
