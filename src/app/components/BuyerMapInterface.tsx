@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react';
 import { BuyerMapData, UploadedFiles, ActiveTab, ComparisonOutcome } from '@/types/buyer-map';
-import { User } from '@supabase/auth-helpers-nextjs';
+import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import AuthModal from './AuthModal';
 

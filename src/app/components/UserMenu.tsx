@@ -1,24 +1,17 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { User } from '@supabase/auth-helpers-nextjs'
-import { createClientComponent } from '@/lib/supabase'
-import AuthModal from './AuthModal'
+import { useState, useEffect } from 'react'
+import { User } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 
-interface UserMenuProps {
-  className?: string
-}
-
-export default function UserMenu({ className = '' }: UserMenuProps) {
+export default function UserMenu() {
   const [user, setUser] = useState<User | null>(null)
-  const [showAuthModal, setShowAuthModal] = useState(false)
-  const supabase = createClientComponent()
-
-  const getUser = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    setUser(user)
-  }, [supabase])
 
   useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+    }
+
     getUser()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -28,39 +21,23 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
     )
 
     return () => subscription.unsubscribe()
-  }, [getUser, supabase])
+  }, [])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
   }
 
-  return (
-    <div className={className}>
-      {user ? (
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-white/80">
-            {user.email}
-          </span>
-          <button
-            onClick={handleSignOut}
-            className="px-4 py-2 text-sm text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowAuthModal(true)}
-          className="px-4 py-2 text-sm text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-        >
-          Sign In
-        </button>
-      )}
+  if (!user) return null
 
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
+  return (
+    <div className="flex items-center gap-4">
+      <span className="text-sm text-gray-700">{user.email}</span>
+      <button
+        onClick={handleSignOut}
+        className="text-sm text-red-600 hover:text-red-800"
+      >
+        Sign Out
+      </button>
     </div>
   )
 }
