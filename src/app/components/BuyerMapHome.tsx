@@ -1,144 +1,782 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Upload, Users, BarChart3, Brain, Target } from 'lucide-react';
-import BuyerMapInterface from './BuyerMapInterface';
+import { useState, useEffect } from 'react';
 
-export default function BuyerMapHome() {
-  const [currentView, setCurrentView] = useState<'home' | 'app'>('home');
+interface Quote {
+  id: number;
+  text: string;
+  speaker: string;
+  role: string;
+  source: string;
+  rejected: boolean;
+}
 
-  const handleStartFlow = () => {
-    setCurrentView('app');
+interface BuyerMapItem {
+  id: number;
+  icpAttribute: string;
+  icpTheme: string;
+  v1Assumption: string;
+  whyAssumption: string;
+  evidenceFromDeck: string;
+  realityFromInterviews: string;
+  comparisonOutcome: string;
+  waysToAdjustMessaging: string;
+  confidenceScore: number;
+  confidenceExplanation: string;
+  quotes: Quote[];
+}
+
+interface UploadedFiles {
+  deck: File | null;
+  interviews: File[];
+}
+
+const ModernBuyerMapLanding = () => {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFiles>({ deck: null, interviews: [] });
+  const [buyerMapData, setBuyerMapData] = useState<BuyerMapItem[]>([]);
+  const [overallScore, setOverallScore] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState('all');
+  const [expandedRows, setExpandedRows] = useState(new Set<number>());
+  const [rejectedQuotes, setRejectedQuotes] = useState(new Set<number>());
+
+  // Mock data
+  const mockBuyerMapData: BuyerMapItem[] = [
+    {
+      id: 1,
+      icpAttribute: "Pain Points",
+      icpTheme: "Evidence Review Burden",
+      v1Assumption: "Attorneys spend 87+ workdays/year on manual evidence review",
+      whyAssumption: "Market research indicated high time investment in evidence processing",
+      evidenceFromDeck: "Slide 4: '87 workdays wasted annually'",
+      realityFromInterviews: "Attorneys actually spend 60-120 workdays depending on case complexity and firm size",
+      comparisonOutcome: "New Data Added",
+      waysToAdjustMessaging: "Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days",
+      confidenceScore: 85,
+      confidenceExplanation: "8 quotes from diverse attorney roles, consistent pattern across firm sizes",
+      quotes: [
+        { id: 1, text: "In complex cases, I easily spend 3-4 months just reviewing evidence", speaker: "Maria Santos", role: "Criminal Defense Attorney", source: "Interview #2", rejected: false },
+        { id: 2, text: "For our firm size, 87 days sounds about right for major cases", speaker: "David Chen", role: "Managing Partner", source: "Interview #5", rejected: false }
+      ]
+    },
+    {
+      id: 2,
+      icpAttribute: "Desired Outcomes",
+      icpTheme: "Courtroom Advantage Priority",
+      v1Assumption: "Primary goal is creating searchable, court-ready insights",
+      whyAssumption: "Product positioning focused on trial preparation and courtroom success",
+      evidenceFromDeck: "Slide 7: 'Transform evidence into courtroom advantage'",
+      realityFromInterviews: "Defense attorneys prioritize avoiding malpractice over gaining advantages",
+      comparisonOutcome: "Misaligned",
+      waysToAdjustMessaging: "Lead with risk mitigation and malpractice prevention, position advantages as secondary benefit",
+      confidenceScore: 92,
+      confidenceExplanation: "12 quotes across all interview types, unanimous sentiment on risk vs advantage",
+      quotes: [
+        { id: 3, text: "I just need to make sure I don't miss anything that could hurt my client", speaker: "Jennifer Park", role: "Solo Practitioner", source: "Interview #1", rejected: false },
+        { id: 4, text: "It's not about gaining an edge - it's about not getting blindsided", speaker: "Robert Kim", role: "Senior Associate", source: "Interview #7", rejected: false }
+      ]
+    },
+    {
+      id: 3,
+      icpAttribute: "Buyer Titles",
+      icpTheme: "Decision Maker Identification",
+      v1Assumption: "Criminal defense attorneys are primary decision makers",
+      whyAssumption: "Sales conversations typically started with attorneys",
+      evidenceFromDeck: "Slide 2: 'Built for Criminal Defense Attorneys'",
+      realityFromInterviews: "Partners and office managers heavily influence tech decisions, especially on budget",
+      comparisonOutcome: "Misaligned",
+      waysToAdjustMessaging: "Include office managers and partners in marketing materials, create ROI-focused content for decision influencers",
+      confidenceScore: 78,
+      confidenceExplanation: "6 quotes from decision makers, clear pattern of multi-stakeholder involvement",
+      quotes: [
+        { id: 5, text: "I have to run any tech purchase over $5K through our office manager first", speaker: "Lisa Wang", role: "Associate Attorney", source: "Interview #3", rejected: false },
+        { id: 6, text: "Partners care more about billable efficiency than the attorneys do", speaker: "Tom Rodriguez", role: "Office Manager", source: "Interview #8", rejected: false }
+      ]
+    }
+  ];
+
+  useEffect(() => {
+    if (currentStep === 3) {
+      setBuyerMapData(mockBuyerMapData);
+      calculateOverallScore(mockBuyerMapData);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  const calculateOverallScore = (data: BuyerMapItem[]) => {
+    const outcomeWeights: Record<string, number> = { 'Aligned': 2, 'New Data Added': 1, 'Misaligned': 0 };
+    const filteredData = data.map(item => ({
+      ...item,
+      effectiveConfidence: getEffectiveConfidence(item)
+    }));
+    
+    const totalWeighted = filteredData.reduce((sum, item) => {
+      return sum + (outcomeWeights[item.comparisonOutcome] * (item.effectiveConfidence / 100));
+    }, 0);
+    const maxPossible = filteredData.length * 2;
+    const score = Math.round((totalWeighted / maxPossible) * 100);
+    setOverallScore(score);
   };
 
-  if (currentView === 'app') {
-    return <BuyerMapInterface onStartFlow={handleStartFlow} />;
-  }
+  const getEffectiveConfidence = (item: BuyerMapItem) => {
+    const activeQuotes = item.quotes.filter(quote => !rejectedQuotes.has(quote.id));
+    const rejectionPenalty = (item.quotes.length - activeQuotes.length) * 10;
+    return Math.max(item.confidenceScore - rejectionPenalty, 0);
+  };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-purple-600/10"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-          <div className="text-center">
-            <div className="flex justify-center mb-8">
-              <div className="relative p-4 bg-white rounded-2xl shadow-lg">
-                <Brain className="h-12 w-12 text-blue-600" />
-                <div className="absolute -top-2 -right-2 h-6 w-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <Target className="h-3 w-3 text-white" />
+  const handleQuoteRejection = (quoteId: number) => {
+    const newRejected = new Set(rejectedQuotes);
+    newRejected.add(quoteId);
+    setRejectedQuotes(newRejected);
+    calculateOverallScore(buyerMapData);
+  };
+
+  const handleFileUpload = (type: string, files: FileList | null) => {
+    if (!files) return;
+    
+    if (type === 'deck') {
+      setUploadedFiles(prev => ({ ...prev, deck: files[0] }));
+    } else {
+      setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...Array.from(files)] }));
+    }
+  };
+
+  const removeFile = (type: string, index: number | null = null) => {
+    if (type === 'deck') {
+      setUploadedFiles(prev => ({ ...prev, deck: null }));
+    } else {
+      setUploadedFiles(prev => ({
+        ...prev,
+        interviews: prev.interviews.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const toggleRowExpansion = (id: number) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const getOutcomeColor = (outcome: string) => {
+    switch (outcome) {
+      case 'Aligned': return 'text-green-700 bg-green-100 border-green-300';
+      case 'New Data Added': return 'text-blue-700 bg-blue-100 border-blue-300';
+      case 'Misaligned': return 'text-red-700 bg-red-100 border-red-300';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 80) return 'bg-green-500';
+    if (confidence >= 60) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getScoreMessage = (score: number) => {
+    if (score >= 90) return 'Your messaging is highly aligned with buyer reality';
+    if (score >= 70) return 'Generally aligned, with room for refinement';
+    return 'Major adjustments to core messaging likely needed';
+  };
+
+  const getFilteredData = () => {
+    const sorted = [...buyerMapData].sort((a, b) => getEffectiveConfidence(a) - getEffectiveConfidence(b));
+    
+    switch (activeTab) {
+      case 'aligned':
+        return sorted.filter(item => item.comparisonOutcome === 'Aligned');
+      case 'insights':
+        return sorted.filter(item => item.comparisonOutcome === 'New Data Added');
+      case 'misaligned':
+        return sorted.filter(item => item.comparisonOutcome === 'Misaligned');
+      case 'all':
+      default:
+        return sorted;
+    }
+  };
+
+  const getTabCounts = () => {
+    return {
+      aligned: buyerMapData.filter(item => item.comparisonOutcome === 'Aligned').length,
+      insights: buyerMapData.filter(item => item.comparisonOutcome === 'New Data Added').length,
+      misaligned: buyerMapData.filter(item => item.comparisonOutcome === 'Misaligned').length
+    };
+  };
+
+  if (currentStep === 1) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse"></div>
+        </div>
+
+        {/* Hero Section - Perfect 2 Column Split */}
+        <div className="relative max-w-7xl mx-auto px-6 py-20">
+          <div className="grid grid-cols-2 gap-16 items-center min-h-screen">
+            {/* Left Column - Hero Copy & CTA */}
+            <div className="space-y-8">
+              {/* Badge/Tag */}
+              <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
+                <span className="text-sm font-medium text-blue-300">✨ BuyerMap Analysis</span>
+              </div>
+              
+              {/* Hero Headline */}
+              <div>
+                <h1 className="text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+                  Validate Your ICP Assumptions
+                </h1>
+                <p className="text-xl text-gray-400 mb-8 leading-relaxed">
+                  Compare your sales messaging against real customer interviews
+                </p>
+              </div>
+
+              {/* Main CTA */}
+              <div className="space-y-4">
+                <button
+                  onClick={() => setCurrentStep(2)}
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200"
+                >
+                  Create Your BuyerMap Report
+                </button>
+                
+                <p className="text-sm text-gray-500 text-center">
+                  Free to try • Export or save with account
+                </p>
+              </div>
+            </div>
+
+            {/* Right Column - Demo Preview */}
+            <div className="relative">
+              {/* Glassmorphism Container */}
+              <div className="relative bg-white/10 backdrop-blur-lg rounded-3xl overflow-hidden border border-white/20 shadow-2xl transform hover:scale-105 transition-transform duration-500">
+                {/* Demo Hero Score */}
+                <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white p-8">
+                  <h3 className="text-sm font-medium mb-2 opacity-90">Overall Alignment Score</h3>
+                  <div className="text-5xl font-bold mb-3">73%</div>
+                  <p className="text-sm opacity-90">Generally aligned, with room for refinement</p>
+                </div>
+
+                {/* Demo Tab Navigation */}
+                <div className="border-b border-white/10 px-6 py-2">
+                  <nav className="-mb-px flex space-x-6">
+                    <div className="py-3 border-b-2 border-white/50 text-sm font-medium text-white">
+                      All Results (3)
+                    </div>
+                    <div className="py-3 text-sm text-gray-400">
+                      Misalignments (2)
+                    </div>
+                    <div className="py-3 text-sm text-gray-400">
+                      New Insights (1)
+                    </div>
+                    <div className="py-3 text-sm text-gray-400">
+                      Validated (0)
+                    </div>
+                  </nav>
+                </div>
+
+                {/* Demo Content */}
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-8 items-start">
+                    {/* Left Column - Theme Details */}
+                    <div className="space-y-3">
+                      <div className="text-xs text-blue-300 font-medium">PAIN POINTS</div>
+                      <h4 className="text-lg font-bold text-white">Evidence Review Burden</h4>
+                      <p className="text-sm text-gray-300">
+                        Attorneys spend 87+ workdays/year on manual evidence review
+                      </p>
+                      
+                      {/* Messaging Recommendation */}
+                      <div className="bg-blue-500/20 border-l-4 border-blue-400 rounded-r-lg p-3 mt-4">
+                        <h5 className="font-semibold text-blue-200 mb-1 text-xs flex items-center">
+                          💡 Messaging Recommendation:
+                        </h5>
+                        <p className="text-xs text-blue-300">
+                          Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Right Column - Reality & Metrics */}
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-300">
+                        Attorneys actually spend 60-120 workdays depending on case complexity and firm size
+                      </p>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/30 text-blue-200">
+                          New Data Added
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-12 bg-white/20 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-green-400" style={{ width: '85%' }}></div>
+                          </div>
+                          <span className="text-sm font-bold text-white">85%</span>
+                        </div>
+                      </div>
+                      
+                      <button className="text-blue-300 text-sm font-medium hover:text-blue-200 transition-colors">
+                        Show Details ▼
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Supporting Evidence Section */}
+                  <div className="mt-6 pt-4 border-t border-white/10">
+                    <h5 className="font-semibold text-white mb-3 text-sm">Supporting Evidence:</h5>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-sm text-gray-300 italic mb-2">
+                        &ldquo;In complex cases, I easily spend 3-4 months just reviewing evidence&rdquo;
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        <strong>Maria Santos</strong>, Criminal Defense Attorney • Interview #2
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Floating Elements */}
+              <div className="absolute -bottom-6 -left-4 bg-green-500 rounded-xl shadow-lg px-4 py-3 transform -rotate-2">
+                <p className="text-xs text-white font-medium">✓ 3 insights validated</p>
+              </div>
+              
+              <div className="absolute -top-4 -right-4 bg-gradient-to-r from-red-400 to-orange-500 text-white rounded-xl px-4 py-2 shadow-lg transform rotate-3">
+                <p className="text-xs font-bold">2 misalignments found</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* How It Works Section */}
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-white mb-4">How It Works</h2>
+            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+              Get actionable insights from your customer interviews in three simple steps
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+                1
+              </div>
+              <h3 className="text-xl font-bold mb-4 text-white">Upload Your Materials</h3>
+              <p className="text-gray-400 mb-6 leading-relaxed">
+                Share your sales deck and customer interview transcripts. We support PDF, PowerPoint, and text files.
+              </p>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                <div className="flex items-center justify-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                      <span className="text-xs">📄</span>
+                    </div>
+                    <span className="text-sm text-gray-300">Sales Deck</span>
+                  </div>
+                  <span className="text-gray-400">+</span>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+                      <span className="text-xs">🎤</span>
+                    </div>
+                    <span className="text-sm text-gray-300">Interviews</span>
+                  </div>
                 </div>
               </div>
             </div>
             
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              Buyer<span className="text-blue-600">Map</span>
-            </h1>
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+                2
+              </div>
+              <h3 className="text-xl font-bold mb-4 text-white">AI Analysis</h3>
+              <p className="text-gray-400 mb-6 leading-relaxed">
+                Our AI extracts assumptions from your deck and validates them against customer quotes from interviews.
+              </p>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span className="text-sm text-gray-300">Extract assumptions</span>
+                    </div>
+                    <span className="text-xs text-green-400 font-medium">✓</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      <span className="text-sm text-gray-300">Match customer quotes</span>
+                    </div>
+                    <span className="text-xs text-green-400 font-medium">✓</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-gray-300">Calculate confidence</span>
+                    </div>
+                    <span className="text-xs text-blue-400 font-medium">...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
             
-            <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Transform your customer data into actionable buyer intelligence with AI-powered scoring and insights
+            <div className="text-center group">
+              <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+                3
+              </div>
+              <h3 className="text-xl font-bold mb-4 text-white">Get Actionable Results</h3>
+              <p className="text-gray-400 mb-6 leading-relaxed">
+                Receive a detailed report with messaging recommendations, confidence scores, and supporting evidence.
+              </p>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-300">Alignment Score</span>
+                    <span className="text-lg font-bold text-blue-400">73%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-300">Insights Found</span>
+                    <span className="text-lg font-bold text-green-400">3</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-300">Recommendations</span>
+                    <span className="text-lg font-bold text-purple-400">5</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Final CTA Section */}
+        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl p-12 text-white backdrop-blur-sm">
+            <h2 className="text-3xl font-bold mb-4">Ready to validate your assumptions?</h2>
+            <p className="text-xl mb-8 opacity-90">
+              Join hundreds of teams improving their messaging with data-driven insights
             </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              <button 
-                onClick={handleStartFlow}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+            <button
+              onClick={() => setCurrentStep(2)}
+              className="bg-white text-blue-600 px-10 py-4 rounded-xl text-lg font-bold hover:bg-gray-50 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              Create Your BuyerMap Report
+            </button>
+            <p className="text-sm mt-4 opacity-75">Free to try • Export or save with account</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Other steps with original styling
+  return (
+    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+      <div className="bg-white rounded-lg shadow-sm p-8">
+        {/* Step Indicator */}
+        <div className="flex items-center justify-center mb-8">
+          {[1, 2, 3, 4].map((step) => (
+            <div key={step} className="flex items-center">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
+                currentStep >= step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+              }`}>
+                {step}
+              </div>
+              {step < 4 && (
+                <div className={`w-16 h-1 mx-2 ${
+                  currentStep > step ? 'bg-blue-600' : 'bg-gray-200'
+                }`} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Step 2: Upload */}
+        {currentStep === 2 && (
+          <div className="space-y-8">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Your Materials</h2>
+              <h3 className="text-xl font-bold mb-4 text-white">We&apos;ll validate your ICP assumptions against interview data</h3>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
+                <h3 className="text-lg font-semibold mb-2">Sales Deck / Pitch Materials</h3>
+                <p className="text-gray-500 mb-4">Upload your current sales presentation</p>
+                
+                {uploadedFiles.deck ? (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{uploadedFiles.deck.name}</span>
+                      <button onClick={() => removeFile('deck')} className="text-red-500 hover:text-red-700 text-xl">×</button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <input type="file" className="hidden" accept=".pdf,.ppt,.pptx" onChange={(e) => handleFileUpload('deck', e.target.files)} />
+                    <div className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 inline-block">Choose File</div>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
+                <h3 className="text-lg font-semibold mb-2">Customer Interview Transcripts</h3>
+                <p className="text-gray-500 mb-4">Upload up to 10 interview transcripts</p>
+                
+                {uploadedFiles.interviews.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {uploadedFiles.interviews.map((file, index) => (
+                      <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{file.name}</span>
+                          <button onClick={() => removeFile('interviews', index)} className="text-red-500 hover:text-red-700 text-xl">×</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <label className="cursor-pointer">
+                  <input type="file" className="hidden" multiple accept=".txt,.doc,.docx,.pdf" onChange={(e) => handleFileUpload('interviews', e.target.files)} />
+                  <div className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 inline-block">Add Interview Files</div>
+                </label>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() => setCurrentStep(3)}
+                disabled={!uploadedFiles.deck || uploadedFiles.interviews.length === 0}
+                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                Start Analysis
-              </button>
-              <button className="text-blue-600 hover:text-blue-700 px-8 py-4 rounded-xl text-lg font-semibold transition-colors border-2 border-blue-200 hover:border-blue-300">
-                Watch Demo
+                Process & Analyze
               </button>
             </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Features Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Powerful Features for Buyer Intelligence
-          </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Everything you need to identify, score, and convert your best prospects
-          </p>
-        </div>
+        {/* Step 3: Results */}
+        {currentStep === 3 && (
+          <div className="space-y-8">
+            {overallScore !== null && (
+              <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-8 mb-8">
+                <h2 className="text-lg font-medium mb-2">Overall Alignment Score</h2>
+                <div className="text-6xl font-bold mb-4">{overallScore}%</div>
+                <p className="text-lg opacity-90">{getScoreMessage(overallScore)}</p>
+              </div>
+            )}
 
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="bg-blue-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-              <Upload className="h-8 w-8 text-blue-600" />
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8">
+                {[
+                  { key: 'all', label: 'All Results', count: buyerMapData.length, color: 'gray' },
+                  { key: 'misaligned', label: 'Misalignments', count: getTabCounts().misaligned, color: 'red' },
+                  { key: 'insights', label: 'New Insights', count: getTabCounts().insights, color: 'blue' },
+                  { key: 'aligned', label: 'Validated', count: getTabCounts().aligned, color: 'green' }
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === tab.key
+                        ? `border-${tab.color}-500 text-${tab.color}-600`
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {tab.label} ({tab.count})
+                  </button>
+                ))}
+              </nav>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Smart Upload</h3>
-            <p className="text-gray-600">
-              Upload CSV, Excel, or connect your CRM. Our AI automatically detects and maps your data fields for instant analysis.
-            </p>
+
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {getFilteredData().map((item) => (
+                <div key={item.id} className="border-b border-gray-200 last:border-b-0">
+                  <div className="p-6 hover:bg-gray-50">
+                    <div className="grid grid-cols-12 gap-4 items-start">
+                      <div className="col-span-3">
+                        <div className="text-xs text-gray-500 mb-1">{item.icpAttribute}</div>
+                        <h3 className="font-semibold text-gray-900 mb-1">{item.icpTheme}</h3>
+                        <p className="text-sm text-gray-600">{item.v1Assumption}</p>
+                      </div>
+                      
+                      <div className="col-span-3">
+                        <p className="text-sm text-gray-700">{item.realityFromInterviews}</p>
+                      </div>
+                      
+                      <div className="col-span-2">
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${getOutcomeColor(item.comparisonOutcome)}`}>
+                          {item.comparisonOutcome}
+                        </span>
+                      </div>
+                      
+                      <div className="col-span-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${getConfidenceColor(getEffectiveConfidence(item))}`}
+                              style={{ width: `${getEffectiveConfidence(item)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium">{getEffectiveConfidence(item)}%</span>
+                        </div>
+                      </div>
+                      
+                      <div className="col-span-2 flex justify-end">
+                        <button
+                          onClick={() => toggleRowExpansion(item.id)}
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          {expandedRows.has(item.id) ? 'Hide Details ▲' : 'Show Details ▼'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-900 mb-2">💡 Messaging Recommendation:</h4>
+                      <p className="text-sm text-blue-800">{item.waysToAdjustMessaging}</p>
+                    </div>
+                  </div>
+
+                  {expandedRows.has(item.id) && (
+                    <div className="bg-gray-50 border-t border-gray-200 p-6">
+                      <div className="grid grid-cols-2 gap-8">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-3">Supporting Evidence</h4>
+                          <div className="space-y-3">
+                            {item.quotes.map((quote) => (
+                              <div key={quote.id} className={`border rounded-lg p-4 ${rejectedQuotes.has(quote.id) ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-gray-200'}`}>
+                                <p className="text-gray-700 mb-2 italic">&ldquo;{quote.text}&rdquo;</p>
+                                <div className="flex justify-between items-center">
+                                  <div className="text-xs text-gray-500">
+                                    <strong>{quote.speaker}</strong>, {quote.role} • {quote.source}
+                                  </div>
+                                  {!rejectedQuotes.has(quote.id) && (
+                                    <button
+                                      onClick={() => handleQuoteRejection(quote.id)}
+                                      className="text-red-500 hover:text-red-700 text-xs px-2 py-1 border border-red-300 rounded"
+                                    >
+                                      Reject Quote
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-3">Analysis Details</h4>
+                          <div className="space-y-4">
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h5 className="font-medium text-gray-900 mb-2">Original Assumption Source</h5>
+                              <p className="text-sm text-gray-600 mb-2">{item.whyAssumption}</p>
+                              <p className="text-xs text-blue-600">{item.evidenceFromDeck}</p>
+                            </div>
+                            
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <h5 className="font-medium text-gray-900 mb-2">Confidence Explanation</h5>
+                              <p className="text-sm text-gray-600">{item.confidenceExplanation}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() => setCurrentStep(4)}
+                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700"
+              >
+                Generate Report
+              </button>
+            </div>
           </div>
+        )}
 
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="bg-green-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-              <BarChart3 className="h-8 w-8 text-green-600" />
+        {/* Step 4: Export */}
+        {currentStep === 4 && (
+          <div className="space-y-8">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Validation Complete</h2>
+              <p className="text-gray-600">Your BuyerMap analysis is ready for export</p>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-4">AI Scoring</h3>
-            <p className="text-gray-600">
-              Advanced machine learning algorithms analyze buyer behavior patterns to generate accurate propensity scores.
-            </p>
+
+            {overallScore !== null && (
+              <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-6">
+                <div className="text-4xl font-bold mb-2">{overallScore}%</div>
+                <p className="text-lg">{getScoreMessage(overallScore)}</p>
+              </div>
+            )}
+
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Your Results</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-900">Free Export Options:</h4>
+                  <div className="space-y-2">
+                    <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
+                      📊 Download Excel Report
+                    </button>
+                    <button className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">
+                      📄 Download PDF Summary
+                    </button>
+                    <button className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50">
+                      📋 Copy to Clipboard
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-900">Save & Collaborate:</h4>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 mb-3">Create a free account to:</p>
+                    <ul className="text-xs text-blue-700 space-y-1">
+                      <li>• Save multiple BuyerMap reports</li>
+                      <li>• Share with your team</li>
+                      <li>• Track changes over time</li>
+                      <li>• Access advanced export options</li>
+                    </ul>
+                    <button className="w-full mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
+                      Create Free Account
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() => {
+                  setCurrentStep(1);
+                  setUploadedFiles({ deck: null, interviews: [] });
+                  setBuyerMapData([]);
+                  setOverallScore(null);
+                  setRejectedQuotes(new Set());
+                }}
+                className="bg-gray-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-gray-700"
+              >
+                Start New Analysis
+              </button>
+            </div>
           </div>
-
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-            <div className="bg-purple-100 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-              <Users className="h-8 w-8 text-purple-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Segmentation</h3>
-            <p className="text-gray-600">
-              Automatically segment your audience into buyer personas with detailed insights and targeting recommendations.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Section */}
-      <div className="bg-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-blue-600 mb-2">94%</div>
-              <div className="text-gray-600">Accuracy Rate</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-green-600 mb-2">3.2x</div>
-              <div className="text-gray-600">Conversion Lift</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-purple-600 mb-2">50K+</div>
-              <div className="text-gray-600">Records Analyzed</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-indigo-600 mb-2">24/7</div>
-              <div className="text-gray-600">Real-time Updates</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-16">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-            Ready to Transform Your Sales Process?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8">
-            Join thousands of sales teams using BuyerMap to identify and convert their best prospects
-          </p>
-          <button 
-            onClick={handleStartFlow}
-            className="bg-white text-blue-600 hover:bg-blue-50 px-8 py-4 rounded-xl text-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg"
-          >
-            Get Started Now
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default ModernBuyerMapLanding;
