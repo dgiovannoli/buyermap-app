@@ -7,4 +7,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
+// Export the singleton client instance
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Export a function to create a new client instance
+export const createClientComponent = () => createClient(supabaseUrl, supabaseAnonKey)

@@ -1,7 +1,7 @@
 'use client'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
-import { createClientComponent } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { ReactElement } from 'react'
 
 interface AuthModalProps {
@@ -10,8 +10,6 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactElement | null {
-  const supabase = createClientComponent()
-
   if (!isOpen) return null
 
   return (
