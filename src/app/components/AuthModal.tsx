@@ -50,3 +50,4 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
     </div>
   )
 }// Updated for Vercel fix
+
