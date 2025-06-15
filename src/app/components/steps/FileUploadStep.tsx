@@ -16,7 +16,7 @@ export default function FileUploadStep({ uploadedFiles, onFileUpload, onRemoveFi
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 space-y-8">
         <h1 className="text-3xl font-bold text-center mb-2">Upload Your Materials</h1>
-        <p className="text-center text-gray-600 mb-6">We'll analyze your sales deck and validate your assumptions against real customer interview data.</p>
+        <p className="text-center text-gray-600 mb-6">We&apos;ll analyze your sales deck and validate your assumptions against real customer interview data.</p>
 
         {/* Sales Deck Upload */}
         <FileDropzone

@@ -54,10 +54,4 @@ export function getConfidenceColor(confidence: number) {
     if (confidence >= min) return className;
   }
   return 'bg-red-500';
-}
-
-export function getScoreMessage(score: number): string {
-  if (score >= 90) return 'Your messaging is highly aligned with buyer reality';
-  if (score >= 70) return 'Generally aligned, with room for refinement';
-  return 'Major adjustments to core messaging likely needed';
 } 

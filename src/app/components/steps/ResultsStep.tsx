@@ -1,209 +1,251 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { BuyerMapData } from '@/types/buyer-map'
-import { getOutcomeColor, getConfidenceColor, getScoreMessage } from '@/styles/theme'
+import React from 'react';
+import { BarChart, Users, TrendingUp, ArrowRight, Brain, Target, Zap } from 'lucide-react';
 
-interface ResultsStepProps {
-  buyerMapData: BuyerMapData[];
-  overallScore: number | null;
-  activeTab: string;
-  expandedRows: Set<number>;
-  rejectedQuotes: Set<number>;
-  onTabChange: (tab: string) => void;
-  onToggleRowExpansion: (id: number) => void;
-  onQuoteRejection: (quoteId: number) => void;
-  getEffectiveConfidence: (item: BuyerMapData) => number;
-  onNext: () => void;
-  onBack: () => void;
-  onBackToHome: () => void;
+interface BuyerResult {
+  id?: string;
+  buyerScore: number;
+  confidence: number;
+  outcome: string;
 }
 
-export default function ResultsStep({
-  buyerMapData,
-  overallScore,
-  activeTab,
-  expandedRows,
-  rejectedQuotes,
-  onTabChange,
-  onToggleRowExpansion,
-  onQuoteRejection,
-  getEffectiveConfidence,
-  onNext,
-  onBack,
-  onBackToHome
-}: ResultsStepProps) {
-  const getFilteredData = () => {
-    const sorted = [...buyerMapData].sort((a, b) => getEffectiveConfidence(b) - getEffectiveConfidence(a))
-    switch (activeTab) {
-      case 'aligned':
-        return sorted.filter(item => item.comparisonOutcome === 'Aligned')
-      case 'insights':
-        return sorted.filter(item => item.comparisonOutcome === 'New Data Added')
-      case 'misaligned':
-        return sorted.filter(item => item.comparisonOutcome === 'Misaligned')
-      case 'all':
-      default:
-        return sorted
-    }
-  }
+interface ResultsStepProps {
+  results: BuyerResult[];
+  onExport: () => void;
+  onBack: () => void;
+}
 
-  const getTabCounts = () => {
-    return {
-      aligned: buyerMapData.filter(item => item.comparisonOutcome === 'Aligned').length,
-      insights: buyerMapData.filter(item => item.comparisonOutcome === 'New Data Added').length,
-      misaligned: buyerMapData.filter(item => item.comparisonOutcome === 'Misaligned').length
-    }
-  }
+export default function ResultsStep({ results, onExport, onBack }: ResultsStepProps) {
+  const totalRecords = results.length;
+  const highProbabilityBuyers = results.filter((r: BuyerResult) => r.buyerScore >= 70).length;
+  const mediumProbabilityBuyers = results.filter((r: BuyerResult) => r.buyerScore >= 40 && r.buyerScore < 70).length;
+  const lowProbabilityBuyers = results.filter((r: BuyerResult) => r.buyerScore < 40).length;
+  const averageScore = results.reduce((sum: number, r: BuyerResult) => sum + r.buyerScore, 0) / totalRecords;
+  const averageConfidence = results.reduce((sum: number, r: BuyerResult) => sum + r.confidence, 0) / totalRecords;
+
+  const getScoreColor = (score: number) => {
+    if (score >= 70) return 'text-green-600 bg-green-100';
+    if (score >= 40) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  const getOutcomeColor = (outcome: string) => {
+    return outcome === 'likely_buyer' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100';
+  };
 
   return (
-    <div className="space-y-8">
-      {/* Overall Score Display */}
-      {overallScore !== null && (
-        <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-8 mb-8">
-          <h2 className="text-lg font-medium mb-2">Overall Alignment Score</h2>
-          <div className="text-6xl font-bold mb-4">{overallScore}%</div>
-          <p className="text-lg opacity-90">{getScoreMessage(overallScore)}</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center">
+            <BarChart className="h-8 w-8 text-blue-600 mr-3" />
+            <h1 className="text-2xl font-bold text-gray-900">Analysis Results</h1>
+          </div>
+          <div className="text-sm text-gray-500">
+            Step 4 of 5
+          </div>
         </div>
-      )}
 
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { key: 'all', label: 'All Results', count: buyerMapData.length, color: 'gray' },
-            { key: 'misaligned', label: 'Misalignments', count: getTabCounts().misaligned, color: 'red' },
-            { key: 'insights', label: 'New Insights', count: getTabCounts().insights, color: 'blue' },
-            { key: 'aligned', label: 'Validated', count: getTabCounts().aligned, color: 'green' }
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.key
-                  ? `border-${tab.color}-500 text-${tab.color}-600`
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
-        </nav>
-      </div>
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <Users className="h-8 w-8 text-blue-600" />
+              <span className="text-2xl font-bold text-gray-900">{totalRecords.toLocaleString()}</span>
+            </div>
+            <h3 className="font-semibold text-gray-900">Total Records</h3>
+            <p className="text-sm text-gray-600">Analyzed profiles</p>
+          </div>
 
-      {/* Results Data */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        {getFilteredData().map((item) => (
-          <div key={item.id} className="border-b border-gray-200 last:border-b-0">
-            <div className="p-6 hover:bg-gray-50">
-              <div className="grid grid-cols-12 gap-4 items-start">
-                <div className="col-span-3">
-                  <div className="text-xs text-gray-500 mb-1">{item.icpAttribute}</div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{item.icpTheme}</h3>
-                  <p className="text-sm text-gray-600">{item.v1Assumption}</p>
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <Target className="h-8 w-8 text-green-600" />
+              <span className="text-2xl font-bold text-green-600">{highProbabilityBuyers}</span>
+            </div>
+            <h3 className="font-semibold text-gray-900">High Probability</h3>
+            <p className="text-sm text-gray-600">Score ≥ 70</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <TrendingUp className="h-8 w-8 text-purple-600" />
+              <span className="text-2xl font-bold text-purple-600">{averageScore.toFixed(1)}</span>
+            </div>
+            <h3 className="font-semibold text-gray-900">Average Score</h3>
+            <p className="text-sm text-gray-600">Buyer propensity</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <Brain className="h-8 w-8 text-indigo-600" />
+              <span className="text-2xl font-bold text-indigo-600">{averageConfidence.toFixed(1)}%</span>
+            </div>
+            <h3 className="font-semibold text-gray-900">Avg Confidence</h3>
+            <p className="text-sm text-gray-600">Model certainty</p>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8 mb-8">
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Score Distribution</h2>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-green-500 rounded mr-3"></div>
+                  <span className="font-medium text-gray-900">High Probability (70-100)</span>
                 </div>
-                <div className="col-span-3">
-                  <p className="text-sm text-gray-700">{item.realityFromInterviews}</p>
-                </div>
-                <div className="col-span-2">
-                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${getOutcomeColor(item.comparisonOutcome)}`}>
-                    {item.comparisonOutcome}
-                  </span>
-                </div>
-                <div className="col-span-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${getConfidenceColor(getEffectiveConfidence(item))}`}
-                        style={{ width: `${getEffectiveConfidence(item)}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm font-medium">{getEffectiveConfidence(item)}%</span>
-                  </div>
-                </div>
-                <div className="col-span-2 flex justify-end">
-                  <button
-                    onClick={() => onToggleRowExpansion(item.id)}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    {expandedRows.has(item.id) ? 'Hide Details ▲' : 'Show Details ▼'}
-                  </button>
+                <div className="flex items-center">
+                  <span className="text-2xl font-bold text-green-600 mr-2">{highProbabilityBuyers}</span>
+                  <span className="text-sm text-gray-500">({((highProbabilityBuyers / totalRecords) * 100).toFixed(1)}%)</span>
                 </div>
               </div>
-              <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">💡 Messaging Recommendation:</h4>
-                <p className="text-sm text-blue-800">{item.waysToAdjustMessaging}</p>
+              
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className="bg-green-500 h-3 rounded-full" 
+                  style={{ width: `${(highProbabilityBuyers / totalRecords) * 100}%` }}
+                ></div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-yellow-500 rounded mr-3"></div>
+                  <span className="font-medium text-gray-900">Medium Probability (40-69)</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-2xl font-bold text-yellow-600 mr-2">{mediumProbabilityBuyers}</span>
+                  <span className="text-sm text-gray-500">({((mediumProbabilityBuyers / totalRecords) * 100).toFixed(1)}%)</span>
+                </div>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className="bg-yellow-500 h-3 rounded-full" 
+                  style={{ width: `${(mediumProbabilityBuyers / totalRecords) * 100}%` }}
+                ></div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-red-500 rounded mr-3"></div>
+                  <span className="font-medium text-gray-900">Low Probability (0-39)</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-2xl font-bold text-red-600 mr-2">{lowProbabilityBuyers}</span>
+                  <span className="text-sm text-gray-500">({((lowProbabilityBuyers / totalRecords) * 100).toFixed(1)}%)</span>
+                </div>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div 
+                  className="bg-red-500 h-3 rounded-full" 
+                  style={{ width: `${(lowProbabilityBuyers / totalRecords) * 100}%` }}
+                ></div>
               </div>
             </div>
-            {expandedRows.has(item.id) && (
-              <div className="bg-gray-50 border-t border-gray-200 p-6">
-                <div className="grid grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-3">Supporting Evidence</h4>
-                    <div className="space-y-3">
-                      {item.quotes.map((quote) => (
-                        <div key={quote.id} className={`border rounded-lg p-4 ${rejectedQuotes.has(quote.id) ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-gray-200'}`}>
-                          <p className="text-gray-700 mb-2 italic">"{quote.text}"</p>
-                          <div className="flex justify-between items-center">
-                            <div className="text-xs text-gray-500">
-                              <strong>{quote.speaker}</strong>, {quote.role} • {quote.source}
-                            </div>
-                            {!rejectedQuotes.has(quote.id) && (
-                              <button
-                                onClick={() => onQuoteRejection(quote.id)}
-                                className="text-red-500 hover:text-red-700 text-xs px-2 py-1 border border-red-300 rounded"
-                              >
-                                Reject Quote
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-3">Analysis Details</h4>
-                    <div className="space-y-4">
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h5 className="font-medium text-gray-900 mb-2">Original Assumption Source</h5>
-                        <p className="text-sm text-gray-600 mb-2">{item.whyAssumption}</p>
-                        <p className="text-xs text-blue-600">{item.evidenceFromDeck}</p>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <h5 className="font-medium text-gray-900 mb-2">Confidence Explanation</h5>
-                        <p className="text-sm text-gray-600">{item.confidenceExplanation}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        ))}
-      </div>
 
-      {/* Navigation Buttons */}
-      <div className="flex flex-col md:flex-row justify-between gap-4 mt-8">
-        <button 
-          onClick={onBack}
-          className="bg-gray-600 text-white px-8 py-3 rounded-lg"
-        >
-          Back to Step 2
-        </button>
-        <button 
-          onClick={onNext}
-          className="bg-blue-600 text-white px-8 py-3 rounded-lg"
-        >
-          Continue to Step 4
-        </button>
-        <button 
-          onClick={onBackToHome}
-          className="bg-gray-400 text-white px-8 py-3 rounded-lg"
-        >
-          Back to Homepage
-        </button>
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Key Insights</h2>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Zap className="h-5 w-5 text-green-600 mr-2" />
+                  <span className="font-semibold text-green-800">Top Opportunity</span>
+                </div>
+                <p className="text-sm text-green-700">
+                  {highProbabilityBuyers} high-probability prospects identified for immediate outreach
+                </p>
+              </div>
+
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Target className="h-5 w-5 text-blue-600 mr-2" />
+                  <span className="font-semibold text-blue-800">Focus Area</span>
+                </div>
+                <p className="text-sm text-blue-700">
+                  Medium probability segment shows potential for nurturing campaigns
+                </p>
+              </div>
+
+              <div className="p-4 bg-purple-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Brain className="h-5 w-5 text-purple-600 mr-2" />
+                  <span className="font-semibold text-purple-800">Model Performance</span>
+                </div>
+                <p className="text-sm text-purple-700">
+                  {averageConfidence.toFixed(0)}% average confidence indicates reliable predictions
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">Sample Results</h2>
+            <span className="text-sm text-gray-500">Showing first 10 records</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">ID</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Buyer Score</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Confidence</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Outcome</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Segment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.slice(0, 10).map((result: BuyerResult, index: number) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-gray-900">
+                      {result.id || `Record ${index + 1}`}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getScoreColor(result.buyerScore)}`}>
+                        {result.buyerScore.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-700">
+                      {result.confidence.toFixed(1)}%
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getOutcomeColor(result.outcome)}`}>
+                        {result.outcome === 'likely_buyer' ? 'Likely Buyer' : 'Unlikely Buyer'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-700">
+                      {result.buyerScore >= 70 ? 'High Value' : result.buyerScore >= 40 ? 'Medium Value' : 'Low Value'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <button
+            onClick={onBack}
+            className="px-6 py-3 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            Back to Configuration
+          </button>
+          
+          <button
+            onClick={onExport}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center"
+          >
+            Export Results
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </button>
+        </div>
       </div>
     </div>
-  )
-} 
+  );
+}
