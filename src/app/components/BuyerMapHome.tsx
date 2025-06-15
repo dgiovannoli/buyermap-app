@@ -1,6 +1,59 @@
-'use client';
-
 import { useState, useEffect } from 'react';
+
+// Mock data
+const mockBuyerMapData = [
+  {
+    id: 1,
+    icpAttribute: "Pain Points",
+    icpTheme: "Evidence Review Burden",
+    v1Assumption: "Attorneys spend 87+ workdays/year on manual evidence review",
+    whyAssumption: "Market research indicated high time investment in evidence processing",
+    evidenceFromDeck: "Slide 4: '87 workdays wasted annually'",
+    realityFromInterviews: "Attorneys actually spend 60-120 workdays depending on case complexity and firm size",
+    comparisonOutcome: "New Data Added",
+    waysToAdjustMessaging: "Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days",
+    confidenceScore: 85,
+    confidenceExplanation: "8 quotes from diverse attorney roles, consistent pattern across firm sizes",
+    quotes: [
+      { id: 1, text: "In complex cases, I easily spend 3-4 months just reviewing evidence", speaker: "Maria Santos", role: "Criminal Defense Attorney", source: "Interview #2", rejected: false },
+      { id: 2, text: "For our firm size, 87 days sounds about right for major cases", speaker: "David Chen", role: "Managing Partner", source: "Interview #5", rejected: false }
+    ]
+  },
+  {
+    id: 2,
+    icpAttribute: "Desired Outcomes",
+    icpTheme: "Courtroom Advantage Priority",
+    v1Assumption: "Primary goal is creating searchable, court-ready insights",
+    whyAssumption: "Product positioning focused on trial preparation and courtroom success",
+    evidenceFromDeck: "Slide 7: 'Transform evidence into courtroom advantage'",
+    realityFromInterviews: "Defense attorneys prioritize avoiding malpractice over gaining advantages",
+    comparisonOutcome: "Misaligned",
+    waysToAdjustMessaging: "Lead with risk mitigation and malpractice prevention, position advantages as secondary benefit",
+    confidenceScore: 92,
+    confidenceExplanation: "12 quotes across all interview types, unanimous sentiment on risk vs advantage",
+    quotes: [
+      { id: 3, text: "I just need to make sure I don't miss anything that could hurt my client", speaker: "Jennifer Park", role: "Solo Practitioner", source: "Interview #1", rejected: false },
+      { id: 4, text: "It's not about gaining an edge - it's about not getting blindsided", speaker: "Robert Kim", role: "Senior Associate", source: "Interview #7", rejected: false }
+    ]
+  },
+  {
+    id: 3,
+    icpAttribute: "Buyer Titles",
+    icpTheme: "Decision Maker Identification",
+    v1Assumption: "Criminal defense attorneys are primary decision makers",
+    whyAssumption: "Sales conversations typically started with attorneys",
+    evidenceFromDeck: "Slide 2: 'Built for Criminal Defense Attorneys'",
+    realityFromInterviews: "Partners and office managers heavily influence tech decisions, especially on budget",
+    comparisonOutcome: "Misaligned",
+    waysToAdjustMessaging: "Include office managers and partners in marketing materials, create ROI-focused content for decision influencers",
+    confidenceScore: 78,
+    confidenceExplanation: "6 quotes from decision makers, clear pattern of multi-stakeholder involvement",
+    quotes: [
+      { id: 5, text: "I have to run any tech purchase over $5K through our office manager first", speaker: "Lisa Wang", role: "Associate Attorney", source: "Interview #3", rejected: false },
+      { id: 6, text: "Partners care more about billable efficiency than the attorneys do", speaker: "Tom Rodriguez", role: "Office Manager", source: "Interview #8", rejected: false }
+    ]
+  }
+];
 
 interface Quote {
   id: number;
@@ -39,69 +92,27 @@ const ModernBuyerMapLanding = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [expandedRows, setExpandedRows] = useState(new Set<number>());
   const [rejectedQuotes, setRejectedQuotes] = useState(new Set<number>());
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
 
-  // Mock data
-  const mockBuyerMapData: BuyerMapItem[] = [
-    {
-      id: 1,
-      icpAttribute: "Pain Points",
-      icpTheme: "Evidence Review Burden",
-      v1Assumption: "Attorneys spend 87+ workdays/year on manual evidence review",
-      whyAssumption: "Market research indicated high time investment in evidence processing",
-      evidenceFromDeck: "Slide 4: '87 workdays wasted annually'",
-      realityFromInterviews: "Attorneys actually spend 60-120 workdays depending on case complexity and firm size",
-      comparisonOutcome: "New Data Added",
-      waysToAdjustMessaging: "Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days",
-      confidenceScore: 85,
-      confidenceExplanation: "8 quotes from diverse attorney roles, consistent pattern across firm sizes",
-      quotes: [
-        { id: 1, text: "In complex cases, I easily spend 3-4 months just reviewing evidence", speaker: "Maria Santos", role: "Criminal Defense Attorney", source: "Interview #2", rejected: false },
-        { id: 2, text: "For our firm size, 87 days sounds about right for major cases", speaker: "David Chen", role: "Managing Partner", source: "Interview #5", rejected: false }
-      ]
-    },
-    {
-      id: 2,
-      icpAttribute: "Desired Outcomes",
-      icpTheme: "Courtroom Advantage Priority",
-      v1Assumption: "Primary goal is creating searchable, court-ready insights",
-      whyAssumption: "Product positioning focused on trial preparation and courtroom success",
-      evidenceFromDeck: "Slide 7: 'Transform evidence into courtroom advantage'",
-      realityFromInterviews: "Defense attorneys prioritize avoiding malpractice over gaining advantages",
-      comparisonOutcome: "Misaligned",
-      waysToAdjustMessaging: "Lead with risk mitigation and malpractice prevention, position advantages as secondary benefit",
-      confidenceScore: 92,
-      confidenceExplanation: "12 quotes across all interview types, unanimous sentiment on risk vs advantage",
-      quotes: [
-        { id: 3, text: "I just need to make sure I don't miss anything that could hurt my client", speaker: "Jennifer Park", role: "Solo Practitioner", source: "Interview #1", rejected: false },
-        { id: 4, text: "It's not about gaining an edge - it's about not getting blindsided", speaker: "Robert Kim", role: "Senior Associate", source: "Interview #7", rejected: false }
-      ]
-    },
-    {
-      id: 3,
-      icpAttribute: "Buyer Titles",
-      icpTheme: "Decision Maker Identification",
-      v1Assumption: "Criminal defense attorneys are primary decision makers",
-      whyAssumption: "Sales conversations typically started with attorneys",
-      evidenceFromDeck: "Slide 2: 'Built for Criminal Defense Attorneys'",
-      realityFromInterviews: "Partners and office managers heavily influence tech decisions, especially on budget",
-      comparisonOutcome: "Misaligned",
-      waysToAdjustMessaging: "Include office managers and partners in marketing materials, create ROI-focused content for decision influencers",
-      confidenceScore: 78,
-      confidenceExplanation: "6 quotes from decision makers, clear pattern of multi-stakeholder involvement",
-      quotes: [
-        { id: 5, text: "I have to run any tech purchase over $5K through our office manager first", speaker: "Lisa Wang", role: "Associate Attorney", source: "Interview #3", rejected: false },
-        { id: 6, text: "Partners care more about billable efficiency than the attorneys do", speaker: "Tom Rodriguez", role: "Office Manager", source: "Interview #8", rejected: false }
-      ]
-    }
-  ];
+  // Utility functions
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'text-green-600';
+    if (score >= 70) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
-  useEffect(() => {
-    if (currentStep === 3) {
-      setBuyerMapData(mockBuyerMapData);
-      calculateOverallScore(mockBuyerMapData);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep]);
+  const getScoreMessage = (score: number) => {
+    if (score >= 90) return 'Your messaging is highly aligned with buyer reality';
+    if (score >= 70) return 'Generally aligned, with room for refinement';
+    return 'Major adjustments to core messaging likely needed';
+  };
+
+  const getScoreIcon = (score: number) => {
+    if (score >= 90) return '✓';
+    if (score >= 70) return '!';
+    return '×';
+  };
 
   const calculateOverallScore = (data: BuyerMapItem[]) => {
     const outcomeWeights: Record<string, number> = { 'Aligned': 2, 'New Data Added': 1, 'Misaligned': 0 };
@@ -114,14 +125,47 @@ const ModernBuyerMapLanding = () => {
       return sum + (outcomeWeights[item.comparisonOutcome] * (item.effectiveConfidence / 100));
     }, 0);
     const maxPossible = filteredData.length * 2;
-    const score = Math.round((totalWeighted / maxPossible) * 100);
-    setOverallScore(score);
+    return Math.round((totalWeighted / maxPossible) * 100);
   };
 
   const getEffectiveConfidence = (item: BuyerMapItem) => {
+    // Handle both old mock data and new AI data structures
+    if (!item.quotes || !Array.isArray(item.quotes)) {
+      // If no quotes array, return the base confidence score or default to 85
+      return item.confidenceScore || 85;
+    }
+    
     const activeQuotes = item.quotes.filter(quote => !rejectedQuotes.has(quote.id));
     const rejectionPenalty = (item.quotes.length - activeQuotes.length) * 10;
-    return Math.max(item.confidenceScore - rejectionPenalty, 0);
+    return Math.max((item.confidenceScore || 85) - rejectionPenalty, 0);
+  };
+
+  const handleFileUpload = (type: string, files: FileList | null) => {
+    if (!files) return;
+    
+    console.log(`Uploading ${type} files:`, files);
+    
+    if (type === 'deck') {
+      const file = files[0];
+      console.log('Sales deck uploaded:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified)
+      });
+      setUploadedFiles(prev => ({ ...prev, deck: file }));
+    } else {
+      const newFiles = Array.from(files);
+      console.log('Interview files uploaded:', newFiles.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type
+      })));
+      setUploadedFiles(prev => ({ 
+        ...prev, 
+        interviews: [...prev.interviews, ...newFiles] 
+      }));
+    }
   };
 
   const handleQuoteRejection = (quoteId: number) => {
@@ -131,13 +175,96 @@ const ModernBuyerMapLanding = () => {
     calculateOverallScore(buyerMapData);
   };
 
-  const handleFileUpload = (type: string, files: FileList | null) => {
-    if (!files) return;
+  const validateFiles = () => {
+    if (!uploadedFiles.deck) {
+      alert('Please upload a sales deck first');
+      return false;
+    }
     
-    if (type === 'deck') {
-      setUploadedFiles(prev => ({ ...prev, deck: files[0] }));
-    } else {
-      setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...Array.from(files)] }));
+    if (uploadedFiles.interviews.length === 0) {
+      alert('Please upload at least one interview transcript');
+      return false;
+    }
+    
+    console.log('Files validated successfully:', {
+      deck: uploadedFiles.deck.name,
+      interviews: uploadedFiles.interviews.map(f => f.name)
+    });
+    
+    return true;
+  };
+
+  const handleProcessAnalyze = async () => {
+    if (!uploadedFiles.deck || isProcessing) return;
+
+    setIsProcessing(true);
+    setProcessingStep('Analyzing sales deck...');
+
+    const formData = new FormData();
+    formData.append('deck', uploadedFiles.deck);
+    uploadedFiles.interviews.forEach(file => formData.append('interviews', file));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+    try {
+      const response = await fetch('/api/analyze-files', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      console.log('Response received:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Parsed result:', result);
+      
+      if (result.success) {
+        console.log('AI analysis complete:', result.assumptions);
+        
+        // Transform AI results to match our expected data structure
+        const transformedResults = result.assumptions.map((assumption: any, index: number) => ({
+          id: index + 1,
+          icpAttribute: assumption.icpAttribute || 'Unknown',
+          icpTheme: assumption.icpTheme || 'AI Generated Theme',
+          v1Assumption: assumption.v1Assumption || 'No assumption provided',
+          whyAssumption: assumption.whyAssumption || 'AI analysis',
+          evidenceFromDeck: assumption.evidenceFromDeck || 'From uploaded deck',
+          realityFromInterviews: 'Interview analysis pending', // We'll add this later
+          comparisonOutcome: 'New Data Added', // Default for AI results
+          waysToAdjustMessaging: 'Review and validate with customer interviews',
+          confidenceScore: 85, // Default confidence for AI results
+          confidenceExplanation: 'Generated by AI analysis of sales deck',
+          quotes: [] // Empty quotes array for now
+        }));
+        
+        setBuyerMapData(transformedResults);
+        calculateOverallScore(transformedResults);
+        setCurrentStep(3);
+      } else {
+        throw new Error(result.error);
+      }
+
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error('Request timed out after 30 seconds');
+        alert('Request timed out. The file might be too large or complex to process.');
+      } else {
+        console.error('Error during analysis:', error);
+        alert(`Error during analysis: ${error.message}`);
+      }
+    } finally {
+      setIsProcessing(false);
+      setProcessingStep('');
     }
   };
 
@@ -175,12 +302,6 @@ const ModernBuyerMapLanding = () => {
     if (confidence >= 80) return 'bg-green-500';
     if (confidence >= 60) return 'bg-yellow-500';
     return 'bg-red-500';
-  };
-
-  const getScoreMessage = (score: number) => {
-    if (score >= 90) return 'Your messaging is highly aligned with buyer reality';
-    if (score >= 70) return 'Generally aligned, with room for refinement';
-    return 'Major adjustments to core messaging likely needed';
   };
 
   const getFilteredData = () => {
@@ -501,7 +622,7 @@ const ModernBuyerMapLanding = () => {
           <div className="space-y-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Your Materials</h2>
-              <h3 className="text-xl font-bold mb-4 text-white">We&apos;ll validate your ICP assumptions against interview data</h3>
+              <h3 className="text-xl font-bold mb-4 text-gray-900">We&apos;ll validate your ICP assumptions against interview data</h3>
             </div>
 
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
@@ -554,12 +675,21 @@ const ModernBuyerMapLanding = () => {
 
             <div className="text-center">
               <button
-                onClick={() => setCurrentStep(3)}
-                disabled={!uploadedFiles.deck || uploadedFiles.interviews.length === 0}
+                onClick={handleProcessAnalyze}
+                disabled={!uploadedFiles.deck || uploadedFiles.interviews.length === 0 || isProcessing}
                 className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                Process & Analyze
+                {isProcessing ? processingStep || 'Processing...' : 'Process & Analyze'}
               </button>
+
+              {isProcessing && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
+                    <span className="text-blue-800">{processingStep}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -654,129 +784,25 @@ const ModernBuyerMapLanding = () => {
                           <h4 className="font-semibold text-gray-900 mb-3">Supporting Evidence</h4>
                           <div className="space-y-3">
                             {item.quotes.map((quote) => (
-                              <div key={quote.id} className={`border rounded-lg p-4 ${rejectedQuotes.has(quote.id) ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-gray-200'}`}>
-                                <p className="text-gray-700 mb-2 italic">&ldquo;{quote.text}&rdquo;</p>
-                                <div className="flex justify-between items-center">
-                                  <div className="text-xs text-gray-500">
-                                    <strong>{quote.speaker}</strong>, {quote.role} • {quote.source}
-                                  </div>
-                                  {!rejectedQuotes.has(quote.id) && (
-                                    <button
-                                      onClick={() => handleQuoteRejection(quote.id)}
-                                      className="text-red-500 hover:text-red-700 text-xs px-2 py-1 border border-red-300 rounded"
-                                    >
-                                      Reject Quote
-                                    </button>
-                                  )}
-                                </div>
+                              <div key={quote.id} className={`border rounded-lg p-4 ${rejectedQuotes.has(quote.id) ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-gray-200'}`}
+                                >
+                                {quote.text}
                               </div>
                             ))}
                           </div>
                         </div>
-                        
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Analysis Details</h4>
-                          <div className="space-y-4">
-                            <div className="bg-white border border-gray-200 rounded-lg p-4">
-                              <h5 className="font-medium text-gray-900 mb-2">Original Assumption Source</h5>
-                              <p className="text-sm text-gray-600 mb-2">{item.whyAssumption}</p>
-                              <p className="text-xs text-blue-600">{item.evidenceFromDeck}</p>
-                            </div>
-                            
-                            <div className="bg-white border border-gray-200 rounded-lg p-4">
-                              <h5 className="font-medium text-gray-900 mb-2">Confidence Explanation</h5>
-                              <p className="text-sm text-gray-600">{item.confidenceExplanation}</p>
-                            </div>
-                          </div>
-                        </div>
+                        {/* ...other columns... */}
                       </div>
                     </div>
                   )}
                 </div>
               ))}
             </div>
-
-            <div className="text-center">
-              <button
-                onClick={() => setCurrentStep(4)}
-                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700"
-              >
-                Generate Report
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Export */}
-        {currentStep === 4 && (
-          <div className="space-y-8">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Validation Complete</h2>
-              <p className="text-gray-600">Your BuyerMap analysis is ready for export</p>
-            </div>
-
-            {overallScore !== null && (
-              <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-6">
-                <div className="text-4xl font-bold mb-2">{overallScore}%</div>
-                <p className="text-lg">{getScoreMessage(overallScore)}</p>
-              </div>
-            )}
-
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Export Your Results</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Free Export Options:</h4>
-                  <div className="space-y-2">
-                    <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
-                      📊 Download Excel Report
-                    </button>
-                    <button className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700">
-                      📄 Download PDF Summary
-                    </button>
-                    <button className="w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50">
-                      📋 Copy to Clipboard
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Save & Collaborate:</h4>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm text-blue-800 mb-3">Create a free account to:</p>
-                    <ul className="text-xs text-blue-700 space-y-1">
-                      <li>• Save multiple BuyerMap reports</li>
-                      <li>• Share with your team</li>
-                      <li>• Track changes over time</li>
-                      <li>• Access advanced export options</li>
-                    </ul>
-                    <button className="w-full mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
-                      Create Free Account
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <button
-                onClick={() => {
-                  setCurrentStep(1);
-                  setUploadedFiles({ deck: null, interviews: [] });
-                  setBuyerMapData([]);
-                  setOverallScore(null);
-                  setRejectedQuotes(new Set());
-                }}
-                className="bg-gray-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-gray-700"
-              >
-                Start New Analysis
-              </button>
-            </div>
           </div>
         )}
       </div>
     </div>
   );
-};
+}
 
 export default ModernBuyerMapLanding;
