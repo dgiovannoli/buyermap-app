@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -10,13 +11,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const code = requestUrl.searchParams.get('code')
 
     if (code) {
-      const supabase = createRouteHandlerClient({ cookies })
+      const cookieStore = cookies()
+      const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
       await supabase.auth.exchangeCodeForSession(code)
     }
 
-    return NextResponse.redirect(requestUrl.origin)
+    // URL to redirect to after sign in process completes
+    return NextResponse.redirect(new URL('/', request.url))
   } catch (error) {
     console.error('Auth callback error:', error)
-    return NextResponse.redirect(`${request.url}/error`)
+    // URL to redirect to after sign in process fails
+    return NextResponse.redirect(new URL('/auth/error', request.url))
   }
 }
