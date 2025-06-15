@@ -1,5 +1,7 @@
-import BuyerMapInterface from './components/BuyerMapInterface'
+"use client";
+
+import BuyerMapHome from './components/BuyerMapHome';
 
 export default function Home() {
-  return <BuyerMapInterface />
+  return <BuyerMapHome />;
 }

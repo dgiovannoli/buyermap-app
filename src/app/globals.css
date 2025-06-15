@@ -1,26 +1,117 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Layout ratios and grid systems */
+  --layout-mobile: 1fr;
+  --layout-tablet: 1fr 1fr;
+  --layout-desktop: 2fr 3fr;
+  
+  /* Responsive spacing */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+  
+  /* Component padding by breakpoint */
+  --panel-padding-mobile: 1rem;
+  --panel-padding-tablet: 1.5rem;
+  --panel-padding-desktop: 2rem;
+  
+  /* Typography scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  
+  /* Responsive headline sizes */
+  --headline-mobile: 2rem;
+  --headline-tablet: 2.5rem;
+  --headline-desktop: 3rem;
+  
+  /* Breakpoints */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+  
+  /* Component specific sizes */
+  --button-height: 48px;
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  
+  /* Z-index scale */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal: 1040;
+  --z-popover: 1050;
+  --z-tooltip: 1060;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Layout utilities */
+.layout-stack { display: flex; flex-direction: column; }
+.layout-row { display: flex; flex-direction: row; }
+.layout-grid { display: grid; }
+.layout-50-50 { grid-template-columns: 1fr 1fr; }
+.layout-40-60 { grid-template-columns: 2fr 3fr; }
+.layout-30-70 { grid-template-columns: 3fr 7fr; }
+
+/* Spacing utilities */
+.gap-xs { gap: var(--spacing-xs); }
+.gap-sm { gap: var(--spacing-sm); }
+.gap-md { gap: var(--spacing-md); }
+.gap-lg { gap: var(--spacing-lg); }
+.gap-xl { gap: var(--spacing-xl); }
+
+.p-xs { padding: var(--spacing-xs); }
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+
+/* Responsive utilities */
+.hide-mobile { display: none; }
+.hide-tablet { display: block; }
+.hide-desktop { display: block; }
+
+@media (min-width: var(--bp-md)) {
+  .hide-mobile { display: block; }
+  .hide-tablet { display: none; }
+  .show-tablet { display: block; }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@media (min-width: var(--bp-lg)) {
+  .hide-tablet { display: block; }
+  .hide-desktop { display: none; }
+  .show-desktop { display: block; }
+}
+
+/* Component utilities */
+.button-primary {
+  min-height: var(--button-height);
+  padding: 0 var(--spacing-lg);
+  border-radius: var(--border-radius-md);
+}
+
+.panel-responsive {
+  padding: var(--panel-padding-mobile);
+}
+
+@media (min-width: var(--bp-md)) {
+  .panel-responsive {
+    padding: var(--panel-padding-tablet);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (min-width: var(--bp-lg)) {
+  .panel-responsive {
+    padding: var(--panel-padding-desktop);
+  }
 }

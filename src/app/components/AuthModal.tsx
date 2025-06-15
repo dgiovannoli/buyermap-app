@@ -2,7 +2,7 @@
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { createClientComponent } from '@/lib/supabase-client'
-import { ReactElement } from 'react'
+import { ReactElement, useState, useEffect } from 'react'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -11,8 +11,15 @@ interface AuthModalProps {
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactElement | null {
   const supabase = createClientComponent()
+  const [mounted, setMounted] = useState(false)
+  const [origin, setOrigin] = useState('')
 
-  if (!isOpen) return null
+  useEffect(() => {
+    setMounted(true)
+    setOrigin(window.location.origin)
+  }, [])
+
+  if (!isOpen || !mounted) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -42,7 +49,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
               },
             }
           }}
-          redirectTo={`${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`}
+          redirectTo={`${origin}/auth/callback`}
           showLinks={true}
           view="sign_up"
         />
