@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BuyerMapData, UploadedFiles, ActiveTab, ComparisonOutcome } from '@/types/buyer-map';
 import { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { createClientComponent } from '@/lib/supabase-client';
 import AuthModal from './AuthModal';
 
 interface Tab {
@@ -21,6 +21,7 @@ const ModernBuyerMapLanding = () => {
   const [rejectedQuotes, setRejectedQuotes] = useState<Set<number>>(new Set());
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const supabase = createClientComponent();
 
   const getEffectiveConfidence = useCallback((item: BuyerMapData): number => {
     const activeQuotes = item.quotes.filter(quote => !rejectedQuotes.has(quote.id));

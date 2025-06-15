@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { User } from '@supabase/auth-helpers-nextjs'
+import { createClientComponent } from '@/lib/supabase-client'
 
 export default function UserMenu() {
   const [user, setUser] = useState<User | null>(null)
+  const supabase = createClientComponent()
 
   useEffect(() => {
     const getUser = async () => {
@@ -21,7 +22,7 @@ export default function UserMenu() {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [supabase])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
