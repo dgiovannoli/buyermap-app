@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 // Mock data
-const mockBuyerMapData = [
+/* const mockBuyerMapData = [
   {
     id: 1,
     icpAttribute: "Pain Points",
@@ -53,7 +53,7 @@ const mockBuyerMapData = [
       { id: 6, text: "Partners care more about billable efficiency than the attorneys do", speaker: "Tom Rodriguez", role: "Office Manager", source: "Interview #8", rejected: false }
     ]
   }
-];
+]; */
 
 interface Quote {
   id: number;
@@ -79,6 +79,14 @@ interface BuyerMapItem {
   quotes: Quote[];
 }
 
+interface AssumptionData {
+  icpAttribute?: string;
+  icpTheme?: string;
+  v1Assumption?: string;
+  whyAssumption?: string;
+  evidenceFromDeck?: string;
+}
+
 interface UploadedFiles {
   deck: File | null;
   interviews: File[];
@@ -88,30 +96,16 @@ const ModernBuyerMapLanding = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFiles>({ deck: null, interviews: [] });
   const [buyerMapData, setBuyerMapData] = useState<BuyerMapItem[]>([]);
-  const [overallScore, setOverallScore] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [expandedRows, setExpandedRows] = useState(new Set<number>());
-  const [rejectedQuotes, setRejectedQuotes] = useState(new Set<number>());
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
 
   // Utility functions
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
   const getScoreMessage = (score: number) => {
     if (score >= 90) return 'Your messaging is highly aligned with buyer reality';
     if (score >= 70) return 'Generally aligned, with room for refinement';
     return 'Major adjustments to core messaging likely needed';
-  };
-
-  const getScoreIcon = (score: number) => {
-    if (score >= 90) return '✓';
-    if (score >= 70) return '!';
-    return '×';
   };
 
   const calculateOverallScore = (data: BuyerMapItem[]) => {
@@ -135,9 +129,8 @@ const ModernBuyerMapLanding = () => {
       return item.confidenceScore || 85;
     }
     
-    const activeQuotes = item.quotes.filter(quote => !rejectedQuotes.has(quote.id));
-    const rejectionPenalty = (item.quotes.length - activeQuotes.length) * 10;
-    return Math.max((item.confidenceScore || 85) - rejectionPenalty, 0);
+    // Since we're not using quote rejection anymore, just return the base confidence
+    return item.confidenceScore || 85;
   };
 
   const handleFileUpload = (type: string, files: FileList | null) => {
@@ -166,32 +159,6 @@ const ModernBuyerMapLanding = () => {
         interviews: [...prev.interviews, ...newFiles] 
       }));
     }
-  };
-
-  const handleQuoteRejection = (quoteId: number) => {
-    const newRejected = new Set(rejectedQuotes);
-    newRejected.add(quoteId);
-    setRejectedQuotes(newRejected);
-    calculateOverallScore(buyerMapData);
-  };
-
-  const validateFiles = () => {
-    if (!uploadedFiles.deck) {
-      alert('Please upload a sales deck first');
-      return false;
-    }
-    
-    if (uploadedFiles.interviews.length === 0) {
-      alert('Please upload at least one interview transcript');
-      return false;
-    }
-    
-    console.log('Files validated successfully:', {
-      deck: uploadedFiles.deck.name,
-      interviews: uploadedFiles.interviews.map(f => f.name)
-    });
-    
-    return true;
   };
 
   const handleProcessAnalyze = async () => {
@@ -231,7 +198,7 @@ const ModernBuyerMapLanding = () => {
         console.log('AI analysis complete:', result.assumptions);
         
         // Transform AI results to match our expected data structure
-        const transformedResults = result.assumptions.map((assumption: any, index: number) => ({
+        const transformedResults = result.assumptions.map((assumption: AssumptionData, index: number) => ({
           id: index + 1,
           icpAttribute: assumption.icpAttribute || 'Unknown',
           icpTheme: assumption.icpTheme || 'AI Generated Theme',
@@ -253,14 +220,14 @@ const ModernBuyerMapLanding = () => {
         throw new Error(result.error);
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        console.error('Request timed out after 30 seconds');
-        alert('Request timed out. The file might be too large or complex to process.');
+      if (error instanceof Error) {
+        console.error('Error processing files:', error.message);
+        alert(`Error: ${error.message}`);
       } else {
-        console.error('Error during analysis:', error);
-        alert(`Error during analysis: ${error.message}`);
+        console.error('Unknown error occurred:', error);
+        alert('An unknown error occurred while processing the files');
       }
     } finally {
       setIsProcessing(false);
@@ -291,17 +258,11 @@ const ModernBuyerMapLanding = () => {
 
   const getOutcomeColor = (outcome: string) => {
     switch (outcome) {
-      case 'Aligned': return 'text-green-700 bg-green-100 border-green-300';
-      case 'New Data Added': return 'text-blue-700 bg-blue-100 border-blue-300';
-      case 'Misaligned': return 'text-red-700 bg-red-100 border-red-300';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+      case 'Aligned': return 'text-green-600';
+      case 'New Data Added': return 'text-blue-600';
+      case 'Misaligned': return 'text-red-600';
+      default: return 'text-gray-600';
     }
-  };
-
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 80) return 'bg-green-500';
-    if (confidence >= 60) return 'bg-yellow-500';
-    return 'bg-red-500';
   };
 
   const getFilteredData = () => {
@@ -697,13 +658,12 @@ const ModernBuyerMapLanding = () => {
         {/* Step 3: Results */}
         {currentStep === 3 && (
           <div className="space-y-8">
-            {overallScore !== null && (
-              <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-8 mb-8">
-                <h2 className="text-lg font-medium mb-2">Overall Alignment Score</h2>
-                <div className="text-6xl font-bold mb-4">{overallScore}%</div>
-                <p className="text-lg opacity-90">{getScoreMessage(overallScore)}</p>
+            <div className="flex flex-col items-center justify-center p-6 bg-white rounded-lg shadow-sm">
+              <div className="text-4xl font-bold mb-2">
+                {getScoreMessage(0)}
               </div>
-            )}
+              <p className="text-lg opacity-90">Initial analysis complete</p>
+            </div>
 
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
@@ -751,11 +711,11 @@ const ModernBuyerMapLanding = () => {
                       
                       <div className="col-span-2">
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${getConfidenceColor(getEffectiveConfidence(item))}`}
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full">
+                            <div 
+                              className="h-2 rounded-full bg-blue-500"
                               style={{ width: `${getEffectiveConfidence(item)}%` }}
-                            ></div>
+                            />
                           </div>
                           <span className="text-sm font-medium">{getEffectiveConfidence(item)}%</span>
                         </div>
@@ -783,10 +743,16 @@ const ModernBuyerMapLanding = () => {
                         <div>
                           <h4 className="font-semibold text-gray-900 mb-3">Supporting Evidence</h4>
                           <div className="space-y-3">
-                            {item.quotes.map((quote) => (
-                              <div key={quote.id} className={`border rounded-lg p-4 ${rejectedQuotes.has(quote.id) ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-gray-200'}`}
-                                >
-                                {quote.text}
+                            {item.quotes.map(quote => (
+                              <div key={quote.id} className="border rounded-lg p-4 bg-white border-gray-200">
+                                <p className="text-gray-700 mb-2">{quote.text}</p>
+                                <div className="text-sm text-gray-500">
+                                  <span className="font-medium">{quote.speaker}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>{quote.role}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>{quote.source}</span>
+                                </div>
                               </div>
                             ))}
                           </div>

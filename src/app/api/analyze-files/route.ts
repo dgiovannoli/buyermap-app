@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         fileContent = fileContent.substring(0, 20000) + '\n\n[Content truncated due to length]';
         console.log('Content truncated to 20000 characters');
       }
-    } catch (error) {
+    } catch {
       console.log('Could not read file as text, using filename analysis');
       fileContent = `Sales deck file: ${deckFile.name}. File type: ${deckFile.type}. Unable to extract text content.`;
     }
@@ -63,12 +63,12 @@ export async function POST(request: NextRequest) {
     try {
       // First try direct parsing
       assumptions = JSON.parse(content);
-    } catch (parseError) {
+    } catch {
       console.log('Direct JSON parse failed, trying to clean response...');
       
       try {
         // Remove common markdown formatting and extra text
-        let cleanContent = content
+        const cleanContent = content
           .replace(/```json/g, '')
           .replace(/```/g, '')
           .replace(/^[^[\{]*/, '') // Remove text before first [ or {
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         console.log('Cleaned content:', cleanContent);
         assumptions = JSON.parse(cleanContent);
         
-      } catch (secondError) {
+      } catch {
         console.log('Cleaned parse also failed, trying regex extraction...');
         
         // Try to find JSON array pattern
@@ -109,11 +109,8 @@ export async function POST(request: NextRequest) {
       assumptions
     });
 
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+  } catch {
+    console.error('Error processing files');
+    return NextResponse.json({ success: false, error: 'Error processing files' }, { status: 500 });
   }
 } 
