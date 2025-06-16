@@ -4,86 +4,138 @@ import React, { useState } from 'react';
 import BuyerMapInterface from './BuyerMapInterface';
 import ResultsStep from './steps/ResultsStep';
 import ExportStep from './steps/ExportStep';
+import { BuyerMapData, Quote, AssumptionData } from '../types/buyermap';
+import FileUploadStep from './steps/FileUploadStep';
+import BuyerMapHome from './BuyerMapHome';
 
-interface BuyerResult {
-  id?: string;
-  buyerScore: number;
-  confidence: number;
-  outcome: string;
+interface UploadedFiles {
+  deck: File | null;
+  interviews: File[];
 }
 
 export default function BuyerMapApp() {
-  const [currentStep, setCurrentStep] = useState<'home' | 'upload' | 'configure' | 'processing' | 'results' | 'export'>('home');
-  const [results, setResults] = useState<BuyerResult[]>([]);
+  const [currentStep, setCurrentStep] = useState<'upload' | 'results'>('upload');
+  const [results, setResults] = useState<BuyerMapData[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<'deck' | 'interviews' | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<{
+    deck: File | null;
+    interviews: File[];
+  }>({
+    deck: null,
+    interviews: []
+  });
 
-  const handleStartFlow = () => {
-    setCurrentStep('upload');
-  };
+  const handleFileUpload = (type: string, files: FileList | null) => {
+    if (!files) return;
 
-  const handleExport = () => {
-    setCurrentStep('export');
-  };
-
-  const handleBack = () => {
-    if (currentStep === 'results') {
-      setCurrentStep('configure');
-    } else if (currentStep === 'export') {
-      setCurrentStep('results');
+    if (type === 'deck') {
+      setUploadedFiles(prev => ({ ...prev, deck: files[0] }));
+    } else if (type === 'interviews') {
+      const newInterviews = Array.from(files);
+      setUploadedFiles(prev => ({ ...prev, interviews: newInterviews }));
     }
   };
 
-  const handleReset = () => {
-    setCurrentStep('home');
+  const handleRemoveFile = (type: string, index?: number) => {
+    if (type === 'deck') {
+      setUploadedFiles(prev => ({ ...prev, deck: null }));
+    } else if (type === 'interviews' && index !== undefined) {
+      setUploadedFiles(prev => ({
+        ...prev,
+        interviews: prev.interviews.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const handleProcessAnalyze = async () => {
+    if (!uploadedFiles.deck) return;
+
+    setIsProcessing(true);
+    setProcessingStep('deck');
+
+    try {
+      // Phase 1: Analyze Sales Deck
+      const deckFormData = new FormData();
+      deckFormData.append('deck', uploadedFiles.deck);
+
+      const deckResponse = await fetch('/api/analyze-deck', {
+        method: 'POST',
+        body: deckFormData
+      });
+
+      if (!deckResponse.ok) {
+        throw new Error('Failed to analyze sales deck');
+      }
+
+      const deckData = await deckResponse.json();
+      if (!deckData.success) {
+        throw new Error(deckData.error || 'Failed to analyze sales deck');
+      }
+
+      // Show initial assumptions immediately
+      setResults(deckData.assumptions);
+      setCurrentStep('results');
+
+      // Phase 2: Process Interviews if available
+      if (uploadedFiles.interviews.length > 0) {
+        setProcessingStep('interviews');
+        const interviewFormData = new FormData();
+        uploadedFiles.interviews.forEach(file => {
+          interviewFormData.append('interviews', file);
+        });
+        interviewFormData.append('assumptions', JSON.stringify(deckData.assumptions));
+
+        const interviewResponse = await fetch('/api/analyze-interviews', {
+          method: 'POST',
+          body: interviewFormData
+        });
+
+        if (!interviewResponse.ok) {
+          throw new Error('Failed to process interviews');
+        }
+
+        const interviewData = await interviewResponse.json();
+        if (!interviewData.success) {
+          throw new Error(interviewData.error || 'Failed to process interviews');
+        }
+
+        // Update results with interview analysis
+        setResults(interviewData.updatedAssumptions);
+      }
+    } catch (error) {
+      console.error('Error processing files:', error);
+      // TODO: Show error message to user
+    } finally {
+      setIsProcessing(false);
+      setProcessingStep(null);
+    }
+  };
+
+  const handleBackToHome = () => {
+    setCurrentStep('upload');
     setResults([]);
+    setUploadedFiles({ deck: null, interviews: [] });
   };
 
-  const handleComplete = () => {
-    setCurrentStep('home');
-  };
-
-  if (currentStep === 'home') {
-    return <BuyerMapInterface onStartFlow={handleStartFlow} />;
-  }
-
-  if (currentStep === 'results') {
-    return (
-      <ResultsStep
-        results={results}
-        onExport={handleExport}
-        onBack={handleBack}
-      />
-    );
-  }
-
-  if (currentStep === 'export') {
-    return (
-      <ExportStep
-        results={results}
-        onBack={handleBack}
-        onComplete={handleComplete}
-      />
-    );
-  }
-
-  // For other steps (upload, configure, processing), show a simple message
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Step: {currentStep}
-          </h2>
-          <p className="text-gray-600 mb-6">
-            This step is under development. Click below to return to home.
-          </p>
-          <button
-            onClick={handleReset}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {currentStep === 'upload' ? (
+        <FileUploadStep
+          uploadedFiles={uploadedFiles}
+          onFileUpload={handleFileUpload}
+          onRemoveFile={handleRemoveFile}
+          onNext={handleProcessAnalyze}
+          onBackToHome={handleBackToHome}
+          isProcessing={isProcessing}
+          processingStep={processingStep}
+        />
+      ) : (
+        <ResultsStep
+          results={results}
+          onBackToHome={handleBackToHome}
+        />
+      )}
     </div>
   );
 }

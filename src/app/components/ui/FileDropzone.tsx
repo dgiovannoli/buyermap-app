@@ -9,8 +9,9 @@ interface FileDropzoneProps {
   description: string;
   icon: React.ReactNode;
   uploadedFiles?: File[];
-  onRemoveFile?: (index: number) => void;
+  onRemoveFile?: (index?: number) => void;
   maxFiles?: number;
+  disabled?: boolean;
 }
 
 const FileDropzone = ({ 
@@ -22,75 +23,37 @@ const FileDropzone = ({
   icon,
   uploadedFiles = [],
   onRemoveFile,
-  maxFiles = 10
+  maxFiles = 10,
+  disabled = false
 }: FileDropzoneProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
+    if (!disabled) {
+      setIsDragging(true);
+    }
+  }, [disabled]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
-    
-    const files = e.dataTransfer.files;
-    console.log('🎯 Drop - files received:', files);
-    console.log('🎯 Drop - files length:', files.length);
-    
-    if (files.length > 0) {
-      // ✅ Convert FileList to Array immediately to preserve files
-      const fileArray = Array.from(files);
-      console.log('🎯 Drop - converted to array:', fileArray);
-      
-      setIsUploading(true);
-      // Create a new FileList-like object from the array
-      setTimeout(() => {
-        console.log('🎯 Drop - calling onFileUpload with preserved files');
-        // Convert array back to FileList format
-        const dt = new DataTransfer();
-        fileArray.forEach(file => dt.items.add(file));
-        onFileUpload(dt.files);
-        setIsUploading(false);
-      }, 500);
+    if (!disabled && e.dataTransfer.files.length > 0) {
+      onFileUpload(e.dataTransfer.files);
     }
-  }, [onFileUpload]);
+  }, [onFileUpload, disabled]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    console.log('📁 Input files selected:', files);
-    console.log('📁 Files length:', files?.length);
-    
-    if (files && files.length > 0) {
-      // ✅ Convert FileList to Array immediately to preserve files
-      const fileArray = Array.from(files);
-      console.log('📁 Input - converted to array:', fileArray);
-      
-      setIsUploading(true);
-      setTimeout(() => {
-        console.log('📁 Input - calling onFileUpload with preserved files');
-        // Convert array back to FileList format
-        const dt = new DataTransfer();
-        fileArray.forEach(file => dt.items.add(file));
-        onFileUpload(dt.files);
-        setIsUploading(false);
-      }, 500);
-    } else {
-      console.log('❌ No files selected or empty FileList');
+    if (!disabled && e.target.files && e.target.files.length > 0) {
+      onFileUpload(e.target.files);
     }
-    // Reset input
-    e.target.value = '';
-  }, [onFileUpload]);
+  }, [onFileUpload, disabled]);
 
   const getFileIcon = (fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase();
@@ -121,7 +84,7 @@ const FileDropzone = ({
           isDragging 
             ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 scale-105 shadow-lg' 
             : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-        } ${isUploading ? 'pointer-events-none' : ''}`}
+        } ${isUploading ? 'pointer-events-none' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -153,7 +116,7 @@ const FileDropzone = ({
             accept={accept}
             multiple={multiple}
             onChange={handleFileSelect}
-            disabled={isUploading}
+            disabled={disabled}
           />
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all inline-flex items-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-105">
             <span className="font-semibold">Choose Files</span>
@@ -206,6 +169,7 @@ const FileDropzone = ({
                       onClick={() => onRemoveFile(index)}
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-2 transition-colors"
                       title="Remove file"
+                      disabled={disabled}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
