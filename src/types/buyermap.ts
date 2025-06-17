@@ -58,6 +58,7 @@ export interface Quote {
   role: string;
   source: string;
   rejected?: boolean;
+  quote?: string;
 }
 
 export interface AssumptionData {

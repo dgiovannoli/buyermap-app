@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BuyerMapData, ICPValidationResponse, ValidationAttribute } from '../../../types/buyermap';
-import ICPValidationDashboard from '../../../components/ICPValidationDashboard';
+import ModernBuyerMapLanding from '../../../components/modern-buyermap-landing';
 import { 
   createValidationData, 
   createICPValidationData 
@@ -136,6 +136,9 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
   onProgressUpdate,
   onValidationUpdate
 }) => {
+  // Add local step state for navigation if needed
+  const [currentStep, setCurrentStep] = useState<number>(3);
+
   console.log('buyerMapData received:', buyerMapData, typeof buyerMapData);
   console.log('buyerMapData structure:', JSON.stringify(buyerMapData, null, 2));
 
@@ -214,12 +217,11 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
   };
 
   return (
-    <ICPValidationDashboard
-      buyerMapData={buyerMapData}
-      handleInterviewAnalysis={handleInterviewAnalysis}
-      onError={handleUploadError}
-      onProgressUpdate={handleProgressUpdate}
-      onValidationUpdate={handleValidationUpdate}
+    <ModernBuyerMapLanding
+      buyerMapData={buyerMapData.assumptions}
+      overallScore={buyerMapData.overallAlignmentScore}
+      currentStep={currentStep}
+      setCurrentStep={setCurrentStep}
     />
   );
 };

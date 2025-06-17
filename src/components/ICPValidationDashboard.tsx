@@ -16,6 +16,7 @@ import {
   calculateTotalInterviews,
   STANDARD_ICP_ATTRIBUTES
 } from '../utils/dataMapping';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
 
 interface ICPValidationDashboardProps {
   buyerMapData: ICPValidationResponse;
@@ -105,35 +106,91 @@ const fixAssumptionCategories = (assumptions: any[]): AssumptionState[] => {
     }
     return 'BUYER_TITLES';
   };
-  return assumptions.map((assumption, index) => {
+
+  const mapOutcomeToStatus = (outcome: string): AssumptionState['status'] => {
+    switch ((outcome || '').toUpperCase()) {
+      case 'ALIGNED': return 'ALIGNED';
+      case 'MISALIGNED': return 'MISALIGNED';
+      case 'NEW_DATA_ADDED': return 'NEW_DATA_ADDED';
+      case 'NEUTRAL': return 'NEUTRAL';
+      default: return 'PENDING_VALIDATION';
+    }
+  };
+
+  return assumptions.map((apiAssumption, index) => {
     // Extract the assumption text from the correct field
-    const assumptionText = assumption.v1Assumption || 
-                          assumption.assumption || 
-                          assumption.text || 
-                          assumption.icpAttribute || '';
-    const category = assumption.icpTheme ? 
-      mapIcpThemeToCategory(assumption.icpTheme) : 
+    const assumptionText = apiAssumption.v1Assumption || 
+                          apiAssumption.assumption || 
+                          apiAssumption.text || 
+                          apiAssumption.icpAttribute || '';
+    const category = apiAssumption.icpTheme ? 
+      mapIcpThemeToCategory(apiAssumption.icpTheme) : 
       assignCategory(assumptionText);
-    console.log(`=== MAPPING DEBUG ${index + 1} ===`);
-    console.log(`Raw assumption:`, assumption);
-    console.log(`Extracted text: "${assumptionText}"`);
-    console.log(`Assigned category: ${category}`);
-    return {
-      id: assumption.id || `assumption-${index}`,
+    const categoryDescription = apiAssumption.icpAttribute || apiAssumption.categoryDescription || '';
+    const outcome = (apiAssumption.comparisonOutcome || '').toUpperCase();
+    console.log('fixAssumptionCategories - incoming API assumption:', apiAssumption);
+    let mappedQuotes = [];
+    if (Array.isArray(apiAssumption.quotes) && apiAssumption.quotes.length > 0) {
+      mappedQuotes = apiAssumption.quotes;
+      console.log('Mapping quotes from .quotes:', mappedQuotes);
+    } else if (Array.isArray(apiAssumption.interviewQuotes) && apiAssumption.interviewQuotes.length > 0) {
+      mappedQuotes = apiAssumption.interviewQuotes;
+      console.log('Mapping quotes from .interviewQuotes:', mappedQuotes);
+    } else if (Array.isArray(apiAssumption.rawQuotes) && apiAssumption.rawQuotes.length > 0) {
+      mappedQuotes = apiAssumption.rawQuotes;
+      console.log('Mapping quotes from .rawQuotes:', mappedQuotes);
+    } else if (apiAssumption.validationAttributes && Array.isArray(apiAssumption.validationAttributes.quotes) && apiAssumption.validationAttributes.quotes.length > 0) {
+      mappedQuotes = apiAssumption.validationAttributes.quotes;
+      console.log('Mapping quotes from .validationAttributes.quotes:', mappedQuotes);
+    } else {
+      console.log('No quotes found for assumption:', apiAssumption.id);
+    }
+    const hasInterviewQuotes = mappedQuotes.length > 0;
+    const status = mapOutcomeToStatus(outcome);
+    const source: 'INTERVIEWS_PROCESSED' | 'DECK_ONLY' = hasInterviewQuotes && status !== 'PENDING_VALIDATION'
+      ? 'INTERVIEWS_PROCESSED'
+      : 'DECK_ONLY';
+    // Map all relevant fields for UI
+    const mapped = {
+      id: apiAssumption.id || `assumption-${index}`,
       assumption: assumptionText,
       category: category,
-      status: assumption.status || 'PENDING_VALIDATION',
-      source: assumption.source || 'DECK_ONLY',
-      deckEvidence: assumption.evidenceFromDeck || assumption.deckEvidence || '',
-      slideNumber: assumption.slideNumber || null,
-      quotes: assumption.quotes || [],
-      confidence: assumption.confidenceScore || assumption.confidence || 0,
-      explanation: assumption.confidenceExplanation || assumption.explanation || 'Extracted from sales deck, awaiting interview validation',
-      createdAt: assumption.createdAt || new Date().toISOString(),
-      lastUpdated: assumption.lastUpdated || new Date().toISOString()
+      categoryDescription: categoryDescription,
+      status,
+      source,
+      deckEvidence: apiAssumption.evidenceFromDeck || apiAssumption.deckEvidence || '',
+      slideNumber: apiAssumption.slideNumber || null,
+      quotes: mappedQuotes,
+      confidence: apiAssumption.confidenceScore || apiAssumption.confidence || 0,
+      confidenceScore: apiAssumption.confidenceScore || apiAssumption.confidence || 0,
+      explanation: apiAssumption.confidenceExplanation || apiAssumption.explanation || '',
+      confidenceExplanation: apiAssumption.confidenceExplanation || apiAssumption.explanation || '',
+      realityFromInterviews: apiAssumption.realityFromInterviews || '',
+      keyFinding: apiAssumption.realityFromInterviews || '',
+      createdAt: apiAssumption.createdAt || new Date().toISOString(),
+      lastUpdated: apiAssumption.lastUpdated || new Date().toISOString(),
+      icpTheme: apiAssumption.icpTheme || '',
+      icpAttribute: apiAssumption.icpAttribute || '',
+      comparisonOutcome: apiAssumption.comparisonOutcome || '',
     };
+    console.log('fixAssumptionCategories - mapped assumption:', mapped);
+    return mapped;
   });
 };
+
+// Extend AssumptionState to include optional API fields for UI compatibility
+interface AssumptionStateWithAPI extends AssumptionState {
+  realityFromInterviews?: string;
+  confidenceExplanation?: string;
+  confidenceScore?: number;
+  comparisonOutcome?: string;
+  categoryDescription?: string;
+  keyFinding?: string;
+  confidenceAnalysis?: string;
+  refinedStatement?: string;
+  evidenceStrength?: 'LOW' | 'MEDIUM' | 'HIGH';
+  interviewCount?: number;
+}
 
 export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onError, onProgressUpdate, handleInterviewAnalysis }: ICPValidationDashboardProps) {
   console.log('ICPValidationDashboard - Raw buyerMapData:', buyerMapData);
@@ -629,6 +686,21 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
     return nonEmptyGroups;
   };
 
+  // Add expanded state management
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  const toggleCardExpand = (cardId: string) => {
+    setExpandedCards(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(cardId)) {
+        newSet.delete(cardId);
+      } else {
+        newSet.add(cardId);
+      }
+      return newSet;
+    });
+  };
+
   const PendingAssumptionCard = ({ assumption }: { assumption: AssumptionState }) => {
     const getCategoryIcon = (category: string) => {
       const iconMap = {
@@ -667,9 +739,11 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
       return colorMap[category?.toUpperCase() as keyof typeof colorMap] || 'blue';
     };
     const categoryColor = getCategoryColor(assumption.category);
+    const isExpanded = expandedCards.has(assumption.id);
+
     return (
       <div className="assumption-card pending-card">
-        <div className="card-header">
+        <div className="card-header" onClick={() => toggleCardExpand(assumption.id)}>
           <div className="category-info">
             <div className={`category-icon-container ${categoryColor}`}>
               <span className="category-icon">{getCategoryIcon(assumption.category)}</span>
@@ -680,18 +754,100 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
           </div>
           <div className="status-container">
             <span className="status-text pending">Pending Validation</span>
-            <span className="chevron">›</span>
+            <span className={`chevron ${isExpanded ? 'expanded' : ''}`}>›</span>
           </div>
         </div>
         <div className="assumption-content">
           <p className="assumption-text">{assumption.assumption}</p>
+          {isExpanded && (
+            <div className="expanded-content">
+              <div className="deck-evidence">
+                <h4>Deck Evidence</h4>
+                <p>{assumption.deckEvidence || 'No evidence provided'}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
-  const ProcessedAssumptionCard = ({ assumption }: { assumption: AssumptionState }) => {
-    const result = calculateBuyerMapOutcome(assumption.quotes || []);
+  // --- StatusBadge Subcomponent ---
+  const StatusBadge = ({ status, confidence }: { status: string, confidence: number }) => {
+    const color = status === 'ALIGNED' ? '#16a34a' : status === 'MISALIGNED' ? '#dc2626' : '#6b7280';
+    const icon = status === 'ALIGNED' ? '✔️' : status === 'MISALIGNED' ? '❌' : '⚠️';
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600,
+        color, background: '#f0fdf4', borderRadius: 999, padding: '0.3em 1em', fontSize: '1rem'
+      }}>
+        <span>{icon}</span>
+        <span style={{textTransform: 'capitalize'}}>{status.toLowerCase()}</span>
+        <span style={{marginLeft: 8, fontWeight: 700}}>{confidence}%</span>
+      </span>
+    );
+  };
+
+  // --- ConfidenceBar Subcomponent ---
+  const ConfidenceBar = ({ confidence, strength }: { confidence: number, strength: string }) => {
+    const color = strength === 'HIGH' ? '#16a34a' : strength === 'MEDIUM' ? '#f59e42' : '#dc2626';
+    return (
+      <div style={{margin: '0.5em 0'}}>
+        <div style={{background: '#e5e7eb', borderRadius: 8, height: 8, width: '100%'}}>
+          <div style={{
+            width: `${confidence}%`, background: color, height: 8, borderRadius: 8, transition: 'width 0.4s'
+          }} />
+        </div>
+        <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 4}}>
+          <span>Confidence</span>
+          <span style={{fontWeight: 700}}>{confidence}%</span>
+        </div>
+      </div>
+    );
+  };
+
+  // --- EnhancedQuoteDisplay Subcomponent ---
+  const EnhancedQuoteDisplay = ({ quotes, interviewCount, showAllQuotes, setShowAllQuotes }: { quotes: any[], interviewCount: number, showAllQuotes: boolean, setShowAllQuotes: (v: boolean) => void }) => {
+    const visibleQuotes = showAllQuotes ? quotes : quotes.slice(0, 2);
+    return (
+      <div>
+        {visibleQuotes.map((q, i) => (
+          <div key={i} className="mb-2">
+            <div className="italic text-sm text-gray-800">"{q.text || q.quote || q.content}"</div>
+            <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+              — {q.speaker}{q.role ? `, ${q.role}` : ''}{q.company ? ` at ${q.company}` : ''}
+              {q.role && <span className="ml-2 bg-green-50 text-green-700 rounded px-2 py-0.5 text-xs font-medium">{q.role}</span>}
+            </div>
+          </div>
+        ))}
+        {quotes.length > 2 && !showAllQuotes && (
+          <button
+            className="mt-1 text-green-700 bg-green-50 rounded px-3 py-1 text-xs font-semibold hover:bg-green-100 transition"
+            onClick={e => { e.stopPropagation(); setShowAllQuotes(true); }}
+          >
+            + View {quotes.length - 2} more quotes
+          </button>
+        )}
+        <div className="text-xs text-gray-400 mt-2">{interviewCount} interview{interviewCount === 1 ? '' : 's'}</div>
+      </div>
+    );
+  };
+
+  // --- Main Card ---
+  const ProcessedAssumptionCard = ({ assumption }: { assumption: AssumptionStateWithAPI }) => {
+    // Collapsible state
+    const [isExpanded, setIsExpanded] = React.useState(false);
+    const [showAllQuotes, setShowAllQuotes] = React.useState(false);
+    React.useEffect(() => { if (!isExpanded) setShowAllQuotes(false); }, [isExpanded]);
+    const toggleExpanded = () => setIsExpanded((prev) => !prev);
+
+    const keyFinding = assumption.keyFinding || assumption.realityFromInterviews || assumption.explanation || '';
+    const confidenceAnalysis = assumption.confidenceAnalysis || assumption.confidenceExplanation || assumption.explanation || '';
+    const refinedStatement = assumption.refinedStatement || assumption.assumption || '';
+    const evidenceStrength = assumption.evidenceStrength || (assumption.confidenceScore && assumption.confidenceScore >= 80 ? 'HIGH' : assumption.confidenceScore && assumption.confidenceScore >= 50 ? 'MEDIUM' : 'LOW');
+    const interviewCount = assumption.interviewCount ?? (assumption.quotes ? assumption.quotes.length : 0) ?? 0;
+
+    // Category helpers for icon and display name
     const getCategoryIcon = (category: string) => {
       const iconMap = {
         'BUYER_TITLES': '👥',
@@ -716,53 +872,52 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
       };
       return nameMap[category?.toUpperCase() as keyof typeof nameMap] || 'GENERAL';
     };
-    const getCategoryColor = (category: string) => {
-      const colorMap = {
-        'BUYER_TITLES': 'blue',
-        'COMPANY_SIZE': 'purple',
-        'PAIN_POINTS': 'red',
-        'DESIRED_OUTCOMES': 'green',
-        'TRIGGERS': 'orange',
-        'BARRIERS': 'gray',
-        'MESSAGING_EMPHASIS': 'indigo'
-      };
-      return colorMap[category?.toUpperCase() as keyof typeof colorMap] || 'blue';
-    };
-    const getOutcomeDisplay = (outcome: string) => {
-      switch(outcome) {
-        case 'ALIGNED': return { label: 'Aligned', color: 'green' };
-        case 'MISALIGNED': return { label: 'Misaligned', color: 'red' };
-        case 'NEW_DATA_ADDED': return { label: 'Refined', color: 'orange' };
-        case 'NEUTRAL': return { label: 'Challenged', color: 'yellow' };
-        default: return { label: 'Unknown', color: 'gray' };
-      }
-    };
-    const categoryColor = getCategoryColor(assumption.category);
-    const outcomeDisplay = getOutcomeDisplay(result.outcome);
+
     return (
-      <div className="assumption-card processed-card">
-        <div className="card-header">
-          <div className="category-info">
-            <div className={`category-icon-container ${categoryColor}`}>
-              <span className="category-icon">{getCategoryIcon(assumption.category)}</span>
+      <div className="bg-white border border-gray-200 border-l-4 rounded-lg shadow-sm mb-3" style={{borderLeftColor: assumption.status === 'ALIGNED' ? '#16a34a' : assumption.status === 'MISALIGNED' ? '#dc2626' : '#eab308'}}>
+        {/* Header (clickable) */}
+        <div
+          className="flex items-center p-4 gap-3 cursor-pointer group"
+          onClick={toggleExpanded}
+        >
+          <span className="text-xl mr-2 flex-shrink-0">{getCategoryIcon(assumption.category)}</span>
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-xs text-gray-500 font-medium leading-tight mb-0.5">{getCategoryDisplayName(assumption.category)}</span>
+            <span className="text-base font-medium text-gray-900 leading-snug truncate" title={refinedStatement}>{refinedStatement}</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <StatusBadge status={assumption.status} confidence={assumption.confidenceScore ?? 0} />
+            <button className="p-1 rounded hover:bg-gray-100 transition flex items-center" tabIndex={-1} onClick={e => { e.stopPropagation(); toggleExpanded(); }}>
+              {isExpanded ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}
+            </button>
+          </div>
+        </div>
+        {/* Separator */}
+        {isExpanded && <div className="border-t border-gray-100 mx-4" />}
+        {/* Expandable Content */}
+        {isExpanded && (
+          <div className="px-4 pt-3 pb-4">
+            {/* Key Finding */}
+            <div className="bg-green-50 border-l-4 border-green-400 rounded p-3 flex items-start gap-3 mb-3">
+              <span className="text-lg text-green-600 mt-0.5">✔️</span>
+              <div>
+                <div className="text-xs font-semibold text-green-700 mb-0.5">KEY FINDING</div>
+                <div className="text-sm text-green-900 font-medium leading-snug">{keyFinding}</div>
+              </div>
             </div>
-            <h3 className={`category-title ${categoryColor}`}>
-              {getCategoryDisplayName(assumption.category)}
-            </h3>
+            {/* Confidence Analysis */}
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">📊 CONFIDENCE ANALYSIS</div>
+              <ConfidenceBar confidence={assumption.confidenceScore ?? 0} strength={evidenceStrength} />
+              <div className="text-sm text-gray-700 mt-1 leading-tight">{confidenceAnalysis}</div>
+            </div>
+            {/* Supporting Evidence */}
+            <div>
+              <div className="text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">💬 SUPPORTING EVIDENCE</div>
+              <EnhancedQuoteDisplay quotes={assumption.quotes} interviewCount={interviewCount} showAllQuotes={showAllQuotes} setShowAllQuotes={setShowAllQuotes} />
+            </div>
           </div>
-          <div className="status-container">
-            <span className={`confidence-percentage ${outcomeDisplay.color}`}>
-              {result.confidence}%
-            </span>
-            <span className={`outcome-label ${outcomeDisplay.color}`}>
-              {outcomeDisplay.label}
-            </span>
-            <span className="chevron">›</span>
-          </div>
-        </div>
-        <div className="assumption-content">
-          <p className="assumption-text">{assumption.assumption}</p>
-        </div>
+        )}
       </div>
     );
   };

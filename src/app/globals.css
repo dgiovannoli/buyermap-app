@@ -158,17 +158,72 @@
 }
 
 .assumption-card {
-  background-color: white;
-  border: 1px solid #e5e7eb;
+  background: white;
   border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
 }
 
-.assumption-card:hover {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transform: translateY(-1px);
+.assumption-card .card-header {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.assumption-card .chevron {
+  font-size: 1.5rem;
+  transition: transform 0.3s ease;
+  color: #666;
+}
+
+.assumption-card .chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.assumption-card .assumption-content {
+  padding: 0 1rem 1rem;
+}
+
+.assumption-card .expanded-content {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.assumption-card .expanded-content h4 {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.assumption-card .deck-evidence,
+.assumption-card .interview-quotes,
+.assumption-card .confidence-explanation {
+  margin-bottom: 1rem;
+}
+
+.assumption-card .quote {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.assumption-card .quote-text {
+  font-style: italic;
+  color: #444;
+  margin-bottom: 0.5rem;
+}
+
+.assumption-card .quote-attribution {
+  font-size: 0.85rem;
+  color: #666;
 }
 
 .card-header {

@@ -490,7 +490,7 @@ Return JSON with topic verification:
       .replace(/["']\s*$/, '')
       .replace(/\n\s*\n/g, '\n')
       .replace(/,\s*[}\]]/, '}')
-      .trim();
+                          .trim();
     // Parse and flatten
     let batchClassified = [];
     try {
@@ -593,14 +593,14 @@ export async function POST(request: NextRequest) {
     const files = formData.getAll('files') as File[];
     const assumptionsJson = formData.get('assumptions') as string;
     const existingAssumptions: BuyerMapData[] = JSON.parse(assumptionsJson);
-    
+
     if (!files.length) {
       return NextResponse.json(
         { error: 'No files provided' },
         { status: 400 }
       );
     }
-    
+
     console.log(`🎯 Starting parallel processing for ${files.length} interviews, ${existingAssumptions.length} assumptions`);
     const assumptionsList: string[] = existingAssumptions.map(a => a.v1Assumption);
     
@@ -617,7 +617,7 @@ export async function POST(request: NextRequest) {
             const elapsed = ((Date.now() - processingStartTime) / 1000).toFixed(1);
             console.log(`✅ Completed interview ${file.name} in ${elapsed}s`);
             return { result, fileName: file.name };
-          } catch (error) {
+        } catch (error) {
             console.error(`❌ Error processing interview ${file.name}:`, error);
             return { 
               result: Object.fromEntries(assumptionsList.map(a => [a, []])),
@@ -668,7 +668,7 @@ export async function POST(request: NextRequest) {
     const overallAlignmentScore = Math.round(
       (validatedCount / aggregatedResults.length) * 100
     );
-    
+
     return NextResponse.json({
       success: true,
       assumptions: aggregatedResults,
