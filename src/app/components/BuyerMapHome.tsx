@@ -92,7 +92,17 @@ interface UploadedFiles {
   interviews: File[];
 }
 
-const ModernBuyerMapLanding = () => {
+interface BuyerMapHomeProps {
+  onStart: () => void;
+}
+
+export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
+  console.log('BuyerMapHome props received:', { onStart });
+  console.log('onStart type in component:', typeof onStart);
+  // Defensive: warn if onStart is not a function
+  if (typeof onStart !== 'function') {
+    console.error('onStart prop is not a function! Value:', onStart);
+  }
   const [currentStep, setCurrentStep] = useState(1);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFiles>({ deck: null, interviews: [] });
   const [buyerMapData, setBuyerMapData] = useState<BuyerMapItem[]>([]);
@@ -339,247 +349,182 @@ const ModernBuyerMapLanding = () => {
     };
   };
 
-  if (currentStep === 1) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white overflow-hidden">
-        {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-50 animate-pulse"></div>
-        </div>
+  const handleMainCTA = () => {
+    console.log('Button clicked, onStart is:', onStart);
+    if (typeof onStart === 'function') {
+      onStart();
+    } else {
+      console.error('onStart is not a function, received:', onStart);
+    }
+  };
 
-        {/* Hero Section - Perfect 2 Column Split */}
-        <div className="relative max-w-7xl mx-auto px-6 py-20">
-          <div className="grid grid-cols-2 gap-16 items-center min-h-screen">
-            {/* Left Column - Hero Copy & CTA */}
-            <div className="space-y-8">
-              {/* Badge/Tag */}
-              <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-                <span className="text-sm font-medium text-blue-300">✨ BuyerMap Analysis</span>
-              </div>
-              
-              {/* Hero Headline */}
-              <div>
-                <h1 className="text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
-                  Validate Your ICP Assumptions
-                </h1>
-                <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-                  Compare your sales messaging against real customer interviews
-                </p>
-              </div>
-
-              {/* Main CTA */}
-              <div className="space-y-4">
-                <button
-                  onClick={() => setCurrentStep(2)}
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200"
-                >
-                  Create Your BuyerMap Report
-                </button>
-                
-                <p className="text-sm text-gray-500 text-center">
-                  Free to try • Export or save with account
-                </p>
-              </div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
+      <div className="relative max-w-7xl mx-auto px-6 py-20">
+        <div className="grid grid-cols-2 gap-16 items-center min-h-screen">
+          {/* Left Column - Hero Copy & CTA */}
+          <div className="space-y-8">
+            {/* Badge/Tag */}
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
+              <span className="text-sm font-medium text-blue-300">✨ BuyerMap Analysis</span>
+            </div>
+            
+            {/* Hero Headline */}
+            <div>
+              <h1 className="text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+                Validate Your ICP Assumptions
+              </h1>
+              <p className="text-xl text-gray-400 mb-8 leading-relaxed">
+                Compare your sales messaging against real customer interviews
+              </p>
             </div>
 
-            {/* Right Column - Demo Preview */}
-            <div className="relative">
-              {/* Glassmorphism Container */}
-              <div className="relative bg-white/10 backdrop-blur-lg rounded-3xl overflow-hidden border border-white/20 shadow-2xl transform hover:scale-105 transition-transform duration-500">
-                {/* Demo Hero Score */}
-                <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white p-8">
-                  <h3 className="text-sm font-medium mb-2 opacity-90">Overall Alignment Score</h3>
-                  <div className="text-5xl font-bold mb-3">73%</div>
-                  <p className="text-sm opacity-90">Generally aligned, with room for refinement</p>
-                </div>
-
-                {/* Demo Tab Navigation */}
-                <div className="border-b border-white/10 px-6 py-2">
-                  <nav className="-mb-px flex space-x-6">
-                    <div className="py-3 border-b-2 border-white/50 text-sm font-medium text-white">
-                      All Results (3)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      Misalignments (2)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      New Insights (1)
-                    </div>
-                    <div className="py-3 text-sm text-gray-400">
-                      Validated (0)
-                    </div>
-                  </nav>
-                </div>
-
-                {/* Demo Content */}
-                <div className="p-6">
-                  <div className="grid grid-cols-2 gap-8 items-start">
-                    {/* Left Column - Theme Details */}
-                    <div className="space-y-3">
-                      <div className="text-xs text-blue-300 font-medium">PAIN POINTS</div>
-                      <h4 className="text-lg font-bold text-white">Evidence Review Burden</h4>
-                      <p className="text-sm text-gray-300">
-                        Attorneys spend 87+ workdays/year on manual evidence review
-                      </p>
-                      
-                      {/* Messaging Recommendation */}
-                      <div className="bg-blue-500/20 border-l-4 border-blue-400 rounded-r-lg p-3 mt-4">
-                        <h5 className="font-semibold text-blue-200 mb-1 text-xs flex items-center">
-                          💡 Messaging Recommendation:
-                        </h5>
-                        <p className="text-xs text-blue-300">
-                          Segment messaging by firm size - small firms relate to 120+ days, large firms to 60 days
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right Column - Reality & Metrics */}
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-300">
-                        Attorneys actually spend 60-120 workdays depending on case complexity and firm size
-                      </p>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-500/30 text-blue-200">
-                          New Data Added
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-12 bg-white/20 rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full bg-green-400" style={{ width: '85%' }}></div>
-                          </div>
-                          <span className="text-sm font-bold text-white">85%</span>
-                        </div>
-                      </div>
-                      
-                      <button className="text-blue-300 text-sm font-medium hover:text-blue-200 transition-colors">
-                        Show Details ▼
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Supporting Evidence Section */}
-                  <div className="mt-6 pt-4 border-t border-white/10">
-                    <h5 className="font-semibold text-white mb-3 text-sm">Supporting Evidence:</h5>
-                    <div className="bg-white/5 rounded-lg p-3">
-                      <p className="text-sm text-gray-300 italic mb-2">
-                        &ldquo;In complex cases, I easily spend 3-4 months just reviewing evidence&rdquo;
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        <strong>Maria Santos</strong>, Criminal Defense Attorney • Interview #2
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Floating Elements */}
-              <div className="absolute -bottom-6 -left-4 bg-green-500 rounded-xl shadow-lg px-4 py-3 transform -rotate-2">
-                <p className="text-xs text-white font-medium">✓ 3 insights validated</p>
-              </div>
+            {/* Main CTA */}
+            <div className="space-y-4 relative z-10">
+              <button
+                onClick={handleMainCTA}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200 relative z-10"
+                style={{ pointerEvents: 'auto' }}
+              >
+                Create Your BuyerMap Report
+              </button>
               
-              <div className="absolute -top-4 -right-4 bg-gradient-to-r from-red-400 to-orange-500 text-white rounded-xl px-4 py-2 shadow-lg transform rotate-3">
-                <p className="text-xs font-bold">2 misalignments found</p>
+              <p className="text-sm text-gray-500 text-center">
+                Free to try • Export or save with account
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column - Demo Preview */}
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-3xl backdrop-blur-sm"></div>
+            <div className="relative bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                      <span className="text-lg">📊</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-white">Alignment Score</h3>
+                      <p className="text-sm text-gray-400">Based on 12 interviews</p>
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-blue-400">87%</div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-300">Validated Assumptions</span>
+                    <span className="text-sm font-medium text-green-400">8/10</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-400 rounded-full" style={{ width: '80%' }}></div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-300">New Insights</span>
+                    <span className="text-sm font-medium text-blue-400">3</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-400 rounded-full" style={{ width: '30%' }}></div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-300">Messaging Adjustments</span>
+                    <span className="text-sm font-medium text-purple-400">5</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-400 rounded-full" style={{ width: '50%' }}></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* How It Works Section */}
-        <div className="max-w-7xl mx-auto px-6 py-20">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-white mb-4">How It Works</h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Get actionable insights from your customer interviews in three simple steps
+        {/* Feature Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mt-20">
+          <div className="text-center group">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+              1
+            </div>
+            <h3 className="text-xl font-bold mb-4 text-white">Upload Your Deck</h3>
+            <p className="text-gray-400 mb-6 leading-relaxed">
+              Share your sales deck and customer interview transcripts. We support PDF, PowerPoint, and text files.
             </p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+              <div className="flex items-center justify-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                    <span className="text-xs">📄</span>
+                  </div>
+                  <span className="text-sm text-gray-300">Sales Deck</span>
+                </div>
+              </div>
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
-                1
-              </div>
-              <h3 className="text-xl font-bold mb-4 text-white">Upload Your Materials</h3>
-              <p className="text-gray-400 mb-6 leading-relaxed">
-                Share your sales deck and customer interview transcripts. We support PDF, PowerPoint, and text files.
-              </p>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-                <div className="flex items-center justify-center space-x-4">
+          <div className="text-center group">
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+              2
+            </div>
+            <h3 className="text-xl font-bold mb-4 text-white">AI Analysis</h3>
+            <p className="text-gray-400 mb-6 leading-relaxed">
+              Our AI extracts assumptions from your deck and validates them against customer quotes from interviews.
+            </p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                      <span className="text-xs">📄</span>
-                    </div>
-                    <span className="text-sm text-gray-300">Sales Deck</span>
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span className="text-sm text-gray-300">Extract assumptions</span>
                   </div>
-                  <span className="text-gray-400">+</span>
+                  <span className="text-xs text-green-400 font-medium">✓</span>
+                </div>
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-                      <span className="text-xs">🎤</span>
-                    </div>
-                    <span className="text-sm text-gray-300">Interviews</span>
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span className="text-sm text-gray-300">Match customer quotes</span>
                   </div>
+                  <span className="text-xs text-green-400 font-medium">✓</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-gray-300">Calculate confidence</span>
+                  </div>
+                  <span className="text-xs text-blue-400 font-medium">...</span>
                 </div>
               </div>
             </div>
-            
-            <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
-                2
-              </div>
-              <h3 className="text-xl font-bold mb-4 text-white">AI Analysis</h3>
-              <p className="text-gray-400 mb-6 leading-relaxed">
-                Our AI extracts assumptions from your deck and validates them against customer quotes from interviews.
-              </p>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span className="text-sm text-gray-300">Extract assumptions</span>
-                    </div>
-                    <span className="text-xs text-green-400 font-medium">✓</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      <span className="text-sm text-gray-300">Match customer quotes</span>
-                    </div>
-                    <span className="text-xs text-green-400 font-medium">✓</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                      <span className="text-sm text-gray-300">Calculate confidence</span>
-                    </div>
-                    <span className="text-xs text-blue-400 font-medium">...</span>
-                  </div>
-                </div>
-              </div>
+          </div>
+          
+          <div className="text-center group">
+            <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
+              3
             </div>
-            
-            <div className="text-center group">
-              <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
-                3
-              </div>
-              <h3 className="text-xl font-bold mb-4 text-white">Get Actionable Results</h3>
-              <p className="text-gray-400 mb-6 leading-relaxed">
-                Receive a detailed report with messaging recommendations, confidence scores, and supporting evidence.
-              </p>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-300">Alignment Score</span>
-                    <span className="text-lg font-bold text-blue-400">73%</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-300">Insights Found</span>
-                    <span className="text-lg font-bold text-green-400">3</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-300">Recommendations</span>
-                    <span className="text-lg font-bold text-purple-400">5</span>
-                  </div>
+            <h3 className="text-xl font-bold mb-4 text-white">Get Actionable Results</h3>
+            <p className="text-gray-400 mb-6 leading-relaxed">
+              Receive a detailed report with messaging recommendations, confidence scores, and supporting evidence.
+            </p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">Alignment Score</span>
+                  <span className="text-lg font-bold text-blue-400">73%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">Insights Found</span>
+                  <span className="text-lg font-bold text-green-400">3</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">Recommendations</span>
+                  <span className="text-lg font-bold text-purple-400">5</span>
                 </div>
               </div>
             </div>
@@ -594,8 +539,9 @@ const ModernBuyerMapLanding = () => {
               Join hundreds of teams improving their messaging with data-driven insights
             </p>
             <button
-              onClick={() => setCurrentStep(2)}
-              className="bg-white text-blue-600 px-10 py-4 rounded-xl text-lg font-bold hover:bg-gray-50 shadow-lg hover:shadow-xl transition-all duration-200"
+              onClick={handleMainCTA}
+              className="bg-white text-blue-600 px-10 py-4 rounded-xl text-lg font-bold hover:bg-gray-50 shadow-lg hover:shadow-xl transition-all duration-200 relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               Create Your BuyerMap Report
             </button>
@@ -603,222 +549,6 @@ const ModernBuyerMapLanding = () => {
           </div>
         </div>
       </div>
-    );
-  }
-
-  // Other steps with original styling
-  return (
-    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center mb-8">
-          {[1, 2, 3, 4].map((step) => (
-            <div key={step} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
-                currentStep >= step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
-              }`}>
-                {step}
-              </div>
-              {step < 4 && (
-                <div className={`w-16 h-1 mx-2 ${
-                  currentStep > step ? 'bg-blue-600' : 'bg-gray-200'
-                }`} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Step 2: Upload */}
-        {currentStep === 2 && (
-          <div className="space-y-8">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Your Materials</h2>
-              <h3 className="text-xl font-bold mb-4 text-gray-900">We&apos;ll validate your ICP assumptions against interview data</h3>
-            </div>
-
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
-                <h3 className="text-lg font-semibold mb-2">Sales Deck / Pitch Materials</h3>
-                <p className="text-gray-500 mb-4">Upload your current sales presentation</p>
-                
-                {uploadedFiles.deck ? (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{uploadedFiles.deck.name}</span>
-                      <button onClick={() => removeFile('deck')} className="text-red-500 hover:text-red-700 text-xl">×</button>
-                    </div>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <input type="file" className="hidden" accept=".pdf,.ppt,.pptx" onChange={(e) => handleFileUpload('deck', e.target.files)} />
-                    <div className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 inline-block">Choose File</div>
-                  </label>
-                )}
-              </div>
-            </div>
-
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
-                <h3 className="text-lg font-semibold mb-2">Customer Interview Transcripts</h3>
-                <p className="text-gray-500 mb-4">Upload up to 10 interview transcripts</p>
-                
-                {uploadedFiles.interviews.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {uploadedFiles.interviews.map((file, index) => (
-                      <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{file.name}</span>
-                          <button onClick={() => removeFile('interviews', index)} className="text-red-500 hover:text-red-700 text-xl">×</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                <label className="cursor-pointer">
-                  <input type="file" className="hidden" multiple accept=".txt,.doc,.docx,.pdf" onChange={(e) => handleFileUpload('interviews', e.target.files)} />
-                  <div className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 inline-block">Add Interview Files</div>
-                </label>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <button
-                onClick={handleProcessAnalyze}
-                disabled={!uploadedFiles.deck || uploadedFiles.interviews.length === 0 || isProcessing}
-                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                {isProcessing ? processingStep || 'Processing...' : 'Process & Analyze'}
-              </button>
-
-              {isProcessing && (
-                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-                    <span className="text-blue-800">{processingStep}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Results */}
-        {currentStep === 3 && (
-          <div className="space-y-8">
-            <div className="flex flex-col items-center justify-center p-6 bg-white rounded-lg shadow-sm">
-              <div className="text-4xl font-bold mb-2">
-                {getScoreMessage(0)}
-              </div>
-              <p className="text-lg opacity-90">Initial analysis complete</p>
-            </div>
-
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
-                {[
-                  { key: 'all', label: 'All Results', count: buyerMapData.length, color: 'gray' },
-                  { key: 'misaligned', label: 'Misalignments', count: getTabCounts().misaligned, color: 'red' },
-                  { key: 'insights', label: 'New Insights', count: getTabCounts().insights, color: 'blue' },
-                  { key: 'aligned', label: 'Validated', count: getTabCounts().aligned, color: 'green' }
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === tab.key
-                        ? `border-${tab.color}-500 text-${tab.color}-600`
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {tab.label} ({tab.count})
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              {getFilteredData().map((item) => (
-                <div key={item.id} className="border-b border-gray-200 last:border-b-0">
-                  <div className="p-6 hover:bg-gray-50">
-                    <div className="grid grid-cols-12 gap-4 items-start">
-                      <div className="col-span-3">
-                        <div className="text-xs text-gray-500 mb-1">{item.icpAttribute}</div>
-                        <h3 className="font-semibold text-gray-900 mb-1">{item.icpTheme}</h3>
-                        <p className="text-sm text-gray-600">{item.v1Assumption}</p>
-                      </div>
-                      
-                      <div className="col-span-3">
-                        <p className="text-sm text-gray-700">{item.realityFromInterviews}</p>
-                      </div>
-                      
-                      <div className="col-span-2">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${getOutcomeColor(item.comparisonOutcome)}`}>
-                          {item.comparisonOutcome}
-                        </span>
-                      </div>
-                      
-                      <div className="col-span-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-gray-200 rounded-full">
-                            <div 
-                              className="h-2 rounded-full bg-blue-500"
-                              style={{ width: `${getEffectiveConfidence(item)}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium">{getEffectiveConfidence(item)}%</span>
-                        </div>
-                      </div>
-                      
-                      <div className="col-span-2 flex justify-end">
-                        <button
-                          onClick={() => toggleRowExpansion(item.id)}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          {expandedRows.has(item.id) ? 'Hide Details ▲' : 'Show Details ▼'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h4 className="font-medium text-blue-900 mb-2">💡 Messaging Recommendation:</h4>
-                      <p className="text-sm text-blue-800">{item.waysToAdjustMessaging}</p>
-                    </div>
-                  </div>
-
-                  {expandedRows.has(item.id) && (
-                    <div className="bg-gray-50 border-t border-gray-200 p-6">
-                      <div className="grid grid-cols-2 gap-8">
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Supporting Evidence</h4>
-                          <div className="space-y-3">
-                            {item.quotes.map(quote => (
-                              <div key={quote.id} className="border rounded-lg p-4 bg-white border-gray-200">
-                                <p className="text-gray-700 mb-2">{quote.text}</p>
-                                <div className="text-sm text-gray-500">
-                                  <span className="font-medium">{quote.speaker}</span>
-                                  <span className="mx-2">•</span>
-                                  <span>{quote.role}</span>
-                                  <span className="mx-2">•</span>
-                                  <span>{quote.source}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        {/* ...other columns... */}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
-
-export default ModernBuyerMapLanding;

@@ -2,19 +2,30 @@
 
 import React from 'react';
 import { BarChart, Users, TrendingUp, ArrowRight, Brain, Target, Zap } from 'lucide-react';
-import { BuyerMapData, Quote } from '../../types/buyermap';
+import { BuyerMapData, Quote, InterviewBatch } from '../../types/buyermap';
 
 interface ResultsStepProps {
   results: BuyerMapData[];
   onBackToHome: () => void;
+  onContinueToInterviews?: () => void;
+  validationStatus: 'pending' | 'partial' | 'validated';
+  processedBatches?: InterviewBatch[];
 }
 
-export default function ResultsStep({ results, onBackToHome }: ResultsStepProps) {
-  const totalRecords = results.length;
-  const alignedAssumptions = results.filter(r => r.comparisonOutcome === 'aligned').length;
-  const misalignedAssumptions = results.filter(r => r.comparisonOutcome === 'misaligned').length;
-  const newInsights = results.filter(r => r.comparisonOutcome === 'new_insight').length;
-  const averageConfidence = results.reduce((acc, r) => acc + (r.effectiveConfidence || r.confidenceScore), 0) / totalRecords;
+export default function ResultsStep({
+  results,
+  onBackToHome,
+  onContinueToInterviews,
+  validationStatus,
+  processedBatches
+}: ResultsStepProps) {
+  const totalRecords = results?.length || 0;
+  const alignedAssumptions = results?.filter(r => r.comparisonOutcome === 'aligned').length || 0;
+  const misalignedAssumptions = results?.filter(r => r.comparisonOutcome === 'misaligned').length || 0;
+  const newInsights = results?.filter(r => r.comparisonOutcome === 'new_insight').length || 0;
+  const averageConfidence = totalRecords > 0 
+    ? (results || []).reduce((acc, r) => acc + (r.effectiveConfidence || r.confidenceScore || 0), 0) / totalRecords
+    : 0;
 
   const getScoreColor = (outcome: string) => {
     switch (outcome) {

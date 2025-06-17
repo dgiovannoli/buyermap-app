@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { User } from '@supabase/auth-helpers-nextjs'
-import { createClientComponent } from '@/lib/supabase-client'
+import { createClientComponent } from '../../lib/supabase-client'
 
 export default function UserMenu() {
   const [user, setUser] = useState<User | null>(null)

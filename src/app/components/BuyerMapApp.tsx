@@ -1,141 +1,164 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import BuyerMapInterface from './BuyerMapInterface';
 import ResultsStep from './steps/ResultsStep';
 import ExportStep from './steps/ExportStep';
-import { BuyerMapData, Quote, AssumptionData } from '../types/buyermap';
+import { BuyerMapData, Quote, AssumptionData, ProcessingStep, InterviewBatch, ProcessingProgress, ValidationProgress } from '../../types/buyer-map';
+import { ICPValidationResponse } from '../../types/buyermap';
 import FileUploadStep from './steps/FileUploadStep';
-import BuyerMapHome from './BuyerMapHome';
+import dynamic from 'next/dynamic';
+import DeckUploadStage from './stages/DeckUploadStage';
+import DeckResultsStage from './stages/DeckResultsStage';
+import ProgressTracker from './ProgressTracker';
 
-interface UploadedFiles {
-  deck: File | null;
-  interviews: File[];
+const BATCH_SIZE = 3; // Process 3 interview files at a time
+
+const BuyerMapHome = dynamic(() => import('./BuyerMapHome'), { ssr: false });
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">Something went wrong</h2>
+          <p className="text-red-600">{this.state.error?.message}</p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 export default function BuyerMapApp() {
-  const [currentStep, setCurrentStep] = useState<'upload' | 'results'>('upload');
-  const [results, setResults] = useState<BuyerMapData[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState<'deck' | 'interviews' | null>(null);
-  const [uploadedFiles, setUploadedFiles] = useState<{
-    deck: File | null;
-    interviews: File[];
-  }>({
-    deck: null,
-    interviews: []
+  const [isClient, setIsClient] = useState(false);
+  const [currentStage, setCurrentStage] = useState<ProcessingStep>('home');
+  const [buyerMapData, setBuyerMapData] = useState<ICPValidationResponse | null>(null);
+  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress>({
+    phase: 'idle',
+    step: 'home',
+    currentBatch: 0,
+    totalBatches: 0,
+    percentage: 0,
+    status: 'idle'
   });
+  const [validationProgress, setValidationProgress] = useState<ValidationProgress>({
+    validatedCount: 0,
+    partiallyValidatedCount: 0,
+    pendingCount: 0,
+    totalQuotes: 0,
+    overallProgress: 0,
+    totalAssumptions: 0,
+    partialCount: 0,
+    totalInterviews: 0,
+    processedBatches: 0
+  });
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = (type: string, files: FileList | null) => {
-    if (!files) return;
+  const handleStart = useCallback(() => {
+    console.log('handleStart called');
+    setCurrentStage('deck-upload');
+  }, []);
 
-    if (type === 'deck') {
-      setUploadedFiles(prev => ({ ...prev, deck: files[0] }));
-    } else if (type === 'interviews') {
-      const newInterviews = Array.from(files);
-      setUploadedFiles(prev => ({ ...prev, interviews: newInterviews }));
-    }
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return <div>Loading...</div>;
+  }
+
+  const handleDeckProcessed = (data: ICPValidationResponse) => {
+    setBuyerMapData(data);
+    setCurrentStage('deck-results');
+    updateValidationProgress(data);
   };
 
-  const handleRemoveFile = (type: string, index?: number) => {
-    if (type === 'deck') {
-      setUploadedFiles(prev => ({ ...prev, deck: null }));
-    } else if (type === 'interviews' && index !== undefined) {
-      setUploadedFiles(prev => ({
-        ...prev,
-        interviews: prev.interviews.filter((_, i) => i !== index)
-      }));
-    }
+  const updateValidationProgress = (data: ICPValidationResponse) => {
+    setBuyerMapData(data);
+    const assumptions = data.assumptions || [];
+    setValidationProgress({
+      validatedCount: data.validatedCount || 0,
+      partiallyValidatedCount: data.partiallyValidatedCount || 0,
+      pendingCount: data.pendingCount || 0,
+      totalQuotes: assumptions.reduce((sum, a) => sum + (a.quotes?.length || 0), 0),
+      overallProgress: data.overallAlignmentScore || 0,
+      totalAssumptions: assumptions.length,
+      partialCount: data.partiallyValidatedCount || 0,
+      totalInterviews: 0,
+      processedBatches: 0
+    });
   };
 
-  const handleProcessAnalyze = async () => {
-    if (!uploadedFiles.deck) return;
-
-    setIsProcessing(true);
-    setProcessingStep('deck');
-
-    try {
-      // Phase 1: Analyze Sales Deck
-      const deckFormData = new FormData();
-      deckFormData.append('deck', uploadedFiles.deck);
-
-      const deckResponse = await fetch('/api/analyze-deck', {
-        method: 'POST',
-        body: deckFormData
-      });
-
-      if (!deckResponse.ok) {
-        throw new Error('Failed to analyze sales deck');
-      }
-
-      const deckData = await deckResponse.json();
-      if (!deckData.success) {
-        throw new Error(deckData.error || 'Failed to analyze sales deck');
-      }
-
-      // Show initial assumptions immediately
-      setResults(deckData.assumptions);
-      setCurrentStep('results');
-
-      // Phase 2: Process Interviews if available
-      if (uploadedFiles.interviews.length > 0) {
-        setProcessingStep('interviews');
-        const interviewFormData = new FormData();
-        uploadedFiles.interviews.forEach(file => {
-          interviewFormData.append('interviews', file);
-        });
-        interviewFormData.append('assumptions', JSON.stringify(deckData.assumptions));
-
-        const interviewResponse = await fetch('/api/analyze-interviews', {
-          method: 'POST',
-          body: interviewFormData
-        });
-
-        if (!interviewResponse.ok) {
-          throw new Error('Failed to process interviews');
-        }
-
-        const interviewData = await interviewResponse.json();
-        if (!interviewData.success) {
-          throw new Error(interviewData.error || 'Failed to process interviews');
-        }
-
-        // Update results with interview analysis
-        setResults(interviewData.updatedAssumptions);
-      }
-    } catch (error) {
-      console.error('Error processing files:', error);
-      // TODO: Show error message to user
-    } finally {
-      setIsProcessing(false);
-      setProcessingStep(null);
-    }
+  const handleDeckResultsError = (error: Error) => {
+    setError(error.message);
   };
 
-  const handleBackToHome = () => {
-    setCurrentStep('upload');
-    setResults([]);
-    setUploadedFiles({ deck: null, interviews: [] });
+  const handleDeckResultsProgress = (progress: number) => {
+    setProcessingProgress(prev => ({ ...prev, percentage: progress }));
+  };
+
+  const renderCurrentStage = () => {
+    console.log('🔍 renderCurrentStage called, currentStage:', currentStage);
+    switch (currentStage) {
+      case 'home':
+        console.log('🔍 Executing HOME case');
+        console.log('About to render BuyerMapHome with onStart:', handleStart);
+        console.log('handleStart type:', typeof handleStart);
+        return <BuyerMapHome onStart={handleStart} />;
+      case 'deck-upload':
+        return (
+          <DeckUploadStage
+            onDeckProcessed={handleDeckProcessed}
+            onError={setError}
+            onProgressUpdate={setProcessingProgress}
+          />
+        );
+      case 'deck-results':
+        return (
+          <DeckResultsStage
+            buyerMapData={buyerMapData!}
+            onError={handleDeckResultsError}
+            onProgressUpdate={handleDeckResultsProgress}
+            onValidationUpdate={updateValidationProgress}
+          />
+        );
+      default:
+        console.log('🔍 Executing DEFAULT case');
+        return null;
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {currentStep === 'upload' ? (
-        <FileUploadStep
-          uploadedFiles={uploadedFiles}
-          onFileUpload={handleFileUpload}
-          onRemoveFile={handleRemoveFile}
-          onNext={handleProcessAnalyze}
-          onBackToHome={handleBackToHome}
-          isProcessing={isProcessing}
-          processingStep={processingStep}
-        />
-      ) : (
-        <ResultsStep
-          results={results}
-          onBackToHome={handleBackToHome}
+      {currentStage !== 'home' && (
+        <ProgressTracker
+          processingProgress={processingProgress}
+          validationProgress={validationProgress}
         />
       )}
+      {error && (
+        <div className="fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+      <ErrorBoundary>
+        {renderCurrentStage()}
+      </ErrorBoundary>
     </div>
   );
 }

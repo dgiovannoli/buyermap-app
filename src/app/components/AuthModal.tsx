@@ -1,7 +1,7 @@
 'use client'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
-import { createClientComponent } from '@/lib/supabase-client'
+import { createClientComponent } from '../../lib/supabase-client'
 import { ReactElement, useState, useEffect } from 'react'
 
 interface AuthModalProps {

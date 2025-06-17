@@ -1,98 +1,143 @@
 'use client'
 
-import { UploadedFiles } from '@/types/buyer-map'
+import { UploadedFiles } from '../../../types/buyer-map'
 import FileDropzone from '../ui/FileDropzone'
+import { InterviewBatch } from '../../../types/buyer-map'
+import { FileWithPath } from 'react-dropzone'
 
 interface FileUploadStepProps {
   uploadedFiles: {
     deck: File | null;
     interviews: File[];
   };
-  onFileUpload: (type: string, files: FileList | null) => void;
-  onRemoveFile: (type: string, index?: number) => void;
+  currentBatch: File[];
+  onDeckUpload: (file: File) => void;
+  onInterviewBatchUpload: (files: FileList) => void;
+  onRemoveDeck: () => void;
+  onRemoveFromCurrentBatch: (index?: number) => void;
+  onRemoveProcessedInterview: (index: number) => void;
   onNext: () => void;
   onBackToHome: () => void;
   isProcessing: boolean;
-  processingStep: 'deck' | 'interviews' | null;
+  processingStep: string;
+  uploadType: 'deck' | 'interviews';
+  processedBatches?: InterviewBatch[];
+  interviewsProcessedCount?: number;
 }
 
-export default function FileUploadStep({ 
-  uploadedFiles, 
-  onFileUpload, 
-  onRemoveFile, 
-  onNext, 
+export default function FileUploadStep({
+  uploadedFiles,
+  currentBatch,
+  onDeckUpload,
+  onInterviewBatchUpload,
+  onRemoveDeck,
+  onRemoveFromCurrentBatch,
+  onRemoveProcessedInterview,
+  onNext,
   onBackToHome,
   isProcessing,
-  processingStep
+  processingStep,
+  uploadType,
+  processedBatches,
+  interviewsProcessedCount
 }: FileUploadStepProps) {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 space-y-8">
-        <h1 className="text-3xl font-bold text-center mb-2">Upload Your Materials</h1>
-        <p className="text-center text-gray-600 mb-6">We&apos;ll analyze your sales deck and validate your assumptions against real customer interview data.</p>
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-6">
+          {uploadType === 'deck' ? 'Upload Sales Deck' : 'Upload Interview Files'}
+        </h2>
 
-        {/* Sales Deck Upload */}
-        <FileDropzone
-          onFileUpload={files => onFileUpload('deck', files)}
-          accept=".pdf,.ppt,.pptx"
-          multiple={false}
-          title="Sales Deck & Pitch Materials"
-          description="Upload your current sales presentation, pitch deck, or marketing materials"
-          icon={<span className="text-blue-500">📊</span>}
-          uploadedFiles={uploadedFiles.deck ? [uploadedFiles.deck] : []}
-          onRemoveFile={() => onRemoveFile('deck')}
-          maxFiles={1}
-          disabled={isProcessing}
-        />
-
-        {/* Interview Transcripts Upload */}
-        <FileDropzone
-          onFileUpload={files => onFileUpload('interviews', files)}
-          accept=".txt,.doc,.docx,.pdf"
-          multiple={true}
-          title="Customer Interview Transcripts"
-          description="Upload your customer interview transcripts, notes, or recordings (up to 10 files)"
-          icon={<span className="text-green-500">🎤</span>}
-          uploadedFiles={uploadedFiles.interviews}
-          onRemoveFile={index => onRemoveFile('interviews', index)}
-          maxFiles={10}
-          disabled={isProcessing}
-        />
-
-        {/* Progress Indicator */}
-        {isProcessing && (
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-blue-700 font-medium">
-                {processingStep === 'deck' ? 'Analyzing Sales Deck...' : 'Processing Interviews...'}
-              </span>
-              <span className="text-blue-500">⏳</span>
+        {uploadType === 'deck' ? (
+          <div className="space-y-4">
+            <FileDropzone
+              onFileUpload={(files) => files[0] && onDeckUpload(files[0])}
+              accept=".pdf,.pptx,.docx"
+              multiple={false}
+              title="Sales Deck & Pitch Materials"
+              description="Upload your current sales presentation, pitch deck, or marketing materials"
+              icon={<span className="text-blue-500">📊</span>}
+              uploadedFiles={uploadedFiles.deck ? [uploadedFiles.deck] : []}
+              onRemoveFile={() => onRemoveDeck()}
+              maxFiles={1}
+              disabled={isProcessing}
+            />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <FileDropzone
+                onFileUpload={onInterviewBatchUpload}
+                accept=".pdf,.docx"
+                multiple={true}
+                title="Customer Interview Transcripts"
+                description="Upload your customer interview transcripts, notes, or recordings (up to 3 files per batch)"
+                icon={<span className="text-green-500">🎤</span>}
+                uploadedFiles={currentBatch}
+                onRemoveFile={onRemoveFromCurrentBatch}
+                maxFiles={3}
+                disabled={isProcessing}
+              />
             </div>
-            <div className="w-full bg-blue-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full animate-pulse"></div>
-            </div>
+
+            {processedBatches && processedBatches.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="font-medium">Processed Batches:</h3>
+                {processedBatches.map((batch, batchIndex) => (
+                  <div key={batchIndex} className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Batch {batchIndex + 1}</span>
+                      <span className={`text-sm ${
+                        batch.status === 'completed' ? 'text-green-600' :
+                        batch.status === 'failed' ? 'text-red-600' :
+                        'text-blue-600'
+                      }`}>
+                        {batch.status}
+                      </span>
+                    </div>
+                    {batch.files.map((file: File, fileIndex: number) => (
+                      <div key={fileIndex} className="flex items-center justify-between text-sm text-gray-600">
+                        <span>{file.name}</span>
+                        {batch.status === 'completed' && (
+                          <button
+                            onClick={() => onRemoveProcessedInterview(fileIndex)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {interviewsProcessedCount !== undefined && (
+              <div className="text-sm text-gray-600">
+                Total interviews processed: {interviewsProcessedCount}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex justify-between mt-8">
+        <div className="mt-6 flex justify-between">
           <button
             onClick={onBackToHome}
-            className="px-6 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            disabled={isProcessing}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800"
           >
-            Back to Home
+            Back
           </button>
           <button
             onClick={onNext}
-            disabled={!uploadedFiles.deck || isProcessing}
-            className={`px-6 py-2 rounded-lg transition-colors ${
-              !uploadedFiles.deck || isProcessing
-                ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
+            disabled={
+              isProcessing ||
+              (uploadType === 'deck' && !uploadedFiles.deck) ||
+              (uploadType === 'interviews' && currentBatch.length === 0)
+            }
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            {isProcessing ? 'Processing...' : 'Analyze Materials'}
+            {isProcessing ? processingStep || 'Processing...' : 'Next'}
           </button>
         </div>
       </div>

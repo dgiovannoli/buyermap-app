@@ -14,12 +14,16 @@ export async function createChatCompletion(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   options?: Partial<OpenAI.Chat.ChatCompletionCreateParams>
 ) {
+  const startTime = Date.now();
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o-mini',
       messages,
       ...options,
     })
+    const duration = Date.now() - startTime;
+    const tokens = 'usage' in completion ? completion.usage?.total_tokens || 0 : 0;
+    console.log(`[OpenAI] ${options?.model || 'gpt-4o-mini'}: ${duration}ms, ${tokens} tokens`);
     return completion
   } catch (error) {
     console.error('OpenAI API error:', error)

@@ -1,7 +1,5 @@
-'use client';
-
-import ModernBuyerMapLanding from './components/BuyerMapHome';
+import BuyerMapApp from './components/BuyerMapApp';
 
 export default function Home() {
-  return <ModernBuyerMapLanding />;
+  return <BuyerMapApp />;
 }
