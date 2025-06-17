@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData, Quote } from '../../../types/buyermap';
-import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions } from '../../../utils/dataMapping';
+import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions, mapComparisonOutcome } from '../../../utils/dataMapping';
 import pLimit from 'p-limit';
 
 const openai = new OpenAI({
@@ -567,6 +567,24 @@ function logProcessingStats(results: any[], startTime: number) {
   }
 }
 
+// Helper: Calculate overall outcome for an assumption based on quote classifications
+function calculateAssumptionOutcome(quotes: any[]): string {
+  if (!quotes || quotes.length === 0) return 'pending';
+  let aligned = 0, misaligned = 0, newInsight = 0, neutral = 0;
+  for (const q of quotes) {
+    const c = (q.classification || '').toLowerCase();
+    if (c === 'aligned') aligned++;
+    else if (c === 'misaligned') misaligned++;
+    else if (c === 'new_insight') newInsight++;
+    else if (c === 'neutral') neutral++;
+  }
+  if (misaligned > aligned && misaligned > newInsight) return 'misaligned';
+  if (aligned > misaligned && aligned > newInsight) return 'aligned';
+  if (newInsight > 0 && misaligned <= aligned) return 'new_insight';
+  if (aligned === 0 && misaligned === 0 && newInsight === 0) return 'pending';
+  return 'neutral';
+}
+
 export async function POST(request: NextRequest) {
   const processingStartTime = Date.now();
   
@@ -629,6 +647,12 @@ export async function POST(request: NextRequest) {
     
     // Log final stats
     logProcessingStats(allResults, processingStartTime);
+    
+    // Set comparisonOutcome for each assumption based on quote classifications
+    aggregatedResults.forEach(assumption => {
+      const rawOutcome = calculateAssumptionOutcome(assumption.quotes);
+      assumption.comparisonOutcome = mapComparisonOutcome(rawOutcome);
+    });
     
     // Transform to final format
     const icpValidation = createICPValidationData(aggregatedResults[0]);

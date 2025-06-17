@@ -1,0 +1,156 @@
+/* === BuyerMap Layout and Card Styling === */
+.buyer-map-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.category-section {
+  margin-bottom: 3rem;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.category-emoji {
+  font-size: 1.25rem;
+}
+
+.assumptions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.assumption-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.assumption-card:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.category-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.category-icon-container {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+/* Category colors */
+.category-icon-container.blue { background-color: #dbeafe; }
+.category-icon-container.purple { background-color: #e9d5ff; }
+.category-icon-container.red { background-color: #fee2e2; }
+.category-icon-container.green { background-color: #d1fae5; }
+.category-icon-container.orange { background-color: #fed7aa; }
+.category-icon-container.gray { background-color: #f3f4f6; }
+.category-icon-container.indigo { background-color: #e0e7ff; }
+
+.category-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.category-title.blue { color: #1d4ed8; }
+.category-title.purple { color: #7c3aed; }
+.category-title.red { color: #dc2626; }
+.category-title.green { color: #059669; }
+.category-title.orange { color: #ea580c; }
+.category-title.gray { color: #6b7280; }
+.category-title.indigo { color: #4338ca; }
+
+.status-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status-text.pending {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.confidence-percentage {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.confidence-percentage.green { color: #059669; }
+.confidence-percentage.red { color: #dc2626; }
+.confidence-percentage.orange { color: #ea580c; }
+.confidence-percentage.yellow { color: #d97706; }
+
+.outcome-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.outcome-label.green { color: #059669; }
+.outcome-label.red { color: #dc2626; }
+.outcome-label.orange { color: #ea580c; }
+.outcome-label.yellow { color: #d97706; }
+
+.chevron {
+  color: #9ca3af;
+  font-size: 1.125rem;
+  font-weight: 300;
+}
+
+.assumption-content {
+  margin-top: 0.5rem;
+}
+
+.assumption-text {
+  font-size: 1rem;
+  color: #374151;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .status-container {
+    align-self: flex-end;
+  }
+} 

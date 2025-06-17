@@ -90,3 +90,18 @@ export interface InterviewBatch {
   processedAt?: Date
   error?: string
 }
+
+export interface AssumptionState {
+  id: string;
+  assumption: string;
+  category: string;
+  status: 'PENDING_VALIDATION' | 'PROCESSING' | 'ALIGNED' | 'MISALIGNED' | 'NEW_DATA_ADDED' | 'NEUTRAL';
+  source: 'DECK_ONLY' | 'INTERVIEWS_PROCESSED';
+  deckEvidence?: string;
+  slideNumber?: number;
+  quotes: any[];
+  confidence: number;
+  explanation: string;
+  createdAt: string;
+  lastUpdated: string;
+}
