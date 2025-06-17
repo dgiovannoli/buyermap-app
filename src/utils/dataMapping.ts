@@ -218,4 +218,91 @@ export function transformBuyerMapData(data: BuyerMapData): BuyerMapData {
  */
 export function transformBuyerMapDataArray(data: BuyerMapData[]): BuyerMapData[] {
   return data.map(transformBuyerMapData);
+}
+
+/**
+ * Returns assumption-specific extraction instructions for targeted quote extraction
+ */
+export function getAssumptionSpecificInstructions(assumption: string): string {
+  const instructions = {
+    'company-size': `
+    Extract quotes that provide CONCRETE EVIDENCE about company/firm size:
+    - Specific employee counts ("we have 12 people", "200+ attorney firm")
+    - Size descriptors with context ("small firm", "large corporation", "mid-sized practice")
+    - Comparative statements ("bigger than us", "smaller operations")
+    - Resource/scale indicators ("limited staff", "enterprise-level", "solo practice")
+    
+    EVIDENCE REQUIREMENT: Quote must contain measurable or comparative size information.
+    REJECT: General business talk without size specifics.`,
+    
+    'buyer-titles': `
+    Extract quotes that provide CONCRETE EVIDENCE about who buys/uses the service:
+    - Exact job titles ("criminal defense attorney", "legal assistant", "paralegal")
+    - Role descriptions ("the person who decides", "whoever handles technology")
+    - Decision-maker identification ("I'm the one who...", "our IT director...")
+    - User personas ("attorneys like me", "paralegals in our office")
+    
+    EVIDENCE REQUIREMENT: Quote must identify specific roles or decision-makers.
+    REJECT: General service descriptions without role clarity.`,
+    
+    'pain-points': `
+    Extract quotes that provide CONCRETE EVIDENCE of specific problems:
+    - Explicit problem statements ("the issue is...", "we struggle with...")
+    - Quantified pain ("takes 40 hours", "costs us $X", "wastes 3 days")
+    - Frustration expressions ("it's frustrating that...", "the problem with...")
+    - Process breakdowns ("when this happens...", "we can't...")
+    
+    EVIDENCE REQUIREMENT: Quote must describe actual problems with specifics.
+    REJECT: General process descriptions or solutions.`,
+    
+    'desired-outcomes': `
+    Extract quotes that provide CONCRETE EVIDENCE of what they want to achieve:
+    - Specific goals ("we want to reduce...", "the goal is to...")
+    - Measurable outcomes ("save 10 hours", "increase accuracy by...")
+    - Success definitions ("success would be...", "ideally we'd...")
+    - Value statements ("what matters most is...", "we need...")
+    
+    EVIDENCE REQUIREMENT: Quote must state desired end-states or goals.
+    REJECT: Current problem descriptions.`,
+    
+    'triggers': `
+    Extract quotes that provide CONCRETE EVIDENCE about when/why they need the service:
+    - Specific situations ("when we get a big case...", "during trial prep...")
+    - Event triggers ("once discovery arrives...", "if there's a deadline...")
+    - Volume thresholds ("when we have more than X...", "cases with lots of...")
+    - Timeline pressures ("right before trial...", "when time is short...")
+    
+    EVIDENCE REQUIREMENT: Quote must describe specific triggering situations.
+    REJECT: General service usage descriptions.`,
+    
+    'barriers': `
+    Extract quotes that provide CONCRETE EVIDENCE of adoption obstacles:
+    - Specific concerns ("worried about security", "cost is an issue")
+    - Risk factors ("concerned about accuracy", "compliance requirements")
+    - Resource constraints ("don't have budget", "lack training time")
+    - Resistance reasons ("hesitant because...", "the problem is...")
+    
+    EVIDENCE REQUIREMENT: Quote must express actual concerns or obstacles.
+    REJECT: General positive feedback.`,
+    
+    'messaging-emphasis': `
+    Extract quotes that provide CONCRETE EVIDENCE of what resonates:
+    - Value priorities ("most important feature is...", "what matters is...")
+    - Persuasion factors ("what convinced me was...", "the key benefit...")
+    - Peer recommendations ("I'd tell others...", "lawyers should know...")
+    - Feature preferences ("love the...", "really useful is...")
+    
+    EVIDENCE REQUIREMENT: Quote must show what influences or persuades.
+    REJECT: Generic feature descriptions.`
+  };
+  
+  // Extract the key from the assumption text
+  for (const [key, instruction] of Object.entries(instructions)) {
+    if (assumption.toLowerCase().includes(key.replace('-', ' ')) || 
+        assumption.toLowerCase().includes(key.replace('-', ''))) {
+      return instruction;
+    }
+  }
+  
+  return `Extract quotes that provide CONCRETE EVIDENCE about this assumption. Look for specific examples, measurements, or explicit statements that validate or challenge the assumption.`;
 } 

@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData, Quote } from '../../../types/buyermap';
-import { createICPValidationData, createValidationData } from '../../../utils/dataMapping';
+import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions } from '../../../utils/dataMapping';
+import pLimit from 'p-limit';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// === FEATURE FLAG ===
+const USE_TARGETED_EXTRACTION = true;
+const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -155,350 +160,516 @@ function parseBatchClassificationResponse(content: string): any[] {
   }
 }
 
+// --- Simple Topic Focus Instructions ---
+function getTopicFocusInstructions(assumption: string): string {
+  const assumptionLower = assumption.toLowerCase();
+  // Buyer titles / target customers
+  if (assumptionLower.includes('buyer') || assumptionLower.includes('target') || 
+      assumptionLower.includes('attorney') || assumptionLower.includes('customer')) {
+    return `TOPIC: WHO buys, uses, or makes decisions about this service
+    
+    EXTRACT quotes about:
+    - Job titles, roles, or professional backgrounds
+    - Who makes purchasing decisions
+    - Types of legal professionals or staff
+    - User personas or target customers
+    
+    EXAMPLES of relevant quotes:
+    "I'm a criminal defense attorney and..."
+    "The paralegal usually handles..."
+    "Our office manager decides on..."
+    "Attorneys like me typically..."`;
+  }
+  // Company/firm size
+  if (assumptionLower.includes('company') || assumptionLower.includes('firm') || 
+      assumptionLower.includes('size') || assumptionLower.includes('small') || 
+      assumptionLower.includes('large')) {
+    return `TOPIC: Company or firm SIZE characteristics
+    
+    EXTRACT quotes about:
+    - Firm size, employee count, or scale
+    - Small vs large operations
+    - Resource constraints based on size
+    - Different needs by company size
+    - Size-related pricing or affordability
+    
+    EXAMPLES of relevant quotes:
+    "We're a small firm with..."
+    "Large practices like ours..."
+    "Solo attorneys don't have..."
+    "Small firms can't afford..."
+    "Enterprise pricing works for..."`;
+  }
+  // Pain points / problems
+  if (assumptionLower.includes('pain') || assumptionLower.includes('problem') || 
+      assumptionLower.includes('challenge') || assumptionLower.includes('difficult')) {
+    return `TOPIC: PROBLEMS, challenges, or pain points
+    
+    EXTRACT quotes about:
+    - Specific problems or frustrations
+    - Time-consuming tasks
+    - Inefficient processes
+    - Challenges they face
+    
+    EXAMPLES of relevant quotes:
+    "The problem is we spend..."
+    "It's frustrating when..."
+    "We waste so much time..."
+    "The biggest challenge is..."`;
+  }
+  // Evidence processing / efficiency
+  if (assumptionLower.includes('evidence') || assumptionLower.includes('processing') || 
+      assumptionLower.includes('efficient') || assumptionLower.includes('review')) {
+    return `TOPIC: EVIDENCE handling, processing, or review efficiency
+    
+    EXTRACT quotes about:
+    - Evidence review processes
+    - Efficiency in handling evidence
+    - Time spent on evidence analysis
+    - Evidence management workflows
+    
+    EXAMPLES of relevant quotes:
+    "When we review evidence..."
+    "Processing all this evidence takes..."
+    "We need to go through..."
+    "Evidence analysis usually..."`;
+  }
+  // Triggers / when they need service
+  if (assumptionLower.includes('trigger') || assumptionLower.includes('when') || 
+      assumptionLower.includes('need') || assumptionLower.includes('use')) {
+    return `TOPIC: WHEN or WHY they need/use the service
+    
+    EXTRACT quotes about:
+    - Specific situations that prompt use
+    - Triggers or events that create need
+    - Circumstances when service is valuable
+    - Timing of service usage
+    
+    EXAMPLES of relevant quotes:
+    "When we get a case with..."
+    "If there's a deadline..."
+    "During trial prep we..."
+    "We typically use this when..."`;
+  }
+  // Barriers / concerns
+  if (assumptionLower.includes('barrier') || assumptionLower.includes('concern') || 
+      assumptionLower.includes('hesitant') || assumptionLower.includes('worry')) {
+    return `TOPIC: CONCERNS, barriers, or hesitations about adoption
+    
+    EXTRACT quotes about:
+    - Worries or concerns about the service
+    - Barriers to adoption (including cost/pricing barriers)
+    - Hesitations or resistance
+    - Risk factors or objections
+    - Budget or affordability concerns
+    
+    EXAMPLES of relevant quotes:
+    "I'm concerned about..."
+    "The worry is that..."
+    "We're hesitant because..."
+    "Cost is a major barrier..."
+    "Can't afford the pricing..."`;
+  }
+  // Default for any other assumption
+  return `TOPIC: The specific subject matter of this assumption
+  
+  EXTRACT quotes that directly discuss or provide evidence about this assumption's topic.
+  Focus on quotes that contain specific, concrete information relevant to validating or challenging this assumption.
+  
+  Avoid generic business talk, satisfaction statements, or unrelated topics.`;
+}
+
+// --- Context-Aware Filtering ---
+function isRelevantToAssumption(text: string, assumption: string): boolean {
+  const textLower = text.toLowerCase();
+  const assumptionLower = assumption.toLowerCase();
+  if (/\b(price|cost|budget|expensive|cheap|afford)\b/i.test(text)) {
+    if (assumptionLower.includes('small') || assumptionLower.includes('large') || 
+        assumptionLower.includes('firm') || assumptionLower.includes('company')) {
+      return /\b(small|large|big|solo|enterprise|firm|company|practice)\b/i.test(text);
+    }
+    if (assumptionLower.includes('barrier') || assumptionLower.includes('concern') || 
+        assumptionLower.includes('hesitant')) {
+      return true;
+    }
+    if (assumptionLower.includes('buyer') || assumptionLower.includes('target')) {
+      return /\b(attorney|lawyer|firm|practice|legal)\b/i.test(text);
+    }
+    return false;
+  }
+  return true;
+}
+
+function filterHighQualityQuotes(quotes: any[]): any[] {
+  return quotes.filter(quote => {
+    const text = quote.text || quote.quote || '';
+    const assumption = quote.assumption || '';
+    if (text.length < 15) return false;
+    const isGenericSatisfaction = /^(we're|it's|that's)\s+(happy|good|great|helpful|nice|useful)\b/i.test(text) ||
+                                 /\b(pretty|really|very)\s+(happy|good|great|helpful|nice|useful)\b/i.test(text);
+    const isOffTopicPricing = /\b(price|cost|budget)\b/i.test(text) && 
+                             !isRelevantToAssumption(text, assumption) &&
+                             !/\b(attorney|lawyer|firm|evidence|case|legal)\b/i.test(text);
+    const isFragment = text.startsWith('So ') || 
+                      text.startsWith('Like ') || 
+                      text.startsWith('Um ') ||
+                      text.includes('...') || 
+                      text.split(' ').length < 8;
+    const isOffTopic = isGenericSatisfaction || isOffTopicPricing || isFragment;
+    if (isOffTopic) {
+      console.log(`Filtering out off-topic quote: ${text.slice(0, 50)}...`);
+      return false;
+    }
+    const specificityScore = quote.specificity_score || quote.relevance_score || 0;
+    return specificityScore >= 6;
+  });
+}
+
+// === TARGETED QUOTE EXTRACTION ===
+async function extractTargetedQuotes(interviewText: string, fileName: string, assumption: string): Promise<Quote[]> {
+  const prompt = `You are extracting quotes that are directly ABOUT this business assumption. Stay focused on the topic.
+
+ASSUMPTION: "${assumption}"
+
+INTERVIEW CONTENT: ${interviewText}
+SOURCE: ${fileName}
+
+TOPIC FOCUS RULES:
+Extract quotes that are directly ABOUT the assumption's topic:
+
+${getTopicFocusInstructions(assumption)}
+
+CRITICAL: ONLY extract quotes that actually discuss the assumption's topic.
+
+REJECT quotes about:
+- General satisfaction ("we're happy", "it's helpful", "we like it")
+- Pricing or costs ("price is always...", "expensive", "budget")
+- Features or functionality (unless directly related to assumption topic)
+- Process descriptions (unless directly related to assumption topic)
+- Unrelated business topics
+
+QUALITY REQUIREMENTS:
+- Quote must contain specific, concrete information about the topic
+- Avoid vague or generic statements
+- Must be substantial (not conversation fragments)
+- Speaker attribution helpful when available
+
+Extract 2-3 quotes that are most directly ABOUT this assumption's topic.
+
+Return in this exact JSON format:
+{
+  "quotes": [
+    {
+      "text": "quote that discusses the assumption topic with specific details",
+      "speaker": "speaker name if identifiable",
+      "role": "speaker role if mentioned", 
+      "source": "${fileName}",
+      "topic_relevance": "brief explanation of why this relates to the assumption topic",
+      "specificity_score": 8
+    }
+  ]
+}`;
+  try {
+    console.log(`[OpenAI][targeted-extraction] Starting for assumption: ${assumption.substring(0, 30)}...`);
+    const startTime = Date.now();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are an expert at extracting relevant quotes for business assumption validation. Only extract quotes that directly relate to the given assumption." 
+        },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      max_tokens: 1500
+    });
+    const duration = Date.now() - startTime;
+    console.log(`[OpenAI][targeted-extraction] Completed in ${duration}ms`);
+    console.log(`[OpenAI][targeted-extraction] Raw response: ${response.choices[0].message.content?.substring(0, 200)}...`);
+    const content = response.choices[0].message.content;
+    if (!content) {
+      console.log(`[OpenAI][targeted-extraction] Empty response for assumption`);
+      return [];
+    }
+    const parsed = JSON.parse(content);
+    let quotes = parsed.quotes || [];
+    quotes = filterHighQualityQuotes(quotes);
+    console.log(`🎯 Extracted ${quotes.length} high-quality targeted quotes for assumption`);
+    if (quotes.length > 0) {
+      console.log(`🎯 Sample quote: "${quotes[0].text?.substring(0, 50)}..."`);
+    }
+    return quotes;
+  } catch (error) {
+    console.error(`[OpenAI][targeted-extraction] Error:`, error);
+    return [];
+  }
+}
+
+// Helper: Classify quotes for a single assumption
+async function classifyQuotesForAssumption(quotes: Quote[], assumption: string): Promise<Quote[]> {
+  const BATCH_SIZE = 3;
+  const allClassifiedQuotes: Quote[] = [];
+  for (let i = 0; i < quotes.length; i += BATCH_SIZE) {
+    const quoteBatch = quotes.slice(i, i + BATCH_SIZE);
+    const classificationPrompt = `Classify these quotes based on how they relate to this business assumption.
+
+ASSUMPTION: "${assumption}"
+
+CLASSIFICATION PROCESS:
+1. First verify: Is this quote actually ABOUT the assumption's topic?
+2. If not about the topic → classify as IRRELEVANT
+3. If about the topic → classify based on what evidence it provides
+
+CLASSIFICATION RULES:
+- ALIGNED: Quote is about the topic AND supports the assumption
+- MISALIGNED: Quote is about the topic AND contradicts the assumption  
+- NEW_INSIGHT: Quote is about the topic AND adds new perspective
+- NEUTRAL: Quote is about the topic BUT doesn't clearly support or contradict
+- IRRELEVANT: Quote is NOT about the assumption's topic (pricing, satisfaction, unrelated topics)
+
+EXAMPLES:
+Assumption: "Target buyers include criminal defense attorneys"
+- Quote about job titles/roles → Classify based on evidence
+- Quote about pricing/satisfaction → IRRELEVANT
+
+Assumption: "Suitable for small and large law firms"  
+- Quote about firm size → Classify based on evidence
+- Quote about features/happiness → IRRELEVANT
+
+Quotes to classify:
+${quoteBatch.map((q, idx) => `${idx + 1}. "${q.text || (q as any).quote || ''}" \n   Speaker: ${q.speaker || 'Unknown'}`).join('\n\n')}
+
+Return JSON with topic verification:
+{
+  "quotes": [
+    {
+      "quote": "exact text",
+      "about_assumption_topic": true/false,
+      "classification": "ALIGNED|MISALIGNED|NEW_INSIGHT|NEUTRAL|IRRELEVANT",
+      "reasoning": "Brief explanation focusing on topic relevance and evidence provided",
+      "confidence": 8
+    }
+  ]
+}`;
+    let batchResponse;
+    try {
+      batchResponse = await withTimeout(callOpenAIWithRetry({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert at classifying quotes for business assumption validation. Focus on logical relationships and contradictions.`
+          },
+          {
+            role: "user",
+            content: classificationPrompt
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000
+      }, 'classification-batch'), 60000);
+    } catch (error) {
+      console.error('[OpenAI][classification-batch] API error:', (error as Error).message);
+      continue;
+    }
+    let content = batchResponse.choices[0]?.message?.content || '';
+    if (!content.trim()) {
+      console.error('[OpenAI][classification-batch] Empty response from OpenAI');
+      continue;
+    }
+    // Aggressive cleaning
+    content = content
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*$/gi, '')
+      .replace(/^[^{[]*/, '')
+      .replace(/[^}\]]*$/, '')
+      .trim()
+      .replace(/^\s*["']/, '')
+      .replace(/["']\s*$/, '')
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/,\s*[}\]]/, '}')
+      .trim();
+    // Parse and flatten
+    let batchClassified = [];
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        batchClassified = parsed;
+      } else if (parsed.quotes && Array.isArray(parsed.quotes)) {
+        batchClassified = parsed.quotes;
+      } else if (parsed.result && Array.isArray(parsed.result)) {
+        batchClassified = parsed.result;
+      }
+    } catch (err) {
+      console.error('Failed to parse classification batch:', err);
+      batchClassified = [];
+    }
+    allClassifiedQuotes.push(...batchClassified.filter((item: Quote) => ((item as any).classification || '').toUpperCase() !== 'IRRELEVANT'));
+    console.log('🔧 Batch result:', batchClassified.length, 'classified quotes');
+    console.log('🔧 Total accumulated:', allClassifiedQuotes.length, 'quotes');
+  }
+  return allClassifiedQuotes;
+}
+
+// Process a single interview file
+async function processSingleInterview(file: File, assumptions: string[]): Promise<Record<string, Quote[]>> {
+  console.log(`📁 Processing interview: ${file.name}`);
+  const parsed = await parseFile(file);
+  if (parsed.error) {
+    throw new Error(`Error parsing interview file ${file.name}: ${parsed.error}`);
+  }
+  
+  const interviewText = parsed.text;
+  const quotesPerAssumption: Record<string, Quote[]> = {};
+  
+  // Initialize quotes array for each assumption
+  assumptions.forEach(assumption => {
+    quotesPerAssumption[assumption] = [];
+  });
+  
+  // Extract quotes for each assumption
+  for (const assumption of assumptions) {
+    console.log(`  🎯 Processing assumption: ${assumption.substring(0, 40)}...`);
+    const targetedQuotes = await extractTargetedQuotes(interviewText, file.name, assumption);
+    quotesPerAssumption[assumption] = targetedQuotes;
+  }
+  
+  // Classify all quotes
+  const classificationResults: Record<string, Quote[]> = {};
+  for (const assumption of assumptions) {
+    const quotesForAssumption = quotesPerAssumption[assumption] || [];
+    if (quotesForAssumption.length > 0) {
+      const classified = await classifyQuotesForAssumption(quotesForAssumption, assumption);
+      classificationResults[assumption] = classified;
+    } else {
+      classificationResults[assumption] = [];
+    }
+  }
+  
+  return classificationResults;
+}
+
+// Helper: Log processing statistics
+function logProcessingStats(results: any[], startTime: number) {
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  const successfulInterviews = results.filter(r => !r.error).length;
+  const failedInterviews = results.filter(r => r.error).length;
+  
+  console.log(`📈 Processing Summary:`);
+  console.log(`   Total time: ${totalTime}s`);
+  console.log(`   Successful interviews: ${successfulInterviews}`);
+  console.log(`   Failed interviews: ${failedInterviews}`);
+  
+  if (failedInterviews > 0) {
+    console.log(`   Failed files:`, results.filter(r => r.error).map(r => r.fileName));
+  }
+}
+
 export async function POST(request: NextRequest) {
+  const processingStartTime = Date.now();
+  
   try {
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
     const assumptionsJson = formData.get('assumptions') as string;
     const existingAssumptions: BuyerMapData[] = JSON.parse(assumptionsJson);
-
+    
     if (!files.length) {
       return NextResponse.json(
         { error: 'No files provided' },
         { status: 400 }
       );
     }
-
-    console.log('📁 Starting file parsing...');
-    console.log('🚀 EXTRACTION FLOW DEBUG:');
-    console.log('🚀 Files array:', files.map(f => f.name));
-    let extractedQuotes: any[] = [];
-    const MAX_QUOTES_PER_INTERVIEW = 4; // Limit quotes per interview
-    const MAX_TOTAL_QUOTES = 12; // Overall limit across all interviews
-
-    for (const file of files) {
-      console.log('🔍 Processing file:', file.name);
-      const parsedContent = await parseFile(file);
-      if (parsedContent.error) {
-        console.error(`Error parsing interview file ${file.name}:`, parsedContent.error);
-        continue;
-      }
-      console.log(`📁 Parsed file: ${file.name}`);
+    
+    console.log(`🎯 Starting parallel processing for ${files.length} interviews, ${existingAssumptions.length} assumptions`);
+    const assumptionsList: string[] = existingAssumptions.map(a => a.v1Assumption);
+    
+    // Set up parallel processing with rate limiting
+    const limit = pLimit(CONCURRENT_LIMIT);
+    console.log(`🚀 Processing ${files.length} interviews in parallel (max ${CONCURRENT_LIMIT} concurrent)...`);
+    
+    const allResults = await Promise.all(
+      files.map(file => 
+        limit(async () => {
+          try {
+            console.log(`Starting interview: ${file.name}`);
+            const result = await processSingleInterview(file, assumptionsList);
+            const elapsed = ((Date.now() - processingStartTime) / 1000).toFixed(1);
+            console.log(`✅ Completed interview ${file.name} in ${elapsed}s`);
+            return { result, fileName: file.name };
+          } catch (error) {
+            console.error(`❌ Error processing interview ${file.name}:`, error);
+            return { 
+              result: Object.fromEntries(assumptionsList.map(a => [a, []])),
+              fileName: file.name,
+              error: error.message
+            };
+          }
+        })
+      )
+    );
+    
+    // Flatten and aggregate results from all interviews
+    const aggregatedResults = existingAssumptions.map(assumption => {
+      const allQuotesForAssumption = allResults.flatMap(result => 
+        result.result[assumption.v1Assumption] || []
+      );
       
-      // Use OpenAI to extract quotes
-      let processedQuotes: Quote[] = [];
-      let quoteResponse;
-      try {
-        console.log('📁 File extraction started for:', file.name);
-        quoteResponse = await withTimeout(callOpenAIWithRetry({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `Extract exactly 3-4 of the most impactful quotes from this interview that relate to:\n- Who uses transcription tools (titles, roles)\n- Pain points with current solutions\n- Desired outcomes or benefits\n- What triggers the need for transcription\n- Barriers to adoption\n- Key messaging that resonates\n\nRespond ONLY with a valid JSON array, no text, no markdown, no explanation.\nFormat:\n[\n  {\n    \"text\": \"exact quote text\",\n    \"speaker\": \"speaker name\", \n    \"role\": \"speaker role/title\",\n    \"source\": \"interview name\"\n  }\n]`
-            },
-            {
-              role: "user",
-              content: `INTERVIEW TRANSCRIPT:\n${parsedContent.text}\n\nExtract ONLY the 3-4 most impactful quotes that reveal customer needs, pain points, behaviors, or outcomes.`
-            }
-          ],
-          temperature: 0.1,
-          max_tokens: 2000
-        }, 'quote-extraction'), 60000);
-        let content = quoteResponse.choices[0]?.message?.content || '';
-        if (!content.trim()) {
-          console.error(`[OpenAI][quote-extraction] Empty response for file ${file.name}`);
-          continue;
-        }
-        content = content.replace(/```json\s*/, '').replace(/```\s*$/, '').trim();
-        processedQuotes = extractQuotesFromOpenAIResponse(content);
-        console.log('📝 Extraction function returned:', typeof processedQuotes);
-        console.log('📝 Is array:', Array.isArray(processedQuotes));
-        console.log('📝 Length:', processedQuotes?.length || 0);
-        console.log('📝 Sample item:', processedQuotes?.[0] ? JSON.stringify(processedQuotes[0], null, 2) : 'No items');
-      } catch (error) {
-        console.error('[OpenAI][quote-extraction] API error:', (error as Error).message);
-        continue;
-      }
-      console.log('💾 About to push to extractedQuotes...');
-      extractedQuotes.push(processedQuotes);
-      console.log('💾 Push completed. New length:', extractedQuotes.length);
-    }
-
-    console.log('🔍 DEBUGGING QUOTE AGGREGATION:');
-    console.log('extractedQuotes type:', typeof extractedQuotes);
-    console.log('extractedQuotes length:', extractedQuotes?.length);
-    console.log('extractedQuotes structure:', JSON.stringify(extractedQuotes, null, 2));
-    if (Array.isArray(extractedQuotes)) {
-      extractedQuotes.forEach((fileQuotes, index) => {
-        console.log(`File ${index + 1}: ${fileQuotes?.length || 0} quotes`);
-      });
-    }
-    let allQuotes = normalizeQuoteExtractionResults(extractedQuotes);
-    if (allQuotes.length === 0) {
-      console.error('❌ CRITICAL: No quotes found for processing!');
-    }
-    console.log(`📊 Processing ${allQuotes.length} quotes against ${existingAssumptions.length} assumptions`);
-
-    // Limit total quotes across all interviews
-    allQuotes = allQuotes.slice(0, MAX_TOTAL_QUOTES);
-    console.log('📊 Processing', allQuotes.length, 'quotes against assumptions');
-
-    // 2. For each assumption, classify quotes in smaller batches
-    const MAX_QUOTES_PER_ASSUMPTION = 6; // Hard limit per assumption
-    for (const assumption of existingAssumptions) {
-      console.log('🚀 Starting classification for assumption:', assumption.v1Assumption);
-      let relevantQuotes: Quote[] = [];
-      let allClassifiedQuotes: Quote[] = [];
-      let alignedCount = 0;
-      let misalignedCount = 0;
-      let newDataCount = 0;
-
-      // Skip batch processing if we have few quotes
-      if (allQuotes.length <= 5) {
-        try {
-          let batchResponse;
-          try {
-            batchResponse = await withTimeout(callOpenAIWithRetry({
-              model: "gpt-4o-mini",
-              messages: [
-                {
-                  role: "system",
-                  content: `Classify each quote as ALIGNED, MISALIGNED, NEW_INSIGHT, or IRRELEVANT to this assumption.\n\nASSUMPTION: \"${assumption.v1Assumption}\"\n\nQUOTES:\n${allQuotes.map((q, idx) => `${idx + 1}. \"${q.text}\"`).join('\\n')}\n\nRespond ONLY with a valid JSON array, no text, no markdown, no explanation.\nFormat:\n[\n  {\n    \"quote\": \"quote text here\", \"classification\": \"ALIGNED\"\n  }\n]`
-                },
-                {
-                  role: "user",
-                  content: `ASSUMPTION: ${assumption.v1Assumption}\n\nQUOTES:\n${allQuotes.map((q, idx) => `${idx + 1}. \"${q.text}\"`).join('\\n')}\n\nClassify each quote against the assumption.`
-                }
-              ],
-              temperature: 0.1,
-              max_tokens: 2000
-            }, 'classification-single'), 60000);
-          } catch (error) {
-            console.error('[OpenAI][classification-single] API error:', (error as Error).message);
-            // Fallback: mark all as unclassified
-            continue;
-          }
-          let content = batchResponse.choices[0]?.message?.content || '';
-          if (!content.trim()) {
-            console.error('[OpenAI][classification-single] Empty response from OpenAI');
-            continue;
-          }
-          // Aggressive cleaning
-          content = content
-            .replace(/```json\s*/gi, '')
-            .replace(/```\s*$/gi, '')
-            .replace(/^[^{[]*/, '')
-            .replace(/[^}\]]*$/, '')
-            .trim()
-            .replace(/^\s*["']/, '')
-            .replace(/["']\s*$/, '')
-            .replace(/\n\s*\n/g, '\n')
-            .replace(/,\s*[}\]]/, '}')
-            .trim();
-          console.log('[Debug] Cleaned content for parsing:', content.substring(0, 200));
-          try {
-            const classifications = JSON.parse(content);
-            if (Array.isArray(classifications)) {
-              classifications.forEach((item) => {
-                const quote = allQuotes.find(q => q.text === item.quote);
-                if (quote && item.classification !== 'irrelevant') {
-                  relevantQuotes.push(quote);
-                  allClassifiedQuotes.push(quote);
-                  switch (item.classification.toLowerCase()) {
-                    case 'aligned': alignedCount++; break;
-                    case 'misaligned': misalignedCount++; break;
-                    case 'new_insight': newDataCount++; break;
-                  }
-                }
-              });
-            }
-          } catch (parseError) {
-            console.error('[Debug] JSON parse failed. Raw content:', content);
-            console.error('[Debug] Parse error:', (parseError as Error).message);
-            // Fallback: try to extract classifications manually
-            const fallbackClassifications = extractClassificationsManually(content);
-            if (fallbackClassifications.length > 0) {
-              console.log('[Debug] Using fallback classification extraction');
-              fallbackClassifications.forEach((item) => {
-                const quote = allQuotes.find(q => q.text === item.quote);
-                if (quote && item.classification !== 'irrelevant') {
-                  relevantQuotes.push(quote);
-                  allClassifiedQuotes.push(quote);
-                  switch (item.classification.toLowerCase()) {
-                    case 'aligned': alignedCount++; break;
-                    case 'misaligned': misalignedCount++; break;
-                    case 'new_insight': newDataCount++; break;
-                  }
-                }
-              });
-            }
-          }
-        } catch (error) {
-          console.error('OpenAI API error (batch classification):', error);
-          throw error;
-        }
-      } else {
-        // Process in smaller batches for larger quote sets
-        const BATCH_SIZE = 3; // Smaller batch size
-        for (let i = 0; i < allQuotes.length && relevantQuotes.length < MAX_QUOTES_PER_ASSUMPTION; i += BATCH_SIZE) {
-          const quoteBatch = allQuotes.slice(i, i + BATCH_SIZE);
-          console.log(`📦 Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(allQuotes.length / BATCH_SIZE)} (${quoteBatch.length} quotes)`);
-          
-          try {
-            let batchResponse;
-            try {
-              batchResponse = await withTimeout(callOpenAIWithRetry({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "system",
-                    content: `Classify each quote as ALIGNED, MISALIGNED, NEW_INSIGHT, or IRRELEVANT to this assumption.\n\nASSUMPTION: \"${assumption.v1Assumption}\"\n\nQUOTES:\n${quoteBatch.map((q, idx) => `${i + idx + 1}. \"${q.text}\"`).join('\\n')}\n\nRespond ONLY with a valid JSON array, no text, no markdown, no explanation.\nFormat:\n[\n  {\n    \"quote\": \"quote text here\", \"classification\": \"ALIGNED\"\n  }\n]`
-                  },
-                  {
-                    role: "user",
-                    content: `ASSUMPTION: ${assumption.v1Assumption}\n\nQUOTES:\n${quoteBatch.map((q, idx) => `${i + idx + 1}. \"${q.text}\"`).join('\\n')}\n\nClassify each quote against the assumption.`
-                  }
-                ],
-                temperature: 0.1,
-                max_tokens: 2000
-              }, 'classification-batch'), 60000);
-            } catch (error) {
-              console.error('[OpenAI][classification-batch] API error:', (error as Error).message);
-              // Fallback: mark all as unclassified
-              continue;
-            }
-            let content = batchResponse.choices[0]?.message?.content || '';
-            if (!content.trim()) {
-              console.error('[OpenAI][classification-batch] Empty response from OpenAI');
-              continue;
-            }
-            // Aggressive cleaning
-            content = content
-              .replace(/```json\s*/gi, '')
-              .replace(/```\s*$/gi, '')
-              .replace(/^[^{[]*/, '')
-              .replace(/[^}\]]*$/, '')
-              .trim()
-              .replace(/^\s*["']/, '')
-              .replace(/["']\s*$/, '')
-              .replace(/\n\s*\n/g, '\n')
-              .replace(/,\s*[}\]]/, '}')
-              .trim();
-            console.log('[Debug] Cleaned content for parsing:', content.substring(0, 200));
-            try {
-              const batchClassified = parseBatchClassificationResponse(content);
-              console.log('🔧 Batch result:', batchClassified.length, 'classified quotes');
-              allClassifiedQuotes.push(...batchClassified.filter(item => item.classification !== 'irrelevant'));
-              console.log('🔧 Total accumulated:', allClassifiedQuotes.length, 'quotes');
-            } catch (parseError) {
-              console.error('[Debug] JSON parse failed. Raw content:', content);
-              console.error('[Debug] Parse error:', (parseError as Error).message);
-              // Fallback: try to extract classifications manually
-              const fallbackClassifications = extractClassificationsManually(content);
-              if (fallbackClassifications.length > 0) {
-                console.log('[Debug] Using fallback classification extraction');
-                fallbackClassifications.forEach((item) => {
-                  const quote = allQuotes.find(q => q.text === item.quote);
-                  if (quote && item.classification !== 'irrelevant' && relevantQuotes.length < MAX_QUOTES_PER_ASSUMPTION) {
-                    relevantQuotes.push(quote);
-                    allClassifiedQuotes.push(quote);
-                    switch (item.classification.toLowerCase()) {
-                      case 'aligned': alignedCount++; break;
-                      case 'misaligned': misalignedCount++; break;
-                      case 'new_insight': newDataCount++; break;
-                    }
-                  }
-                });
-              }
-            }
-          } catch (error) {
-            console.error('OpenAI API error (batch classification):', error);
-            throw error;
-          }
-        }
-      }
-
-      // Update assumption based on quote analysis
-      console.log('🔧 About to store classified quotes for assumption:', assumption.v1Assumption);
-      console.log('�� Quotes to store:', allClassifiedQuotes.length);
-      if (allClassifiedQuotes.length > 0) {
-        console.log('🔧 Sample quote to store:', JSON.stringify(allClassifiedQuotes[0], null, 2));
-      }
-      assumption.quotes = allClassifiedQuotes;
-      // Determine comparison outcome
-      if (alignedCount > misalignedCount && alignedCount > newDataCount) {
-        assumption.comparisonOutcome = 'Aligned';
-      } else if (misalignedCount > alignedCount && misalignedCount > newDataCount) {
-        assumption.comparisonOutcome = 'Misaligned';
-      } else {
-        assumption.comparisonOutcome = 'New Data Added';
-      }
-      // Calculate confidence score based on quote support
-      const totalRelevant = alignedCount + misalignedCount + newDataCount;
-      if (totalRelevant > 0) {
-        const baseConfidence = 85;
-        const quoteMultiplier = Math.min(totalRelevant / 3, 1);
-        assumption.confidenceScore = Math.round(baseConfidence * (0.7 + (0.3 * quoteMultiplier)));
-        assumption.confidenceExplanation = `${totalRelevant} relevant quotes found: ${alignedCount} aligned, ${misalignedCount} misaligned, ${newDataCount} new insights`;
-      }
-      // Generate messaging adjustment
-      if (assumption.comparisonOutcome === 'Misaligned') {
-        assumption.waysToAdjustMessaging = `Adjust messaging to address ${misalignedCount} contradicting quotes. Focus on actual customer needs revealed in interviews.`;
-      } else if (assumption.comparisonOutcome === 'New Data Added') {
-        assumption.waysToAdjustMessaging = `Incorporate ${newDataCount} new insights from interviews into messaging.`;
-      } else {
-        assumption.waysToAdjustMessaging = `Continue emphasizing points validated by ${alignedCount} supporting quotes.`;
-      }
-      // Map quotes to exampleQuotes with attribution/source
-      assumption.exampleQuotes = (assumption.quotes || []).map(q => ({
-        quote: q.text,
-        attribution: `${q.speaker}, ${q.role}`,
-        interviewSource: q.source
-      }));
-    }
-    console.log('✅ OpenAI processing complete');
-
-    // --- TRANSFORM TO NEW FORMAT ---
-    // 1. Update icpValidation subtitle and totalInterviews
-    const icpValidation = createICPValidationData(existingAssumptions[0]);
+      return {
+        ...assumption,
+        quotes: allQuotesForAssumption
+      };
+    });
+    
+    // Count total quotes processed
+    const totalQuotes = aggregatedResults.reduce((sum, assumption) => sum + assumption.quotes.length, 0);
+    console.log(`📊 Total quotes processed: ${totalQuotes} across ${existingAssumptions.length} assumptions`);
+    
+    // Log final stats
+    logProcessingStats(allResults, processingStartTime);
+    
+    // Transform to final format
+    const icpValidation = createICPValidationData(aggregatedResults[0]);
     icpValidation.subtitle = 'Validated against customer interviews';
     icpValidation.totalInterviews = files.length;
-
-    // 2. Regenerate validationAttributes from updated assumptions
-    const validationAttributes = Object.values(createValidationData(existingAssumptions));
-
-    // 3. Calculate new validation counts
-    const validatedCount = existingAssumptions.filter(a => a.comparisonOutcome === 'Aligned').length;
-    const partiallyValidatedCount = existingAssumptions.filter(a => a.comparisonOutcome === 'New Data Added').length;
-    const pendingCount = existingAssumptions.filter(a => !a.comparisonOutcome).length;
+    
+    const validationAttributes = Object.values(createValidationData(aggregatedResults));
+    
+    const validatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'Aligned').length;
+    const partiallyValidatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
+    const pendingCount = aggregatedResults.filter(a => !a.comparisonOutcome).length;
+    
     const overallAlignmentScore = Math.round(
-      (validatedCount / existingAssumptions.length) * 100
+      (validatedCount / aggregatedResults.length) * 100
     );
-
-    // 4. Return transformed BuyerMapData (array of one object for compatibility)
-    console.log('🔧 FINAL VALIDATION CHECK:');
-    existingAssumptions.forEach((a, idx) => {
-      console.log(`🔧 Assumption ${idx + 1}: ${a.quotes?.length ?? 0} quotes`);
-      if (a.quotes && a.quotes.length > 0) {
-        console.log(`🔧 Sample quote:`, JSON.stringify(a.quotes[0], null, 2));
-      }
-    });
+    
     return NextResponse.json({
       success: true,
-      assumptions: existingAssumptions,
+      assumptions: aggregatedResults,
       icpValidation,
       validationAttributes,
       overallAlignmentScore,
       validatedCount,
       partiallyValidatedCount,
-      pendingCount
+      pendingCount,
+      metadata: {
+        totalInterviews: files.length,
+        totalQuotes,
+        processingTimeSeconds: ((Date.now() - processingStartTime) / 1000).toFixed(1),
+        parallelProcessing: true
+      }
     });
-  } catch (error) {
-    console.error('Error processing interview batch:', error);
-    return NextResponse.json(
-      { error: 'Failed to process interview batch' },
-      { status: 500 }
-    );
+    
+  } catch (error: unknown) {
+    const totalTime = ((Date.now() - processingStartTime) / 1000).toFixed(1);
+    console.error(`❌ Processing failed after ${totalTime}s:`, error);
+    
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      processingTimeSeconds: totalTime
+    }, { status: 500 });
   }
 } 
