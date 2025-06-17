@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare,
-  ChevronRight, ChevronDown 
+  ChevronRight, ChevronDown, BarChart3, Quote, Plus 
 } from 'lucide-react';
 import { BuyerMapData } from '../types/buyermap';
+import { getOutcomeIcon, getOutcomeColors, getRoleBadge, getRoleStyle } from './cardHelpers';
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -131,6 +132,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
   const [score, setScore] = useState<number>(overallScore);
   const [showUploadMore, setShowUploadMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAllQuotes, setShowAllQuotes] = useState(false);
 
   // Add effect to log state changes
   useEffect(() => {
@@ -248,12 +250,59 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
   };
 
   // CollapsibleCard
-  const CollapsibleCard: React.FC<{ item: BuyerMapData }> = ({ item }) => {
+  const CollapsibleCard = React.memo(({ item }: { item: BuyerMapData }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const sectionInfo = getSectionInfo(item.icpAttribute);
+    const [progress, setProgress] = useState(0);
+    const [showAllQuotes, setShowAllQuotes] = useState(false);
+
+    // Memoize computed values
+    const sectionInfo = useMemo(() => getSectionInfo(item.icpAttribute), [item.icpAttribute]);
     const IconComponent = sectionInfo.icon;
+    const outcomeColors = useMemo(() => getOutcomeColors(item.comparisonOutcome), [item.comparisonOutcome]);
+    const OutcomeIcon = useMemo(() => getOutcomeIcon(item.comparisonOutcome), [item.comparisonOutcome]);
+
+    // Memoize styles
+    const progressBarStyle = useMemo(() => ({
+      width: `${progress}%`,
+      background: `linear-gradient(90deg, ${outcomeColors.primary}dd, ${outcomeColors.primary})`,
+      transition: 'all 1s ease-out'
+    }), [progress, outcomeColors.primary]);
+
+    const containerStyle = useMemo(() => ({
+      backgroundColor: outcomeColors.bg,
+      borderColor: outcomeColors.border,
+      borderLeftColor: outcomeColors.primary
+    }), [outcomeColors]);
+
+    // Memoize callbacks
+    const toggleExpanded = useCallback(() => {
+      setIsExpanded(prev => !prev);
+    }, []);
+
+    const toggleShowAllQuotes = useCallback(() => {
+      setShowAllQuotes(prev => !prev);
+    }, []);
+
+    // Animate progress bar when expanded
+    useEffect(() => {
+      if (isExpanded) {
+        setProgress(0);
+        setTimeout(() => setProgress(item.confidenceScore), 100);
+      } else {
+        setProgress(0);
+      }
+    }, [isExpanded, item.confidenceScore]);
+
+    // TEMP: Debug re-renders
+    console.log('CollapsibleCard render:', {
+      confidenceScore: item.confidenceScore,
+      comparisonOutcome: item.comparisonOutcome,
+      isExpanded,
+      timestamp: Date.now()
+    });
+
     return (
-      <div className="bg-white/80 rounded-xl border border-gray-200/50 shadow-lg overflow-hidden">
+      <div className="bg-white/80 rounded-xl border border-gray-200/50 shadow-lg overflow-hidden transition-all duration-300">
         <div className="p-6">
           {/* Card Header */}
           <div className="flex items-center justify-between mb-3">
@@ -265,13 +314,28 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                 {sectionInfo.category}
               </h3>
             </div>
-            {/* Validation Indicators */}
+            {/* Enhanced Validation Indicators */}
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-medium">{item.confidenceScore}%</span>
-              <span className="text-xs text-gray-500">•</span>
-              <span className={`text-xs font-medium ${getOutcomeTextColor(item.comparisonOutcome)}`}>{item.comparisonOutcome}</span>
+              {/* Outcome Icon */}
+              <span className="flex items-center justify-center" style={{ color: outcomeColors.primary }}>
+                <OutcomeIcon className="w-4 h-4 mr-1" />
+              </span>
+              {/* Confidence Score */}
+              <span
+                className="text-xs font-semibold px-2 py-1 rounded"
+                style={{ color: outcomeColors.primary, background: outcomeColors.bg, border: `1px solid ${outcomeColors.border}` }}
+              >
+                {item.confidenceScore}%
+              </span>
+              {/* Status Badge */}
+              <span
+                className="text-xs font-bold px-2 py-1 rounded"
+                style={{ color: outcomeColors.primary, background: outcomeColors.bg, border: `1px solid ${outcomeColors.border}` }}
+              >
+                {item.comparisonOutcome}
+              </span>
               <button 
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={toggleExpanded}
                 className="p-1 hover:bg-gray-100 rounded transition-colors"
               >
                 {isExpanded ? (
@@ -286,15 +350,52 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
           <div className="text-sm text-gray-800 leading-relaxed">
             {item.v1Assumption || item.whyAssumption || item.icpAttribute || ''}
           </div>
-          {/* Expandable Content */}
+          {/* Enhanced expandable content container */}
           {isExpanded && (
-            <div className="mt-4 pt-4 border-t border-gray-200/50">
-              <div className="space-y-4">
-                {/* Reality from Interviews */}
+            <div 
+              className="mt-6 pt-6 border-t border-gray-200 transition-all duration-500"
+              style={{
+                background: 'linear-gradient(to bottom, rgba(249, 250, 251, 0.3), white)'
+              }}
+            >
+              <div className="space-y-6">
+                {/* Hero Insight Section - replaces Reality from Interviews and Key Finding */}
                 {item.realityFromInterviews && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Reality from Interviews</h4>
-                    <p className="text-sm text-gray-700">{item.realityFromInterviews}</p>
+                  <div className="relative mb-6">
+                    <div 
+                      className="rounded-xl p-6 border-l-4"
+                      style={containerStyle}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0">
+                          <div className="p-2 bg-white rounded-lg shadow-sm">
+                            {React.createElement(OutcomeIcon, {
+                              className: "w-6 h-6",
+                              style: { color: outcomeColors.primary }
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <span 
+                              className="font-bold text-lg"
+                              style={{ color: outcomeColors.primary }}
+                            >
+                              {item.comparisonOutcome}
+                            </span>
+                            <span className="text-sm font-semibold text-gray-600">
+                              {item.confidenceScore}% confidence
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                            Key Finding
+                          </div>
+                          <div className="text-base text-gray-900 leading-relaxed font-medium">
+                            {item.realityFromInterviews}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {/* Messaging Recommendation */}
@@ -304,35 +405,88 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     <p className="text-sm text-blue-800">{item.waysToAdjustMessaging}</p>
                   </div>
                 )}
-                {/* Key Finding (fallback to realityFromInterviews) */}
-                {item.realityFromInterviews && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium text-green-900 mb-2">✓ Key Finding</h4>
-                    <p className="text-sm text-green-800">{item.realityFromInterviews}</p>
-                  </div>
-                )}
-                {/* Supporting Evidence */}
+                {/* Enhanced Supporting Evidence Header */}
                 {item.quotes && item.quotes.length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Supporting Evidence</h4>
-                    <div className="space-y-2">
-                      {item.quotes.map((quote, index) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-sm text-gray-700 italic mb-1">"{quote.quote || quote.text}"</p>
-                          <p className="text-xs text-gray-500">
-                            — {quote.speaker || 'Anonymous'}
-                            {quote.role && `, ${quote.role}`}
-                          </p>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <MessageSquare className="w-5 h-5 text-gray-600" />
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
+                        Supporting Evidence
+                      </h4>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                        {item.quotes.length} quote{item.quotes.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {/* Enhanced Quote Cards Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                      {(showAllQuotes ? item.quotes : item.quotes.slice(0, 2)).map((quote, index) => (
+                        <div 
+                          key={index} 
+                          className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200"
+                        >
+                          <div className="flex items-start gap-3">
+                            <Quote className="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                              <blockquote className="text-gray-900 font-medium text-sm leading-relaxed mb-3 italic">
+                                "{quote.quote || quote.text}"
+                              </blockquote>
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs text-gray-600 font-medium">
+                                  {quote.speaker || 'Anonymous'}
+                                </div>
+                                {quote.role && (
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleStyle(quote.role)}`}>
+                                    {quote.role}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
+                    {/* Show More Button */}
+                    {item.quotes.length > 2 && (
+                      <button
+                        onClick={toggleShowAllQuotes}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-600 text-sm font-semibold transition-colors duration-200"
+                      >
+                        <Plus className="w-4 h-4" />
+                        {showAllQuotes 
+                          ? 'Show less' 
+                          : `View ${item.quotes.length - 2} more quote${item.quotes.length - 2 !== 1 ? 's' : ''}`
+                        }
+                      </button>
+                    )}
                   </div>
                 )}
-                {/* Confidence Analysis */}
+                {/* Enhanced Confidence Analysis */}
                 {item.confidenceExplanation && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Confidence Analysis</h4>
-                    <p className="text-sm text-gray-700">{item.confidenceExplanation}</p>
+                  <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm mb-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <BarChart3 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <h4 className="text-sm font-bold text-blue-600 uppercase tracking-wide">
+                        Confidence Analysis
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="flex-1 bg-gray-200 rounded-full h-3">
+                        <div 
+                          className="h-3 rounded-full transition-all duration-1000 ease-out"
+                          style={progressBarStyle}
+                        />
+                      </div>
+                      <span className="text-lg font-bold text-gray-900">
+                        {item.confidenceScore}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-blue-600 leading-relaxed">
+                      {item.confidenceExplanation}
+                    </p>
                   </div>
                 )}
               </div>
@@ -341,7 +495,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
         </div>
       </div>
     );
-  };
+  });
 
   // Helper to check if interviews exist
   const hasInterviews = uploadedFiles.interviews.length > 0;
