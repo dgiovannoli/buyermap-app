@@ -38,6 +38,7 @@ interface BuyerMapAssumption {
   confidenceExplanation: string;
   validationStatus: string;
   quotes: Quote[];
+  realityFromInterviews?: string;
 }
 
 type BuyerMapData = {
@@ -476,6 +477,13 @@ function mapComparisonOutcome(rawOutcome: string): string {
   return outcomeMap[rawOutcome] || 'New Data Added';
 }
 
+// Helper function to get the base URL for internal API calls
+function getBaseUrl(req: NextApiRequest): string {
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers.host;
+  return `${protocol}://${host}`;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<BuyerMapData | { error: string }>
@@ -628,6 +636,47 @@ export default async function handler(
       const rawOutcome = calculateAssumptionOutcome(assumption.quotes);
       assumption.comparisonOutcome = mapComparisonOutcome(rawOutcome);
     });
+    
+    // Call the synthesize-insights endpoint to add realityFromInterviews
+    console.log('🔄 Synthesizing interview insights...');
+    try {
+      const synthesisResponse = await fetch(`${getBaseUrl(req)}/api/synthesize-insights`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          assumptions: aggregatedResults.map(assumption => ({
+            id: assumption.id,
+            icpAttribute: assumption.icpAttribute,
+            v1Assumption: assumption.v1Assumption,
+            evidenceFromDeck: assumption.evidenceFromDeck,
+            quotes: assumption.quotes,
+            confidenceScore: assumption.confidenceScore,
+            validationOutcome: assumption.comparisonOutcome
+          }))
+        })
+      });
+
+      if (synthesisResponse.ok) {
+        const { assumptions: synthesizedAssumptions } = await synthesisResponse.json();
+        
+        // Merge the realityFromInterviews back into our results
+        synthesizedAssumptions.forEach((synthesized: any) => {
+          const originalAssumption = aggregatedResults.find(a => a.id === synthesized.id);
+          if (originalAssumption && synthesized.realityFromInterviews) {
+            (originalAssumption as any).realityFromInterviews = synthesized.realityFromInterviews;
+          }
+        });
+        
+        console.log('✅ Interview insights synthesized successfully');
+      } else {
+        console.warn('⚠️ Synthesis endpoint failed, continuing without realityFromInterviews');
+      }
+    } catch (error) {
+      console.error('❌ Error calling synthesis endpoint:', error);
+      // Continue without synthesis rather than failing the entire request
+    }
     
     const validatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'Aligned').length;
     const partiallyValidatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
