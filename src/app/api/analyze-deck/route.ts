@@ -16,6 +16,22 @@ if (!isMockMode()) {
   });
 }
 
+// Timeout wrapper for OpenAI calls
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Request timed out')), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     console.log('=== SALES DECK ANALYSIS PHASE ===');
@@ -40,7 +56,7 @@ export async function POST(req: NextRequest) {
     // 1. Parse the deck file
     console.log('Step 1: Parsing deck file...');
     const parsedResult = await parseFile(deckFile);
-    console.log('Extracted deck text:', parsedResult.text);
+    console.log('Extracted deck text length:', parsedResult.text?.length || 0);
 
     if (!parsedResult.text) {
       console.error('No text extracted from deck');
@@ -52,51 +68,73 @@ export async function POST(req: NextRequest) {
     if (!openai) {
       throw new Error('OpenAI client not initialized');
     }
-    const analysisResponse = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: `Analyze this pitch deck and extract ICP assumptions. Return a JSON object with:
+
+    const systemPrompt = `You are an expert business analyst specializing in B2B buyer personas and Ideal Customer Profiles (ICPs). Your task is to analyze sales/marketing materials and extract specific, testable assumptions about the target buyer.
+
+CRITICAL INSTRUCTIONS:
+1. Extract assumptions for ALL 7 ICP attributes: Buyer Titles, Company Size, Pain Points, Desired Outcomes, Triggers, Barriers, Messaging Emphasis
+2. Make assumptions SPECIFIC and TESTABLE (avoid vague statements)
+3. Base assumptions on EXPLICIT evidence from the content
+4. Include confidence scores (0-100) based on strength of evidence
+5. Return ONLY valid JSON in the exact format specified
+
+RESPONSE FORMAT:
 {
   "assumptions": [
     {
-      "icpAttribute": "Buyer Titles" | "Company Size" | "Pain Points" | "Desired Outcomes" | "Triggers" | "Barriers" | "Messaging Emphasis",
-      "v1Assumption": "specific assumption from deck",
+      "icpAttribute": "Buyer Titles|Company Size|Pain Points|Desired Outcomes|Triggers|Barriers|Messaging Emphasis",
+      "v1Assumption": "Specific, testable assumption with metrics/behaviors when possible",
       "confidenceScore": 0-100,
-      "confidenceExplanation": "brief explanation"
+      "confidenceExplanation": "Brief explanation of evidence strength and source"
     }
   ]
 }
 
-Rules:
-1. Extract from ALL deck sections
-2. Use ONLY the 7 standard attributes listed above
-3. Make assumptions specific and testable
-4. Include confidence scores (0-100)
-5. Cover all 7 attributes
-6. Return valid JSON only`
-        },
-        {
-          role: 'user',
-          content: `Analyze this deck content and extract ICP assumptions:\n\n${parsedResult.text}`
-        }
-      ],
-      temperature: 0.3
-    });
+QUALITY STANDARDS:
+- Buyer Titles: Specific job titles/roles, not generic terms
+- Company Size: Include quantitative ranges when possible
+- Pain Points: Specific problems with business impact
+- Desired Outcomes: Measurable business results
+- Triggers: Specific events/situations that drive need
+- Barriers: Concrete obstacles to adoption
+- Messaging Emphasis: Key value propositions and positioning
+
+AVOID:
+- Generic or obvious statements
+- Assumptions without clear evidence
+- Vague language ("some", "many", "often")
+- Product features instead of buyer needs`;
+
+    const analysisResponse = await withTimeout(
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: `Analyze this sales deck/pitch material and extract ICP assumptions for all 7 attributes. Focus on what the content reveals about the TARGET BUYER, not the product features.\n\nDECK CONTENT:\n${parsedResult.text}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 2000
+      }),
+      30000 // 30 second timeout
+    );
 
     if (!analysisResponse.choices?.[0]?.message?.content) {
       throw new Error('No content in AI response');
     }
 
-    console.log('AI analysis response:', analysisResponse.choices[0].message.content);
+    console.log('AI analysis response received, length:', analysisResponse.choices[0].message.content.length);
 
     // 3. Parse the AI response into structured assumptions
     console.log('Step 3: Parsing AI response into structured assumptions...');
     let parsedAssumptions;
     try {
       const aiResponse = analysisResponse.choices[0].message.content;
-      console.log('Raw AI response:', aiResponse);
 
       // Extract JSON content from markdown code block if present
       let jsonContent = aiResponse;
@@ -104,19 +142,38 @@ Rules:
         const match = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
         if (match) {
           jsonContent = match[1].trim();
-          console.log('Extracted JSON content from markdown:', jsonContent);
         } else {
           console.warn('Found ```json marker but could not extract content');
         }
       }
 
+      // Clean the JSON content
+      jsonContent = jsonContent
+        .replace(/^[^{[]*/, '')
+        .replace(/[^}\]]*$/, '')
+        .trim();
+
       // Parse the JSON content
       parsedAssumptions = JSON.parse(jsonContent);
-      console.log('Parsed JSON response:', parsedAssumptions);
+      console.log('Parsed assumptions count:', parsedAssumptions.assumptions?.length || 0);
 
       // Validate the response format
       if (!parsedAssumptions.assumptions || !Array.isArray(parsedAssumptions.assumptions)) {
         throw new Error('Invalid response format: missing assumptions array');
+      }
+
+      // Validate we have all 7 ICP attributes
+      const requiredAttributes = [
+        'Buyer Titles', 'Company Size', 'Pain Points', 'Desired Outcomes', 
+        'Triggers', 'Barriers', 'Messaging Emphasis'
+      ];
+      
+      const foundAttributes = parsedAssumptions.assumptions.map((a: any) => a.icpAttribute);
+      const missingAttributes = requiredAttributes.filter(attr => !foundAttributes.includes(attr));
+      
+      if (missingAttributes.length > 0) {
+        console.warn('Missing ICP attributes:', missingAttributes);
+        // Continue anyway, but log the warning
       }
 
       // Validate each assumption has required fields
@@ -130,7 +187,6 @@ Rules:
 
       // Create assumption objects with proper typing
       const assumptions: BuyerMapData[] = parsedAssumptions.assumptions.map((assumption: any, index: number) => {
-        console.log(`Creating BuyerMapData for assumption ${index}:`, assumption);
         return {
           id: index + 1,
           icpAttribute: assumption.icpAttribute,
@@ -146,43 +202,69 @@ Rules:
         };
       });
 
-      console.log('Created BuyerMapData array:', assumptions);
+      console.log('Created BuyerMapData array with', assumptions.length, 'assumptions');
 
       // 4. Transform the assumptions into the standard format
       console.log('Step 4: Transforming assumptions into standard format...');
       const transformedData = transformBuyerMapDataArray(assumptions);
-      console.log('Transformed data:', transformedData);
 
       // Validate the transformed data
       if (!transformedData || transformedData.length === 0) {
         throw new Error('Transformation resulted in empty data');
       }
 
-      // Log the final response data
-      console.log('Final API response data:', {
-        assumptions: transformedData,
-        overallAlignmentScore: calculateOverallAlignmentScore(transformedData),
-        validatedCount: countValidationStatus(transformedData, 'validated'),
-        partiallyValidatedCount: countValidationStatus(transformedData, 'partial'),
-        pendingCount: countValidationStatus(transformedData, 'pending')
+      // Calculate final metrics
+      const overallAlignmentScore = calculateOverallAlignmentScore(transformedData);
+      const validatedCount = countValidationStatus(transformedData, 'validated');
+      const partiallyValidatedCount = countValidationStatus(transformedData, 'partial');
+      const pendingCount = countValidationStatus(transformedData, 'pending');
+
+      console.log('Final response metrics:', {
+        assumptionsCount: transformedData.length,
+        overallAlignmentScore,
+        validatedCount,
+        partiallyValidatedCount,
+        pendingCount
       });
 
       return NextResponse.json({
         success: true,
         assumptions: transformedData,
-        overallAlignmentScore: calculateOverallAlignmentScore(transformedData),
-        validatedCount: countValidationStatus(transformedData, 'validated'),
-        partiallyValidatedCount: countValidationStatus(transformedData, 'partial'),
-        pendingCount: countValidationStatus(transformedData, 'pending')
+        overallAlignmentScore,
+        validatedCount,
+        partiallyValidatedCount,
+        pendingCount
       });
-    } catch (error: any) {
-      console.error('Error parsing AI response:', error);
-      throw new Error('Failed to parse AI response: ' + error.message);
+
+    } catch (parseError: any) {
+      console.error('Error parsing AI response:', parseError);
+      console.error('Raw AI response:', analysisResponse.choices[0].message.content?.substring(0, 500));
+      return NextResponse.json({ 
+        error: 'Failed to parse AI response: ' + parseError.message,
+        details: 'Invalid JSON format from AI'
+      }, { status: 500 });
     }
+
   } catch (error: any) {
     console.error('Error in deck analysis:', error);
+    
+    // Handle specific error types
+    if (error.message?.includes('timeout')) {
+      return NextResponse.json({ 
+        error: 'Analysis timed out. Please try again with a smaller file.',
+        details: 'OpenAI request timeout'
+      }, { status: 408 });
+    }
+    
+    if (error.message?.includes('OPENAI_API_KEY')) {
+      return NextResponse.json({ 
+        error: 'OpenAI API configuration error',
+        details: 'Missing or invalid API key'
+      }, { status: 500 });
+    }
+
     return NextResponse.json({ 
-      error: error.message,
+      error: error.message || 'Internal server error',
       details: error.stack
     }, { status: 500 });
   }

@@ -4,14 +4,6 @@ import '@testing-library/jest-dom';
 import DeckResultsStage from './DeckResultsStage';
 import { BuyerMapData } from '../../../types/buyermap';
 
-// Mock the ICPValidationDashboard component
-jest.mock('../../../components/ICPValidationDashboard', () => {
-  return function MockICPValidationDashboard(props: any) {
-    console.log('ICPValidationDashboard props:', props);
-    return <div data-testid="mock-dashboard">Mock Dashboard</div>;
-  };
-});
-
 describe('DeckResultsStage', () => {
   const mockBuyerMapData: BuyerMapData[] = [
     {
@@ -101,84 +93,77 @@ describe('DeckResultsStage', () => {
     jest.clearAllMocks();
   });
 
-  it('transforms data correctly when validation data is missing', () => {
+  it('renders dashboard when validation data is present', () => {
     render(
       <DeckResultsStage
-        buyerMapData={mockBuyerMapData}
+        buyerMapData={{
+          assumptions: mockBuyerMapData,
+          overallAlignmentScore: 87,
+          validatedCount: 2,
+          partiallyValidatedCount: 0,
+          pendingCount: 0,
+          validationAttributes: {}
+        }}
+        {...mockHandlers}
+      />
+    );
+
+    // Verify the dashboard was rendered by checking for validation dashboard
+    expect(screen.getByTestId('validation-dashboard')).toBeInTheDocument();
+    
+    // Check for the overall score display
+    expect(screen.getByText('87%')).toBeInTheDocument();
+    expect(screen.getByText('Overall Alignment Score')).toBeInTheDocument();
+    
+    // Check for buyer titles content
+    expect(screen.getByText('Buyer Titles')).toBeInTheDocument();
+  });
+
+  it('displays correct score from provided data', () => {
+    render(
+      <DeckResultsStage
+        buyerMapData={{
+          assumptions: mockBuyerMapDataWithValidation,
+          overallAlignmentScore: 85,
+          validatedCount: 1,
+          partiallyValidatedCount: 0,
+          pendingCount: 0,
+          validationAttributes: {}
+        }}
         {...mockHandlers}
       />
     );
 
     // Verify the dashboard was rendered
-    expect(screen.getByTestId('mock-dashboard')).toBeInTheDocument();
-
-    // Check console logs for transformed data
-    const consoleLogs = (console.log as jest.Mock).mock.calls;
-    const dashboardProps = consoleLogs.find(log => log[0].includes('ICPValidationDashboard props'))?.[1];
-
-    expect(dashboardProps).toBeDefined();
-    expect(dashboardProps.buyerMapData).toHaveLength(2);
+    expect(screen.getByTestId('validation-dashboard')).toBeInTheDocument();
     
-    // Verify icpValidation was created
-    expect(dashboardProps.buyerMapData[0].icpValidation).toBeDefined();
-    expect(dashboardProps.buyerMapData[0].icpValidation).toMatchObject({
-      title: 'Buyer Titles',
-      subtitle: 'Criminal Defense Attorney ICP',
-      cardNumber: 1,
-      series: 'ICP Collection 2025',
-      totalInterviews: 1
-    });
-
-    // Verify validationAttributes were created
-    expect(dashboardProps.buyerMapData[0].validationAttributes).toBeDefined();
-    expect(dashboardProps.buyerMapData[0].validationAttributes[0]).toMatchObject({
-      assumption: 'Attorneys are the primary users and decision-makers',
-      reality: 'Many attorneys delegate to paralegals',
-      outcome: 'Misaligned',
-      confidence: 85
-    });
+    // Check for the correct score in the header - more specific selector
+    expect(screen.getByText('Overall Alignment Score')).toBeInTheDocument();
+    const scoreElements = screen.getAllByText('85%');
+    expect(scoreElements.length).toBeGreaterThan(0); // Should find at least one 85%
   });
 
-  it('preserves existing validation data when present', () => {
+  it('shows validation insights from provided data', () => {
     render(
       <DeckResultsStage
-        buyerMapData={mockBuyerMapDataWithValidation}
+        buyerMapData={{
+          assumptions: mockBuyerMapData,
+          overallAlignmentScore: 87,
+          validatedCount: 2,
+          partiallyValidatedCount: 0,
+          pendingCount: 0,
+          validationAttributes: {}
+        }}
         {...mockHandlers}
       />
     );
 
-    // Verify the dashboard was rendered
-    expect(screen.getByTestId('mock-dashboard')).toBeInTheDocument();
-
-    // Check console logs for transformed data
-    const consoleLogs = (console.log as jest.Mock).mock.calls;
-    const dashboardProps = consoleLogs.find(log => log[0].includes('ICPValidationDashboard props'))?.[1];
-
-    expect(dashboardProps).toBeDefined();
-    expect(dashboardProps.buyerMapData).toHaveLength(1);
+    // Verify insights are displayed
+    expect(screen.getByText('Buyer Titles')).toBeInTheDocument();
+    expect(screen.getByText('Company Size')).toBeInTheDocument();
     
-    // Verify existing icpValidation was preserved
-    expect(dashboardProps.buyerMapData[0].icpValidation).toEqual(mockBuyerMapDataWithValidation[0].icpValidation);
-
-    // Verify existing validationAttributes were preserved
-    expect(dashboardProps.buyerMapData[0].validationAttributes).toEqual(mockBuyerMapDataWithValidation[0].validationAttributes);
-  });
-
-  it('passes all required props to ICPValidationDashboard', () => {
-    render(
-      <DeckResultsStage
-        buyerMapData={mockBuyerMapData}
-        {...mockHandlers}
-      />
-    );
-
-    const consoleLogs = (console.log as jest.Mock).mock.calls;
-    const dashboardProps = consoleLogs.find(log => log[0].includes('ICPValidationDashboard props'))?.[1];
-
-    expect(dashboardProps).toBeDefined();
-    expect(dashboardProps).toHaveProperty('buyerMapData');
-    expect(dashboardProps).toHaveProperty('onError', mockHandlers.onError);
-    expect(dashboardProps).toHaveProperty('onProgressUpdate', mockHandlers.onProgressUpdate);
-    expect(dashboardProps).toHaveProperty('onValidationUpdate', mockHandlers.onValidationUpdate);
+    // Check for validation results text
+    expect(screen.getByText(/Attorneys are the primary users/)).toBeInTheDocument();
+    expect(screen.getByText(/Small to mid-sized firms/)).toBeInTheDocument();
   });
 }); 

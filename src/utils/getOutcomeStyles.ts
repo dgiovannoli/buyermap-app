@@ -5,43 +5,37 @@ export interface OutcomeStyles {
   iconColor: string;
 }
 
-export function getOutcomeStyles(outcome: string): OutcomeStyles {
+export const getOutcomeStyles = (outcome: string) => {
   switch (outcome?.toLowerCase()) {
     case 'aligned':
       return {
-        textColor: 'text-green-700',
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200',
-        iconColor: 'text-green-600'
+        color: 'rgb(34, 197, 94)', // green-500
+        bgColor: 'rgb(240, 253, 244)', // green-50
+        borderColor: 'rgb(34, 197, 94)' // green-500
       };
     case 'misaligned':
       return {
-        textColor: 'text-red-700',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200',
-        iconColor: 'text-red-600'
+        color: 'rgb(239, 68, 68)', // red-500
+        bgColor: 'rgb(254, 242, 242)', // red-50
+        borderColor: 'rgb(239, 68, 68)' // red-500
       };
     case 'new data added':
+      return {
+        color: 'rgb(59, 130, 246)', // blue-500
+        bgColor: 'rgb(239, 246, 255)', // blue-50
+        borderColor: 'rgb(59, 130, 246)' // blue-500
+      };
     case 'refined':
       return {
-        textColor: 'text-blue-700',
-        bgColor: 'bg-blue-50',
-        borderColor: 'border-blue-200',
-        iconColor: 'text-blue-600'
-      };
-    case 'challenged':
-      return {
-        textColor: 'text-orange-700',
-        bgColor: 'bg-orange-50',
-        borderColor: 'border-orange-200',
-        iconColor: 'text-orange-600'
+        color: 'rgb(245, 158, 11)', // amber-500
+        bgColor: 'rgb(255, 251, 235)', // amber-50
+        borderColor: 'rgb(245, 158, 11)' // amber-500
       };
     default:
       return {
-        textColor: 'text-gray-700',
-        bgColor: 'bg-gray-50',
-        borderColor: 'border-gray-200',
-        iconColor: 'text-gray-600'
+        color: 'rgb(107, 114, 128)', // gray-500
+        bgColor: 'rgb(249, 250, 251)', // gray-50
+        borderColor: 'rgb(107, 114, 128)' // gray-500
       };
   }
-} 
+}; 
