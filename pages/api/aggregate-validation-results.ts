@@ -17,9 +17,14 @@ interface Quote {
   source: string;
 }
 
+// Support wrapped quotes like { quote: { text, speaker, ... } }
+interface WrappedQuote {
+  quote: Quote;
+}
+
 interface RequestBody {
   assumption: string;
-  quotes: Quote[];
+  quotes: (Quote | WrappedQuote)[];
 }
 
 interface ResponseBody {
@@ -62,13 +67,27 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid quotes: must be an array' });
     }
 
-    // Validate quotes structure
-    for (const quote of quotes) {
+    // Flatten quotes - handle both direct quotes and wrapped quotes
+    const flattenedQuotes: Quote[] = quotes.map((item) => {
+      // Check if quote is wrapped in a quote property
+      if (item && typeof item === 'object' && 'quote' in item) {
+        return item.quote;
+      }
+      // Otherwise treat as direct quote
+      return item as Quote;
+    });
+
+    // Validate flattened quotes structure
+    for (const quote of flattenedQuotes) {
+      if (!quote || typeof quote !== 'object') {
+        return res.status(400).json({ error: 'Invalid quote: must be an object' });
+      }
       if (!quote.text || typeof quote.text !== 'string') {
         return res.status(400).json({ error: 'Invalid quote: text field is required and must be a string' });
       }
-      if (!quote.source || typeof quote.source !== 'string') {
-        return res.status(400).json({ error: 'Invalid quote: source field is required and must be a string' });
+      // Source is optional after flattening, but if present must be a string
+      if (quote.source !== undefined && typeof quote.source !== 'string') {
+        return res.status(400).json({ error: 'Invalid quote: source field must be a string if provided' });
       }
     }
 
@@ -77,7 +96,7 @@ export default async function handler(
     }
 
     // If no quotes provided, return empty reality
-    if (quotes.length === 0) {
+    if (flattenedQuotes.length === 0) {
       return res.status(200).json({ realityFromInterviews: 'No interview data available for this assumption.' });
     }
 
@@ -88,11 +107,11 @@ ASSUMPTION TO ANALYZE:
 "${assumption}"
 
 INTERVIEW QUOTES:
-${quotes.map((quote, index) => `
+${flattenedQuotes.map((quote, index) => `
 ${index + 1}. "${quote.text}"
    Speaker: ${quote.speaker || 'Unknown'}
    Role: ${quote.role || 'Unknown'}
-   Source: ${quote.source}
+   Source: ${quote.source || 'Unknown'}
 `).join('\n')}
 
 INSTRUCTIONS:
