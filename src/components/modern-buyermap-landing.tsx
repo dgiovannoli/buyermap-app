@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare,
-  ChevronRight, ChevronDown, BarChart3, Quote, Plus 
+  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare
 } from 'lucide-react';
 import { BuyerMapData } from '../types/buyermap';
-import { getOutcomeIcon, getOutcomeColors, getRoleBadge, getRoleStyle } from './cardHelpers';
+import DetailedValidationCard from './DetailedValidationCard';
+import { mapBuyerMapToValidationData } from '../utils/mapToValidationData';
+import UploadComponent from './UploadComponent';
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -116,9 +117,20 @@ interface ModernBuyerMapLandingProps {
   overallScore: number;
   currentStep: number;
   setCurrentStep: (step: number) => void;
+  initialInsights?: BuyerMapData[]; // Optional prop for testing/mock data
 }
 
-const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapData, overallScore, currentStep, setCurrentStep }) => {
+const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ 
+  buyerMapData, 
+  overallScore, 
+  currentStep, 
+  setCurrentStep,
+  initialInsights 
+}) => {
+  const isMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+  // If we have buyerMapData, it means deck was already processed, so set uploaded to true
+  const [uploaded, setUploaded] = useState<boolean>(isMock || buyerMapData.length > 0);
+  
   const [uploadedFiles, setUploadedFiles] = useState<{
     deck: File[];
     interviews: File[];
@@ -128,11 +140,83 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
-  const [localBuyerMapData, setLocalBuyerMapData] = useState<BuyerMapData[]>(buyerMapData);
+  const [localBuyerMapData, setLocalBuyerMapData] = useState<BuyerMapData[]>(
+    initialInsights || buyerMapData
+  );
   const [score, setScore] = useState<number>(overallScore);
   const [showUploadMore, setShowUploadMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Auto-load mock data when MSW is enabled
+  useEffect(() => {
+    if (isMock && !uploaded) {
+      // Simulate the upload completion
+      setUploaded(true);
+      setCurrentStep(3); // Jump directly to results
+      
+      // Load mock data
+      const mockData = [
+        {
+          id: 1,
+          icpAttribute: "Buyer Title",
+          icpTheme: "WHO",
+          v1Assumption: "Our ideal customer is a VP of Engineering or CTO at a mid-size tech company",
+          whyAssumption: "These decision makers have budget authority and technical understanding",
+          evidenceFromDeck: "Slide 3 shows our target as 'VP Engineering/CTO at 100-500 person companies'",
+          realityFromInterviews: "Most successful customers are actually Engineering Directors or Senior Engineering Managers, not VPs or CTOs",
+          comparisonOutcome: "Misaligned" as const,
+          waysToAdjustMessaging: "Focus messaging on Engineering Directors and Senior Managers, emphasize team-level decision making rather than executive-level",
+          confidenceScore: 85,
+          confidenceExplanation: "Strong evidence from 8 customer interviews showing consistent patterns in actual buyer titles",
+          quotes: [
+            {
+              id: "q1",
+              text: "I'm an Engineering Director, not a VP. I make the final call on tools for my team.",
+              speaker: "Sarah Chen",
+              role: "Engineering Director",
+              source: "Interview 3"
+            },
+            {
+              id: "q2",
+              text: "The VP is involved in budget approval, but I'm the one who evaluates and recommends tools.",
+              speaker: "Mike Rodriguez",
+              role: "Senior Engineering Manager",
+              source: "Interview 7"
+            }
+          ],
+          validationStatus: "validated" as const
+        },
+        {
+          id: 2,
+          icpAttribute: "Company Size",
+          icpTheme: "WHO",
+          v1Assumption: "Target companies with 100-500 employees",
+          whyAssumption: "Large enough to have budget but small enough to be agile",
+          evidenceFromDeck: "Slide 4 mentions 'mid-market companies (100-500 employees)'",
+          realityFromInterviews: "Our best customers are actually 50-200 employees, with some successful cases at 20-50 person startups",
+          comparisonOutcome: "Refined" as const,
+          waysToAdjustMessaging: "Adjust target to 50-200 employees, emphasize benefits for growing companies and early-stage startups",
+          confidenceScore: 92,
+          confidenceExplanation: "Clear pattern across 12 interviews showing optimal company size range",
+          quotes: [
+            {
+              id: "q3",
+              text: "We're 75 people and this is perfect for our scale. I don't think it would work as well at a 500-person company.",
+              speaker: "Alex Thompson",
+              role: "CTO",
+              source: "Interview 1"
+            }
+          ],
+          validationStatus: "validated" as const
+        }
+      ];
+      
+      setLocalBuyerMapData(mockData);
+      setScore(88); // Mock overall score
+    }
+  }, [isMock, uploaded, setCurrentStep]);
 
   // Add effect to log state changes
   useEffect(() => {
@@ -249,254 +333,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
     });
   };
 
-  // CollapsibleCard
-  const CollapsibleCard = React.memo(({ item }: { item: BuyerMapData }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [progress, setProgress] = useState(0);
-    const [showAllQuotes, setShowAllQuotes] = useState(false);
-
-    // Memoize computed values
-    const sectionInfo = useMemo(() => getSectionInfo(item.icpAttribute), [item.icpAttribute]);
-    const IconComponent = sectionInfo.icon;
-    const outcomeColors = useMemo(() => getOutcomeColors(item.comparisonOutcome), [item.comparisonOutcome]);
-    const OutcomeIcon = useMemo(() => getOutcomeIcon(item.comparisonOutcome), [item.comparisonOutcome]);
-
-    // Memoize styles
-    const progressBarStyle = useMemo(() => ({
-      width: `${progress}%`,
-      background: `linear-gradient(90deg, ${outcomeColors.primary}dd, ${outcomeColors.primary})`,
-      transition: 'all 1s ease-out'
-    }), [progress, outcomeColors.primary]);
-
-    const containerStyle = useMemo(() => ({
-      backgroundColor: outcomeColors.bg,
-      borderColor: outcomeColors.border,
-      borderLeftColor: outcomeColors.primary
-    }), [outcomeColors]);
-
-    // Memoize callbacks
-    const toggleExpanded = useCallback(() => {
-      setIsExpanded(prev => !prev);
-    }, []);
-
-    const toggleShowAllQuotes = useCallback(() => {
-      setShowAllQuotes(prev => !prev);
-    }, []);
-
-    // Animate progress bar when expanded
-    useEffect(() => {
-      if (isExpanded) {
-        setProgress(0);
-        setTimeout(() => setProgress(item.confidenceScore), 100);
-      } else {
-        setProgress(0);
-      }
-    }, [isExpanded, item.confidenceScore]);
-
-    // TEMP: Debug re-renders
-    console.log('CollapsibleCard render:', {
-      confidenceScore: item.confidenceScore,
-      comparisonOutcome: item.comparisonOutcome,
-      isExpanded,
-      timestamp: Date.now()
-    });
-
-    return (
-      <div className="bg-white/80 rounded-xl border border-gray-200/50 shadow-lg overflow-hidden transition-all duration-300">
-        <div className="p-6">
-          {/* Card Header */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center">
-              <div className={`${sectionInfo.iconBg} p-2 rounded-lg mr-3`}>
-                <IconComponent className={`w-5 h-5 ${sectionInfo.iconColor}`} />
-              </div>
-              <h3 className={`${sectionInfo.titleColor} text-sm font-bold uppercase tracking-wide`}>
-                {sectionInfo.category}
-              </h3>
-            </div>
-            {/* Enhanced Validation Indicators */}
-            <div className="flex items-center space-x-2">
-              {/* Outcome Icon */}
-              <span className="flex items-center justify-center" style={{ color: outcomeColors.primary }}>
-                <OutcomeIcon className="w-4 h-4 mr-1" />
-              </span>
-              {/* Confidence Score */}
-              <span
-                className="text-xs font-semibold px-2 py-1 rounded"
-                style={{ color: outcomeColors.primary, background: outcomeColors.bg, border: `1px solid ${outcomeColors.border}` }}
-              >
-                {item.confidenceScore}%
-              </span>
-              {/* Status Badge */}
-              <span
-                className="text-xs font-bold px-2 py-1 rounded"
-                style={{ color: outcomeColors.primary, background: outcomeColors.bg, border: `1px solid ${outcomeColors.border}` }}
-              >
-                {item.comparisonOutcome}
-              </span>
-              <button 
-                onClick={toggleExpanded}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
-              >
-                {isExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-gray-500" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                )}
-              </button>
-            </div>
-          </div>
-          {/* Card Content */}
-          <div className="text-sm text-gray-800 leading-relaxed">
-            {item.v1Assumption || item.whyAssumption || item.icpAttribute || ''}
-          </div>
-          {/* Enhanced expandable content container */}
-          {isExpanded && (
-            <div 
-              className="mt-6 pt-6 border-t border-gray-200 transition-all duration-500"
-              style={{
-                background: 'linear-gradient(to bottom, rgba(249, 250, 251, 0.3), white)'
-              }}
-            >
-              <div className="space-y-6">
-                {/* Hero Insight Section - replaces Reality from Interviews and Key Finding */}
-                {item.realityFromInterviews && (
-                  <div className="relative mb-6">
-                    <div 
-                      className="rounded-xl p-6 border-l-4"
-                      style={containerStyle}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="flex-shrink-0">
-                          <div className="p-2 bg-white rounded-lg shadow-sm">
-                            {React.createElement(OutcomeIcon, {
-                              className: "w-6 h-6",
-                              style: { color: outcomeColors.primary }
-                            })}
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <span 
-                              className="font-bold text-lg"
-                              style={{ color: outcomeColors.primary }}
-                            >
-                              {item.comparisonOutcome}
-                            </span>
-                            <span className="text-sm font-semibold text-gray-600">
-                              {item.confidenceScore}% confidence
-                            </span>
-                          </div>
-                          <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                            Key Finding
-                          </div>
-                          <div className="text-base text-gray-900 leading-relaxed font-medium">
-                            {item.realityFromInterviews}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {/* Messaging Recommendation */}
-                {item.waysToAdjustMessaging && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2">💡 Messaging Recommendation</h4>
-                    <p className="text-sm text-blue-800">{item.waysToAdjustMessaging}</p>
-                  </div>
-                )}
-                {/* Enhanced Supporting Evidence Header */}
-                {item.quotes && item.quotes.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-gray-100 rounded-lg">
-                        <MessageSquare className="w-5 h-5 text-gray-600" />
-                      </div>
-                      <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
-                        Supporting Evidence
-                      </h4>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                        {item.quotes.length} quote{item.quotes.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    {/* Enhanced Quote Cards Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                      {(showAllQuotes ? item.quotes : item.quotes.slice(0, 2)).map((quote, index) => (
-                        <div 
-                          key={index} 
-                          className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200"
-                        >
-                          <div className="flex items-start gap-3">
-                            <Quote className="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" />
-                            <div className="flex-1">
-                              <blockquote className="text-gray-900 font-medium text-sm leading-relaxed mb-3 italic">
-                                "{quote.quote || quote.text}"
-                              </blockquote>
-                              <div className="flex items-center justify-between">
-                                <div className="text-xs text-gray-600 font-medium">
-                                  {quote.speaker || 'Anonymous'}
-                                </div>
-                                {quote.role && (
-                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleStyle(quote.role)}`}>
-                                    {quote.role}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Show More Button */}
-                    {item.quotes.length > 2 && (
-                      <button
-                        onClick={toggleShowAllQuotes}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-600 text-sm font-semibold transition-colors duration-200"
-                      >
-                        <Plus className="w-4 h-4" />
-                        {showAllQuotes 
-                          ? 'Show less' 
-                          : `View ${item.quotes.length - 2} more quote${item.quotes.length - 2 !== 1 ? 's' : ''}`
-                        }
-                      </button>
-                    )}
-                  </div>
-                )}
-                {/* Enhanced Confidence Analysis */}
-                {item.confidenceExplanation && (
-                  <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm mb-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <BarChart3 className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <h4 className="text-sm font-bold text-blue-600 uppercase tracking-wide">
-                        Confidence Analysis
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-4 mb-3">
-                      <div className="flex-1 bg-gray-200 rounded-full h-3">
-                        <div 
-                          className="h-3 rounded-full transition-all duration-1000 ease-out"
-                          style={progressBarStyle}
-                        />
-                      </div>
-                      <span className="text-lg font-bold text-gray-900">
-                        {item.confidenceScore}%
-                      </span>
-                    </div>
-                    <p className="text-sm text-blue-600 leading-relaxed">
-                      {item.confidenceExplanation}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  });
-
   // Helper to check if interviews exist
   const hasInterviews = uploadedFiles.interviews.length > 0;
 
@@ -512,6 +348,29 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
   useEffect(() => {
     console.log('localBuyerMapData updated:', localBuyerMapData);
   }, [localBuyerMapData]);
+
+  // Transform buyerMapData to validationInsights format for DetailedValidationCard
+  const validationInsights = useMemo(() => {
+    return localBuyerMapData.map(item => ({
+      id: item.id,
+      icpAttribute: item.icpAttribute || '',
+      title: item.v1Assumption || item.whyAssumption || '',
+      outcome: item.comparisonOutcome,
+      confidence: item.confidenceScore || 0,
+      confidenceExplanation: item.confidenceExplanation || '',
+      reality: item.realityFromInterviews || '',
+      quotes: (item.quotes || []).map(q => ({
+        text: q.text || q.quote || '',
+        author: q.speaker || 'Anonymous',
+        role: q.role || ''
+      }))
+    }));
+  }, [localBuyerMapData]);
+
+  // Bypass logic for mock mode
+  if (!uploaded) {
+    return <UploadComponent onComplete={() => setUploaded(true)} />;
+  }
 
   // Main return with step indicator and step conditionals
   return (
@@ -661,9 +520,31 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     WHO • Target Customer Profile
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
-                    {getFilteredDataBySection("WHO").map((item) => (
-                      <CollapsibleCard key={item.id} item={item} />
-                    ))}
+                    {validationInsights
+                      .filter(insight => {
+                        const item = localBuyerMapData.find(item => item.id === insight.id);
+                        return item && getSectionInfo(item.icpAttribute).section === "WHO";
+                      })
+                      .map(insight => (
+                        <DetailedValidationCard
+                          key={insight.id}
+                          id={insight.id}
+                          attributeTitle={insight.icpAttribute}
+                          subtitle={insight.title}
+                          hasValidation={true}
+                          validation={{
+                            outcome: insight.outcome,
+                            confidence: insight.confidence,
+                            confidence_explanation: insight.confidenceExplanation,
+                            reality: insight.reality,
+                            quotes: insight.quotes
+                          }}
+                          isExpanded={expandedId === insight.id}
+                          onToggleExpand={(id) =>
+                            setExpandedId(prev => prev === id ? null : id)
+                          }
+                        />
+                      ))}
                   </div>
                 </div>
               )}
@@ -675,9 +556,31 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     WHAT • Problems & Solutions
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
-                    {getFilteredDataBySection("WHAT").map((item) => (
-                      <CollapsibleCard key={item.id} item={item} />
-                    ))}
+                    {validationInsights
+                      .filter(insight => {
+                        const item = localBuyerMapData.find(item => item.id === insight.id);
+                        return item && getSectionInfo(item.icpAttribute).section === "WHAT";
+                      })
+                      .map(insight => (
+                        <DetailedValidationCard
+                          key={insight.id}
+                          id={insight.id}
+                          attributeTitle={insight.icpAttribute}
+                          subtitle={insight.title}
+                          hasValidation={true}
+                          validation={{
+                            outcome: insight.outcome,
+                            confidence: insight.confidence,
+                            confidence_explanation: insight.confidenceExplanation,
+                            reality: insight.reality,
+                            quotes: insight.quotes
+                          }}
+                          isExpanded={expandedId === insight.id}
+                          onToggleExpand={(id) =>
+                            setExpandedId(prev => prev === id ? null : id)
+                          }
+                        />
+                      ))}
                   </div>
                 </div>
               )}
@@ -689,9 +592,31 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     WHEN • Purchase Triggers
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
-                    {getFilteredDataBySection("WHEN").map((item) => (
-                      <CollapsibleCard key={item.id} item={item} />
-                    ))}
+                    {validationInsights
+                      .filter(insight => {
+                        const item = localBuyerMapData.find(item => item.id === insight.id);
+                        return item && getSectionInfo(item.icpAttribute).section === "WHEN";
+                      })
+                      .map(insight => (
+                        <DetailedValidationCard
+                          key={insight.id}
+                          id={insight.id}
+                          attributeTitle={insight.icpAttribute}
+                          subtitle={insight.title}
+                          hasValidation={true}
+                          validation={{
+                            outcome: insight.outcome,
+                            confidence: insight.confidence,
+                            confidence_explanation: insight.confidenceExplanation,
+                            reality: insight.reality,
+                            quotes: insight.quotes
+                          }}
+                          isExpanded={expandedId === insight.id}
+                          onToggleExpand={(id) =>
+                            setExpandedId(prev => prev === id ? null : id)
+                          }
+                        />
+                      ))}
                   </div>
                 </div>
               )}
@@ -703,9 +628,31 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     WHY & HOW • Barriers & Messaging
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
-                    {getFilteredDataBySection("WHY").map((item) => (
-                      <CollapsibleCard key={item.id} item={item} />
-                    ))}
+                    {validationInsights
+                      .filter(insight => {
+                        const item = localBuyerMapData.find(item => item.id === insight.id);
+                        return item && getSectionInfo(item.icpAttribute).section === "WHY";
+                      })
+                      .map(insight => (
+                        <DetailedValidationCard
+                          key={insight.id}
+                          id={insight.id}
+                          attributeTitle={insight.icpAttribute}
+                          subtitle={insight.title}
+                          hasValidation={true}
+                          validation={{
+                            outcome: insight.outcome,
+                            confidence: insight.confidence,
+                            confidence_explanation: insight.confidenceExplanation,
+                            reality: insight.reality,
+                            quotes: insight.quotes
+                          }}
+                          isExpanded={expandedId === insight.id}
+                          onToggleExpand={(id) =>
+                            setExpandedId(prev => prev === id ? null : id)
+                          }
+                        />
+                      ))}
                   </div>
                 </div>
               )}
@@ -717,9 +664,31 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ buyerMapD
                     Other Insights
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
-                    {getFilteredDataBySection("OTHER").map((item) => (
-                      <CollapsibleCard key={item.id} item={item} />
-                    ))}
+                    {validationInsights
+                      .filter(insight => {
+                        const item = localBuyerMapData.find(item => item.id === insight.id);
+                        return item && getSectionInfo(item.icpAttribute).section === "OTHER";
+                      })
+                      .map(insight => (
+                        <DetailedValidationCard
+                          key={insight.id}
+                          id={insight.id}
+                          attributeTitle={insight.icpAttribute}
+                          subtitle={insight.title}
+                          hasValidation={true}
+                          validation={{
+                            outcome: insight.outcome,
+                            confidence: insight.confidence,
+                            confidence_explanation: insight.confidenceExplanation,
+                            reality: insight.reality,
+                            quotes: insight.quotes
+                          }}
+                          isExpanded={expandedId === insight.id}
+                          onToggleExpand={(id) =>
+                            setExpandedId(prev => prev === id ? null : id)
+                          }
+                        />
+                      ))}
                   </div>
                 </div>
               )}

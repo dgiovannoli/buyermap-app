@@ -49,6 +49,7 @@ export interface ICPValidationResponse {
   pendingCount: number;
   validationAttributes?: { [key: string]: ValidationAttribute };
   icpValidation?: ICPValidationData;
+  companyId?: string;
 }
 
 export interface Quote {
@@ -105,4 +106,24 @@ export interface AssumptionState {
   explanation: string;
   createdAt: string;
   lastUpdated: string;
+}
+
+export interface ValidationDataObject {
+  id: number;
+  icpAttribute: string;
+  icpTheme: string;
+  assumption: string;
+  reality: string;
+  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined';
+  confidence: number;
+  confidence_explanation: string;
+  quotes: Array<{
+    text: string;
+    author: string;
+    role?: string;
+  }>;
+  comparisonOutcome: string;
+  confidenceScore: number;
+  confidenceExplanation: string;
+  waysToAdjustMessaging: string;
 }

@@ -183,7 +183,7 @@ export function createICPValidationData(data: BuyerMapData): ICPValidationData {
  * Counts unique interview sources from quotes
  */
 export function calculateTotalInterviews(quotes: Quote[]): number {
-  const uniqueSources = new Set(quotes.map(quote => quote.source));
+  const uniqueSources = new Set(quotes.map(quote => quote.speaker || quote.role || 'Unknown'));
   return uniqueSources.size;
 }
 
@@ -198,8 +198,7 @@ export function transformBuyerMapData(data: BuyerMapData): BuyerMapData {
     whyAssumption: data.whyAssumption,
     evidenceFromDeck: data.evidenceFromDeck,
     realityFromInterviews: data.realityFromInterviews,
-    comparisonOutcome: data.comparisonOutcome.toLowerCase() as 'aligned' | 'misaligned' | 'new_insight',
-    waysToAdjustMessaging: data.waysToAdjustMessaging,
+    comparisonOutcome: (data.comparisonOutcome || 'pending').toLowerCase() as 'aligned' | 'misaligned' | 'new_insight',
     confidenceScore: data.confidenceScore,
     confidenceExplanation: data.confidenceExplanation,
     quotes: data.quotes,

@@ -1,3 +1,18 @@
+/**
+ * @deprecated LEGACY COMPONENT - This component is deprecated and should not be used in new implementations.
+ * 
+ * Use modern-buyermap-landing.tsx instead for the primary results display interface.
+ * This component contains complex validation logic that has been simplified and improved
+ * in the modern interface.
+ * 
+ * Migration path:
+ * - Replace ICPValidationDashboard usage with ModernBuyerMapLanding
+ * - Use mapBuyerMapToValidationData utility for data transformation
+ * - Leverage ValidationCard component for consistent card display
+ * 
+ * This file is kept for reference only and may be removed in future versions.
+ */
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Target, Calendar, Shield, Upload, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { BuyerMapData, ValidationAttribute, ICPValidationData, Quote, ICPValidationResponse, AssumptionState } from '../types/buyermap';
@@ -1167,8 +1182,29 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
                 <div className="dashboard-subtitle" style={{fontSize: '1.1rem', color: '#6b7280', marginTop: '0.25rem'}}>Built from archetype analysis and sales deck assumptions</div>
               </div>
             </div>
-            <div className="dashboard-header-actions" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
-              <button className="btn btn-primary" style={{background: '#2563eb', color: '#fff', fontWeight: 600, borderRadius: '8px', padding: '0.75rem 1.5rem', fontSize: '1rem', border: 'none', boxShadow: '0 1px 2px rgba(37,99,235,0.08)', cursor: 'pointer', transition: 'background 0.2s'}} onClick={handleUploadClick}>
+            <div className="dashboard-header-actions" style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              flexWrap: 'wrap',
+              marginTop: '1rem'
+            }}>
+              <button 
+                className="btn btn-primary" 
+                style={{
+                  background: '#2563eb',
+                  color: '#fff',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  border: 'none',
+                  boxShadow: '0 1px 2px rgba(37,99,235,0.08)',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }} 
+                onClick={handleUploadClick}
+              >
                 Upload Interviews
               </button>
               <input
@@ -1179,9 +1215,68 @@ export function ICPValidationDashboard({ buyerMapData, onValidationUpdate, onErr
                 accept={allowedExtensions.join(',')}
                 multiple
               />
-              <button className="btn btn-secondary" style={{background: '#f3f4f6', color: '#2563eb', fontWeight: 600, borderRadius: '8px', padding: '0.75rem 1.5rem', fontSize: '1rem', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 1px 2px rgba(37,99,235,0.04)', cursor: 'pointer', transition: 'background 0.2s'}}>
+              <button 
+                className="btn btn-secondary" 
+                style={{
+                  background: '#f3f4f6',
+                  color: '#2563eb',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '1rem',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  boxShadow: '0 1px 2px rgba(37,99,235,0.04)',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }}
+              >
                 <svg width="20" height="20" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
                 Export Analysis
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/synthesize-insights', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        'buyer-titles': {
+                          assumption: 'Our target buyers are CTOs and VPs of Engineering at mid-market companies',
+                          outcome: 'Aligned',
+                          quotes: [
+                            {
+                              quote: 'As a CTO at a 500-person company, I'm constantly looking for ways to improve our engineering processes.',
+                              classification: 'ALIGNED'
+                            }
+                          ]
+                        }
+                      })
+                    });
+                    
+                    const result = await response.json();
+                    console.log('🐛 FULL RESPONSE STRUCTURE:', Object.keys(result));
+                    console.log('🐛 synthesizedInsights exists?', !!result.synthesizedInsights);
+                    console.log('🐛 Full result:', result);
+                    
+                    if (result.synthesizedInsights) {
+                      console.log('📋 Reality Statements:');
+                      Object.entries(result.synthesizedInsights).forEach(([key, data]: [string, any]) => {
+                        console.log(`\n${key}:`);
+                        console.log(`Reality: ${data.reality}`);
+                        console.log(`Outcome: ${data.outcome}`);
+                        console.log(`Confidence: ${data.confidence}%`);
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error testing synthesis:', error);
+                  }
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center gap-2"
+              >
+                🧪 Test With Quote Data
               </button>
             </div>
           </div>

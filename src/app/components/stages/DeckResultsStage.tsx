@@ -136,8 +136,7 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
   onProgressUpdate,
   onValidationUpdate
 }) => {
-  // Add local step state for navigation if needed
-  const [currentStep, setCurrentStep] = useState<number>(3);
+  // Skip directly to results page - no intermediate upload step needed
 
   console.log('buyerMapData received:', buyerMapData, typeof buyerMapData);
   console.log('buyerMapData structure:', JSON.stringify(buyerMapData, null, 2));
@@ -220,8 +219,8 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
     <ModernBuyerMapLanding
       buyerMapData={buyerMapData.assumptions}
       overallScore={buyerMapData.overallAlignmentScore}
-      currentStep={currentStep}
-      setCurrentStep={setCurrentStep}
+      currentStep={3} // Skip directly to results + interview upload
+      setCurrentStep={() => {}} // No step navigation needed - always show results
     />
   );
 };
