@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI conditionally
+let openai: OpenAI | null = null;
+if (process.env.NEXT_PUBLIC_USE_MOCK !== "TRUE") {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY environment variable is not set');
+  }
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 const APPROVED_ICP_ATTRIBUTES = [
   "Buyer Titles",
@@ -84,6 +91,9 @@ async function processInterviewFiles(interviewFiles: File[]): Promise<Quote[]> {
       }
 
       // Extract quotes from interview transcript
+      if (!openai) {
+        throw new Error('OpenAI client not initialized');
+      }
       const quoteResponse = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
@@ -158,6 +168,9 @@ async function classifyQuotesAgainstAssumptions(quotes: Quote[], assumptions: As
     
     for (const quote of quotes) {
       try {
+        if (!openai) {
+          throw new Error('OpenAI client not initialized');
+        }
         const classificationResponse = await openai.chat.completions.create({
           model: "gpt-4o",
           messages: [
@@ -245,6 +258,14 @@ async function classifyQuotesAgainstAssumptions(quotes: Quote[], assumptions: As
 export async function POST(request: NextRequest) {
   try {
     console.log('=== FILE PROCESSING STEPS ===');
+    
+    // Check if we should use mock data
+    if (process.env.NEXT_PUBLIC_USE_MOCK === "TRUE") {
+      console.log('🎭 Using mock data for file analysis');
+      const mock = await import("../../../mocks/fixtures/interview-results.json");
+      return NextResponse.json(mock.default);
+    }
+    
     const formData = await request.formData();
     const deckFile = formData.get('deck') as File;
     const interviewFiles = formData.getAll('interviews') as File[];
@@ -277,6 +298,9 @@ export async function POST(request: NextRequest) {
     let openaiResponse;
     try {
       console.log('4. Sending deck to OpenAI...');
+      if (!openai) {
+        throw new Error('OpenAI client not initialized');
+      }
       openaiResponse = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [

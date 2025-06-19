@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MockTestButton } from '../../components/MockTestButton';
 
 // Mock data
 /* const mockBuyerMapData = [
@@ -85,6 +86,8 @@ interface AssumptionData {
   v1Assumption?: string;
   whyAssumption?: string;
   evidenceFromDeck?: string;
+  confidenceScore?: number;
+  confidenceExplanation?: string;
 }
 
 interface UploadedFiles {
@@ -378,6 +381,13 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
                 Compare your sales messaging against real customer interviews
               </p>
             </div>
+
+            {/* Mock Test Section (Development Only) */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-6">
+                <MockTestButton />
+              </div>
+            )}
 
             {/* Main CTA */}
             <div className="space-y-4 relative z-10">

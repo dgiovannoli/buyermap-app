@@ -1,0 +1,157 @@
+{
+    "assumptions": [
+      {
+        "id": 1,
+        "icpAttribute": "Buyer Titles",
+        "icpTheme": "buyer-titles",
+        "v1Assumption": "The buyer titles are likely to be attorneys or paralegals, as the product is designed to assist in legal case preparation and evidence review.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "The buyer titles are likely to be attorneys or paralegals, as the product is designed to assist in legal case preparation and evidence review.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 90,
+        "confidenceExplanation": "The pitch deck mentions that the product is used by attorneys and paralegals. This is a strong indicator of the buyer titles.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Buyer Titles",
+          "subtitle": "buyer-titles",
+          "cardNumber": 1,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 2,
+        "icpAttribute": "Company Size",
+        "icpTheme": "company-size",
+        "v1Assumption": "The company size can vary from small to large law firms, as the product is used by thousands of lawyers from different sized firms.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "The company size can vary from small to large law firms, as the product is used by thousands of lawyers from different sized firms.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 80,
+        "confidenceExplanation": "The pitch deck mentions that the product is used by lawyers from small to big firms. However, it does not provide specific numbers or percentages.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Company Size",
+          "subtitle": "company-size",
+          "cardNumber": 2,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 3,
+        "icpAttribute": "Pain Points",
+        "icpTheme": "pain-points",
+        "v1Assumption": "The main pain points are the time and effort spent on manual review of evidence, the disorganization of multimedia files, and the disadvantage defense teams face due to the prosecution's head start.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "The main pain points are the time and effort spent on manual review of evidence, the disorganization of multimedia files, and the disadvantage defense teams face due to the prosecution's head start.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 95,
+        "confidenceExplanation": "The pitch deck clearly outlines these pain points in the 'Industry challenges' section.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Pain Points",
+          "subtitle": "pain-points",
+          "cardNumber": 3,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 4,
+        "icpAttribute": "Desired Outcomes",
+        "icpTheme": "desired-outcomes",
+        "v1Assumption": "The desired outcomes include transforming hours of recordings into searchable insights, redirecting attorney hours from manual review to strategic defense planning, and turning disorganized multimedia files into a structured system of record.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "The desired outcomes include transforming hours of recordings into searchable insights, redirecting attorney hours from manual review to strategic defense planning, and turning disorganized multimedia files into a structured system of record.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 95,
+        "confidenceExplanation": "The pitch deck clearly outlines these desired outcomes in the 'Equalizing the Legal Playing Field with Rev' section.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Desired Outcomes",
+          "subtitle": "desired-outcomes",
+          "cardNumber": 4,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 5,
+        "icpAttribute": "Triggers",
+        "icpTheme": "triggers",
+        "v1Assumption": "Triggers could include the need for a more efficient way to process and review evidence, the need for a secure and compliant solution, and the need to save time on case preparation.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "Triggers could include the need for a more efficient way to process and review evidence, the need for a secure and compliant solution, and the need to save time on case preparation.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 85,
+        "confidenceExplanation": "The pitch deck suggests these triggers by highlighting the product's features and benefits, but does not explicitly state them.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Triggers",
+          "subtitle": "triggers",
+          "cardNumber": 5,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 6,
+        "icpAttribute": "Barriers",
+        "icpTheme": "barriers",
+        "v1Assumption": "Potential barriers could include the cost of the product, the need for training to use the product effectively, and concerns about data security and privacy.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "Potential barriers could include the cost of the product, the need for training to use the product effectively, and concerns about data security and privacy.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 80,
+        "confidenceExplanation": "The pitch deck mentions the cost of the product and its compliance with data security and privacy standards, suggesting these could be potential concerns or barriers for customers.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Barriers",
+          "subtitle": "barriers",
+          "cardNumber": 6,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      },
+      {
+        "id": 7,
+        "icpAttribute": "Messaging Emphasis",
+        "icpTheme": "messaging-emphasis",
+        "v1Assumption": "The messaging emphasis is on the product's ability to save time, improve efficiency, and provide a competitive edge in case preparation and evidence review.",
+        "whyAssumption": "Extracted from deck analysis",
+        "evidenceFromDeck": "The messaging emphasis is on the product's ability to save time, improve efficiency, and provide a competitive edge in case preparation and evidence review.",
+        "comparisonOutcome": "New Data Added",
+        "confidenceScore": 90,
+        "confidenceExplanation": "The pitch deck consistently emphasizes these points throughout its presentation of the product's features and benefits.",
+        "validationStatus": "pending",
+        "quotes": [],
+        "icpValidation": {
+          "title": "Messaging Emphasis",
+          "subtitle": "messaging-emphasis",
+          "cardNumber": 7,
+          "series": "ICP Collection 2025",
+          "totalInterviews": 0
+        },
+        "validationAttributes": []
+      }
+    ],
+  
+    "overallAlignmentScore": 88,
+    "validatedCount": 0,
+    "partiallyValidatedCount": 0,
+    "pendingCount": 7,
+    "companyId": "mock-company-123"
+}

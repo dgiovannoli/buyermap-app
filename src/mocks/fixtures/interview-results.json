@@ -1,0 +1,170 @@
+{
+  "success": true,
+  "assumptions": [
+    {
+      "id": 1,
+      "icpAttribute": "Buyer Titles",
+      "icpTheme": "buyer-titles",
+      "v1Assumption": "The buyer titles are likely to be attorneys or paralegals, as the product is designed to assist in legal case preparation and evidence review.",
+      "whyAssumption": "Extracted from deck analysis",
+      "evidenceFromDeck": "The buyer titles are likely to be attorneys or paralegals, as the product is designed to assist in legal case preparation and evidence review.",
+      "comparisonOutcome": "Aligned",
+      "confidenceScore": 92,
+      "confidenceExplanation": "Validated through 3 interviews with confirmed attorney titles",
+      "validationStatus": "validated",
+      "quotes": [
+        {
+          "id": "interview1-1",
+          "text": "As a criminal defense attorney, I spend way too much time sifting through evidence files.",
+          "speaker": "Sarah Mitchell",
+          "role": "Criminal Defense Attorney",
+          "source": "Interview 1",
+          "rejected": false
+        },
+        {
+          "id": "interview2-1", 
+          "text": "Our paralegal team handles most of the initial evidence review, but we attorneys need to validate everything.",
+          "speaker": "Michael Chen",
+          "role": "Senior Partner",
+          "source": "Interview 2",
+          "rejected": false
+        }
+      ],
+      "icpValidation": {
+        "title": "Buyer Titles",
+        "subtitle": "buyer-titles",
+        "cardNumber": 1,
+        "series": "ICP Collection 2025",
+        "totalInterviews": 3
+      },
+      "validationAttributes": [
+        {
+          "attribute": "Criminal Defense Attorney",
+          "validated": true,
+          "quotes": 2
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "icpAttribute": "Company Size",
+      "icpTheme": "company-size",
+      "v1Assumption": "The company size can vary from small to large law firms, as the product is used by thousands of lawyers from different sized firms.",
+      "whyAssumption": "Extracted from deck analysis",
+      "evidenceFromDeck": "The company size can vary from small to large law firms, as the product is used by thousands of lawyers from different sized firms.",
+      "comparisonOutcome": "Partial",
+      "confidenceScore": 75,
+      "confidenceExplanation": "Interviews show strong interest from mid-size firms (10-50 attorneys) but limited validation from large firms",
+      "validationStatus": "partial",
+      "quotes": [
+        {
+          "id": "interview1-2",
+          "text": "Our firm has about 25 attorneys and we all struggle with the same evidence management issues.",
+          "speaker": "Sarah Mitchell",
+          "role": "Criminal Defense Attorney", 
+          "source": "Interview 1",
+          "rejected": false
+        }
+      ],
+      "icpValidation": {
+        "title": "Company Size",
+        "subtitle": "company-size",
+        "cardNumber": 2,
+        "series": "ICP Collection 2025",
+        "totalInterviews": 3
+      },
+      "validationAttributes": [
+        {
+          "attribute": "Mid-size firms (10-50 attorneys)",
+          "validated": true,
+          "quotes": 2
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "icpAttribute": "Pain Points",
+      "icpTheme": "pain-points",
+      "v1Assumption": "The main pain points are the time and effort spent on manual review of evidence, the disorganization of multimedia files, and the disadvantage defense teams face due to the prosecution's head start.",
+      "whyAssumption": "Extracted from deck analysis",
+      "evidenceFromDeck": "The main pain points are the time and effort spent on manual review of evidence, the disorganization of multimedia files, and the disadvantage defense teams face due to the prosecution's head start.",
+      "comparisonOutcome": "Aligned",
+      "confidenceScore": 98,
+      "confidenceExplanation": "All interviewed attorneys confirmed these exact pain points with specific examples",
+      "validationStatus": "validated",
+      "quotes": [
+        {
+          "id": "interview1-3",
+          "text": "I spend 60% of my time just organizing and reviewing evidence files. It's incredibly inefficient.",
+          "speaker": "Sarah Mitchell",
+          "role": "Criminal Defense Attorney",
+          "source": "Interview 1",
+          "rejected": false
+        },
+        {
+          "id": "interview2-3",
+          "text": "The prosecution always gets their evidence organized first. We're constantly playing catch-up.",
+          "speaker": "David Rodriguez",
+          "role": "Public Defender",
+          "source": "Interview 2",
+          "rejected": false
+        },
+        {
+          "id": "interview3-3",
+          "text": "Video and audio files are the worst - they're scattered across different systems and impossible to search through quickly.",
+          "speaker": "Jennifer Wong",
+          "role": "Defense Attorney",
+          "source": "Interview 3",
+          "rejected": false
+        }
+      ],
+      "icpValidation": {
+        "title": "Pain Points",
+        "subtitle": "pain-points",
+        "cardNumber": 3,
+        "series": "ICP Collection 2025",
+        "totalInterviews": 3
+      },
+      "validationAttributes": [
+        {
+          "attribute": "Manual evidence review time",
+          "validated": true,
+          "quotes": 3
+        },
+        {
+          "attribute": "Multimedia file organization",
+          "validated": true,
+          "quotes": 2
+        }
+      ]
+    }
+  ],
+  "icpValidation": {
+    "title": "Interview Validation Results",
+    "subtitle": "interview-validation",
+    "series": "ICP Collection 2025",
+    "totalInterviews": 3
+  },
+  "validationAttributes": [
+    {
+      "attribute": "Attorney/Paralegal titles",
+      "validated": true,
+      "quotes": 5
+    },
+    {
+      "attribute": "Evidence review pain points",
+      "validated": true,
+      "quotes": 8
+    }
+  ],
+  "overallAlignmentScore": 88,
+  "validatedCount": 2,
+  "partiallyValidatedCount": 1,
+  "pendingCount": 4,
+  "metadata": {
+    "totalInterviews": 3,
+    "totalQuotes": 15,
+    "processingTimeSeconds": "0.2",
+    "parallelProcessing": true
+  }
+} 

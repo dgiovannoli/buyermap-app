@@ -3,14 +3,30 @@ import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData } from '../../../types/buyermap';
 import { createICPValidationData, createValidationData, transformBuyerMapDataArray } from '../../../utils/dataMapping';
+import { isMockMode, logMockUsage } from '../../../utils/mockHelper';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Initialize OpenAI with proper error handling (only if not using mocks)
+let openai: OpenAI | null = null;
+if (!isMockMode()) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY environment variable is not set');
+  }
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
     console.log('=== SALES DECK ANALYSIS PHASE ===');
+    
+    // Check if we should use mock data
+    if (isMockMode()) {
+      logMockUsage('deck analysis');
+      const mock = await import("../../../mocks/fixtures/deck-analysis.json");
+      return NextResponse.json(mock.default);
+    }
+    
     const formData = await req.formData();
     const deckFile = formData.get('deck') as File;
 
@@ -33,18 +49,15 @@ export async function POST(req: NextRequest) {
 
     // 2. Analyze the deck content with AI
     console.log('Step 2: Analyzing deck content with AI...');
-    const analysisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `Analyze this pitch deck and extract ICP assumptions. Return a JSON object with:
+    if (!openai) {
+      throw new Error('OpenAI client not initialized');
+    }
+    const analysisResponse = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: `Analyze this pitch deck and extract ICP assumptions. Return a JSON object with:
 {
   "assumptions": [
     {
@@ -63,29 +76,26 @@ Rules:
 4. Include confidence scores (0-100)
 5. Cover all 7 attributes
 6. Return valid JSON only`
-          },
-          {
-            role: 'user',
-            content: `Analyze this deck content and extract ICP assumptions:\n\n${parsedResult.text}`
-          }
-        ],
-        temperature: 0.3
-      })
+        },
+        {
+          role: 'user',
+          content: `Analyze this deck content and extract ICP assumptions:\n\n${parsedResult.text}`
+        }
+      ],
+      temperature: 0.3
     });
 
-    if (!analysisResponse.ok) {
-      console.error('AI analysis failed:', await analysisResponse.text());
-      throw new Error('Failed to analyze deck content');
+    if (!analysisResponse.choices?.[0]?.message?.content) {
+      throw new Error('No content in AI response');
     }
 
-    const analysisData = await analysisResponse.json();
-    console.log('AI analysis response:', analysisData.choices[0].message.content);
+    console.log('AI analysis response:', analysisResponse.choices[0].message.content);
 
     // 3. Parse the AI response into structured assumptions
     console.log('Step 3: Parsing AI response into structured assumptions...');
     let parsedAssumptions;
     try {
-      const aiResponse = analysisData.choices[0].message.content;
+      const aiResponse = analysisResponse.choices[0].message.content;
       console.log('Raw AI response:', aiResponse);
 
       // Extract JSON content from markdown code block if present
@@ -171,7 +181,10 @@ Rules:
     }
   } catch (error: any) {
     console.error('Error in deck analysis:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message,
+      details: error.stack
+    }, { status: 500 });
   }
 }
 

@@ -5,9 +5,16 @@ import { BuyerMapData, Quote } from '../../../types/buyermap';
 import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions, mapComparisonOutcome } from '../../../utils/dataMapping';
 import pLimit from 'p-limit';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI conditionally
+let openai: OpenAI | null = null;
+if (process.env.NEXT_PUBLIC_USE_MOCK !== "TRUE") {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY environment variable is not set');
+  }
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 // === FEATURE FLAG ===
 const USE_TARGETED_EXTRACTION = true;
@@ -36,6 +43,9 @@ async function callOpenAIWithRetry(params: any, purpose: string, maxRetries = 2)
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     try {
       const start = Date.now();
+      if (!openai) {
+        throw new Error('OpenAI client not initialized');
+      }
       const response = await openai.chat.completions.create({
         ...params,
         response_format: { type: 'json_object' },
@@ -372,6 +382,9 @@ Return in this exact JSON format:
   try {
     console.log(`[OpenAI][targeted-extraction] Starting for assumption: ${assumption.substring(0, 30)}...`);
     const startTime = Date.now();
+    if (!openai) {
+      throw new Error('OpenAI client not initialized');
+    }
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -589,6 +602,13 @@ export async function POST(request: NextRequest) {
   const processingStartTime = Date.now();
   
   try {
+    // Check if we should use mock data
+    if (process.env.NEXT_PUBLIC_USE_MOCK === "TRUE") {
+      console.log('🎭 Using mock data for interview analysis');
+      const mock = await import("../../../mocks/fixtures/interview-results.json");
+      return NextResponse.json(mock.default);
+    }
+    
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
     const assumptionsJson = formData.get('assumptions') as string;
@@ -622,7 +642,7 @@ export async function POST(request: NextRequest) {
             return { 
               result: Object.fromEntries(assumptionsList.map(a => [a, []])),
               fileName: file.name,
-              error: error.message
+              error: error instanceof Error ? error.message : 'Unknown error'
             };
           }
         })

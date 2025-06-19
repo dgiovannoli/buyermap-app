@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "icpAttribute": "Buyer Titles",
+    "icpTheme": "Criminal Defense Attorney",
+    "v1Assumption": "Attorneys are primary users",
+    "whyAssumption": "Based on sales deck",
+    "realityFromInterviews": "Paralegals manage transcription",
+    "comparisonOutcome": "Misaligned",
+    "waysToAdjustMessaging": "Include paralegals in messaging",
+    "confidenceScore": 85,
+    "confidenceExplanation": "Clear evidence from 3 interviews",
+    "quotes": [
+      { "text": "Paralegals handle transcription daily", "speaker": "Betty Behrens", "role": "Paralegal" },
+      { "text": "Attorneys rarely use this feature",  "speaker": "Marcus Rivera", "role": "Attorney" }
+    ]
+  }
+]
