@@ -202,7 +202,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                {validation.quotes.slice(0, 2).map((quote, idx) => (
+                {(showAllQuotes ? validation.quotes : validation.quotes.slice(0, 2)).map((quote, idx) => (
                   <div
                     key={idx}
                     className="bg-white rounded-xl p-5 border border-gray-200/50 shadow-sm hover:shadow-md transition-shadow"
@@ -234,10 +234,20 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               {validation.quotes.length > 2 && (
                 <div>
                   <button
+                    onClick={toggleShowAllQuotes}
                     className="text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors flex items-center space-x-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>View {validation.quotes.length - 2} more quotes</span>
+                    {showAllQuotes ? (
+                      <>
+                        <ChevronUp className="w-4 h-4" />
+                        <span>Show fewer quotes</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>View {validation.quotes.length - 2} more quotes</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}
