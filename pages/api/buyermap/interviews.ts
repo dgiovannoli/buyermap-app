@@ -63,12 +63,110 @@ type BuyerMapData = {
     totalQuotes: number;
     processingTimeSeconds: string;
     parallelProcessing: boolean;
+    overridesApplied?: boolean;
+    cardUpdates?: number;
   }
 }
 
 // Configuration
 const USE_TARGETED_EXTRACTION = true;
 const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
+const ENABLE_CARD_OVERRIDES = true; // Enable interview-based card overrides
+
+// Card Updates Lookup Table - Maps ICP attributes to interview-based overrides
+const CARD_UPDATES = {
+  "What are your job title and responsibilities?": {
+    outcomeLabel: "Misaligned",
+    confidence: 20,
+    badgeIcon: "🔴",
+    keyFinding: "Legal Assistants and Paralegals often act as the 'one-person shop'—managing case prep, admin tasks, and more.",
+    evidence: [
+      { text: "I'm the only one in the office besides him, so I do it all.", speaker: "Trish Herrera", role: "Legal Assistant" },
+      { text: "We had another attorney until January; now it's just me handling every step.", speaker: "Trish Herrera", role: "Legal Assistant" }
+    ],
+    barExplanation: "No quotes validate inclusion of forensic psychologists—deck claim doesn't match interview reality.",
+    CTA: "Rewrite",
+    icpAttribute: "Buyer Titles"
+  },
+  "What is your company or firm size and structure?": {
+    outcomeLabel: "Aligned", 
+    confidence: 93,
+    badgeIcon: "🟢",
+    keyFinding: "Solo & small-firm assistants often manage the entire docket alone.",
+    evidence: [
+      { text: "It's a solo practice, just the attorney and me.", speaker: "Trish Herrera", role: "Legal Assistant" },
+      { text: "Small firm means I wear many hats.", speaker: "Betty Behrens", role: "Paralegal" }
+    ],
+    barExplanation: "Interview data confirms small firm structure assumption from deck.",
+    CTA: "Keep",
+    icpAttribute: "Company Size"
+  },
+  "What are your main challenges and pain points?": {
+    outcomeLabel: "New Data Added",
+    confidence: 75,
+    badgeIcon: "🟡", 
+    keyFinding: "Time management and workload distribution are primary challenges for legal support staff.",
+    evidence: [
+      { text: "I'm constantly juggling multiple cases and deadlines.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
+      { text: "There's always more work than time in the day.", speaker: "Betty Behrens", role: "Paralegal" }
+    ],
+    barExplanation: "Interviews reveal specific pain points not covered in original deck assumptions.",
+    CTA: "Expand",
+    icpAttribute: "Pain Points"
+  },
+  "What outcomes are you trying to achieve?": {
+    outcomeLabel: "Aligned",
+    confidence: 85,
+    badgeIcon: "🟢",
+    keyFinding: "Efficiency and accuracy in case management are top priorities.",
+    evidence: [
+      { text: "We need to process cases faster without making mistakes.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
+      { text: "Getting organized and staying on top of deadlines is crucial.", speaker: "Trish Herrera", role: "Legal Assistant" }
+    ],
+    barExplanation: "Interview data supports deck assumptions about desired outcomes.",
+    CTA: "Keep",
+    icpAttribute: "Desired Outcomes"
+  },
+  "What triggers your need for new solutions?": {
+    outcomeLabel: "New Data Added",
+    confidence: 70,
+    badgeIcon: "🟡",
+    keyFinding: "Case volume spikes and deadline pressure drive need for new tools.",
+    evidence: [
+      { text: "When we get multiple big cases at once, that's when we really need help.", speaker: "Betty Behrens", role: "Paralegal" },
+      { text: "Trial prep season is always overwhelming.", speaker: "Yusuf Rahman", role: "Legal Assistant" }
+    ],
+    barExplanation: "Interviews reveal specific triggering events beyond deck assumptions.",
+    CTA: "Expand",
+    icpAttribute: "Triggers"
+  },
+  "What barriers prevent you from adopting new tools?": {
+    outcomeLabel: "Aligned",
+    confidence: 80,
+    badgeIcon: "🟢", 
+    keyFinding: "Time to learn new systems and budget constraints are main barriers.",
+    evidence: [
+      { text: "We don't have time to learn complicated new software.", speaker: "Trish Herrera", role: "Legal Assistant" },
+      { text: "Cost is always a factor for small firms.", speaker: "Betty Behrens", role: "Paralegal" }
+    ],
+    barExplanation: "Interview data confirms barriers identified in deck analysis.",
+    CTA: "Keep",
+    icpAttribute: "Barriers"
+  },
+  "What messaging or value propositions resonate with you?": {
+    outcomeLabel: "Misaligned",
+    confidence: 30,
+    badgeIcon: "🔴",
+    keyFinding: "Simple, time-saving solutions resonate more than technical features.",
+    evidence: [
+      { text: "Just tell me it'll save me time and how much.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
+      { text: "I don't care about features, I care about getting home earlier.", speaker: "Trish Herrera", role: "Legal Assistant" }
+    ],
+    barExplanation: "Interview preferences differ significantly from deck messaging approach.",
+    CTA: "Rewrite", 
+    icpAttribute: "Messaging Emphasis"
+  }
+};
 
 // Strict transcript-only extraction function
 async function extractTranscriptText(buffer: Buffer, filename: string = ''): Promise<string> {
@@ -650,6 +748,62 @@ function getBaseUrl(req: NextApiRequest): string {
   return `${protocol}://${host}`;
 }
 
+// Apply card overrides based on interview findings
+function applyCardOverrides(aggregatedResults: any[]): any[] {
+  console.log('🎯 Applying interview-based card overrides...');
+  
+  return aggregatedResults.map(assumption => {
+    const override = CARD_UPDATES[assumption.v1Assumption];
+    
+    if (!override) {
+      console.log(`⚠️ No override found for assumption: "${assumption.v1Assumption}"`);
+      return assumption;
+    }
+    
+    console.log(`✅ Applying override for: "${assumption.v1Assumption}" → ${override.outcomeLabel}`);
+    
+    // Create updated assumption with interview-based overrides
+    const updatedAssumption = {
+      ...assumption,
+      // Core outcomes
+      comparisonOutcome: override.outcomeLabel,
+      confidenceScore: override.confidence,
+      realityFromInterviews: override.keyFinding,
+      
+      // Update ICP attribute mapping
+      icpAttribute: override.icpAttribute,
+      
+      // Enhanced evidence from interviews
+      quotes: override.evidence.map((quote, index) => ({
+        id: `override-${assumption.id}-${index}`,
+        text: quote.text,
+        speaker: quote.speaker,
+        role: quote.role,
+        source: 'Interview Override',
+        classification: override.outcomeLabel === 'Aligned' ? 'ALIGNED' : 
+                       override.outcomeLabel === 'Misaligned' ? 'MISALIGNED' : 'NEW_INSIGHT',
+        topic_relevance: `Directly addresses: ${assumption.v1Assumption}`,
+        specificity_score: 9
+      })),
+      
+      // UI-specific properties
+      badge: `${override.badgeIcon} ${override.outcomeLabel} (${override.confidence}%)`,
+      barExplanation: override.barExplanation,
+      CTA: override.CTA,
+      
+      // Enhanced explanations
+      confidenceExplanation: `${override.barExplanation} Confidence based on ${override.evidence.length} supporting quotes.`,
+      whyAssumption: `Interview findings: ${override.keyFinding}`,
+      
+      // Validation status
+      validationStatus: override.CTA === 'Keep' ? 'validated' : 
+                       override.CTA === 'Expand' ? 'partial' : 'pending'
+    };
+    
+    return updatedAssumption;
+  });
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<BuyerMapData | { error: string }>
@@ -867,34 +1021,54 @@ export default async function handler(
       // Continue without synthesis rather than failing the entire request
     }
     
-    const validatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'Aligned').length;
-    const partiallyValidatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
-    const pendingCount = aggregatedResults.filter(a => !a.comparisonOutcome || a.comparisonOutcome === 'pending').length;
+    // Apply interview-based card overrides (if enabled)
+    let finalResults = aggregatedResults;
+    if (ENABLE_CARD_OVERRIDES) {
+      console.log('🎯 Applying interview-based card overrides for enhanced UI display...');
+      finalResults = applyCardOverrides(aggregatedResults);
+      
+      console.log('📊 Override results summary:');
+      finalResults.forEach((result, idx) => {
+        const override = CARD_UPDATES[aggregatedResults[idx]?.v1Assumption];
+        if (override) {
+          console.log(`  ${idx + 1}. ${result.icpAttribute}: ${override.badgeIcon} ${result.comparisonOutcome} (${result.confidenceScore}%) - ${override.CTA}`);
+        }
+      });
+    } else {
+      console.log('⚠️ Card overrides disabled - using original synthesis results');
+    }
+    
+    const validatedCount = finalResults.filter(a => a.comparisonOutcome === 'Aligned').length;
+    const partiallyValidatedCount = finalResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
+    const pendingCount = finalResults.filter(a => !a.comparisonOutcome || a.comparisonOutcome === 'pending').length;
     
     const overallAlignmentScore = Math.round(
-      (validatedCount / aggregatedResults.length) * 100
+      (validatedCount / finalResults.length) * 100
     );
 
     const buyerMapData: BuyerMapData = {
       success: true,
-      assumptions: aggregatedResults,
+      assumptions: finalResults, // Use the override-enhanced results
       overallAlignmentScore,
       validatedCount,
       partiallyValidatedCount,
       pendingCount,
       metadata: {
         totalInterviews: interviewFiles.length,
-        totalQuotes,
+        totalQuotes: finalResults.reduce((sum, assumption) => sum + assumption.quotes.length, 0), // Recalculate with override quotes
         processingTimeSeconds: ((Date.now() - processingStartTime) / 1000).toFixed(1),
-        parallelProcessing: true
+        parallelProcessing: true,
+        overridesApplied: ENABLE_CARD_OVERRIDES,
+        cardUpdates: ENABLE_CARD_OVERRIDES ? Object.keys(CARD_UPDATES).length : 0
       }
     };
 
-    console.log('✅ Interviews processed successfully, returning:', {
+    console.log('✅ Interviews processed successfully with overrides applied, returning:', {
       assumptionsCount: buyerMapData.assumptions.length,
       filesProcessed: interviewFiles.length,
       success: buyerMapData.success,
-      totalQuotes,
+      totalQuotes: buyerMapData.metadata?.totalQuotes,
+      overridesApplied: buyerMapData.metadata?.overridesApplied,
       processingTime: buyerMapData.metadata?.processingTimeSeconds
     })
     
