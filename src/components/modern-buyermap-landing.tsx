@@ -162,6 +162,9 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [showAllQuotes, setShowAllQuotes] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<{id:string;score:number;text:string}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Auto-setup for mock mode
   useEffect(() => {
@@ -506,6 +509,35 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     return insights;
   }, [localBuyerMapData, buyerMapData, uploadedFiles.interviews.length]);
 
+  // Search handler function
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const res = await fetch('/api/search-insights', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ query: searchTerm, k: 5 }),
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Search failed: ${res.status}`);
+      }
+      
+      const data = await res.json();
+      setSearchResults(data.hits || []);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   // Bypass logic for mock mode or when no data is available to show
   if (!uploaded && localBuyerMapData.length === 0 && buyerMapData.length === 0) {
     return <UploadComponent onComplete={() => {
@@ -760,6 +792,63 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
             {/* Main Container with Glassmorphism */}
             <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
+              
+              {/* Search Insights Section */}
+              <div className="mb-8 p-6 bg-white/40 rounded-xl border border-white/30">
+                <h2 className="text-lg font-bold text-gray-800 mb-4">🔍 Search Assumptions</h2>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="Search assumptions (e.g., 'Buyer Titles', 'pain points', 'attorneys')..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button 
+                    onClick={handleSearch} 
+                    disabled={isSearching || !searchTerm.trim()}
+                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                      isSearching || !searchTerm.trim()
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {isSearching ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+                
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="mt-4">
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">
+                      Search Results ({searchResults.length} found)
+                    </h3>
+                    <div className="space-y-3">
+                      {searchResults.map((result) => (
+                        <div key={result.id} className="p-4 bg-white/60 rounded-lg border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-sm font-medium text-blue-600">{result.id}</span>
+                            <span className="text-sm font-bold text-gray-700">
+                              {(result.score * 100).toFixed(1)}% match
+                            </span>
+                          </div>
+                          <p className="text-gray-800 text-sm leading-relaxed">{result.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {searchTerm && searchResults.length === 0 && !isSearching && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-yellow-800 text-sm">
+                      No results found for "{searchTerm}". Try different keywords or broader terms.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* WHO Section */}
               {getFilteredDataBySection("WHO").length > 0 && (
                 <div className="mb-8">

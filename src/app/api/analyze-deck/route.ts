@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData } from '../../../types/buyermap';
-import { createICPValidationData, createValidationData, transformBuyerMapDataArray } from '../../../utils/dataMapping';
+import { transformBuyerMapDataArray } from '../../../utils/dataMapping';
 import { isMockMode, logMockUsage } from '../../../utils/mockHelper';
+import { getPineconeIndex } from '../../../lib/pinecone';
 
 // Initialize OpenAI with proper error handling (only if not using mocks)
 let openai: OpenAI | null = null;
@@ -204,8 +205,45 @@ AVOID:
 
       console.log('Created BuyerMapData array with', assumptions.length, 'assumptions');
 
-      // 4. Transform the assumptions into the standard format
-      console.log('Step 4: Transforming assumptions into standard format...');
+      // Step 4: Wrap your embedding logic
+      console.log('Step 4: Generating and storing embeddings...');
+      
+      // Generate embeddings for each assumption
+      const assumptionsText = assumptions.map(assumption => assumption.v1Assumption);
+      
+      if (!isMockMode() && assumptionsText.length > 0) {
+        try {
+          const pineconeIndex = getPineconeIndex();
+          
+          const embedRes = await openai!.embeddings.create({
+            model: 'text-embedding-ada-002',
+            input: assumptionsText
+          });
+
+          const vectors = embedRes.data.map((item, idx) => ({
+            id: `deck-assumption-${idx}`,
+            values: item.embedding,
+            metadata: { text: assumptionsText[idx] }
+          }));
+
+          await pineconeIndex.upsert({
+            upsertRequest: {
+              vectors,
+              namespace: 'analyze-deck'
+            }
+          });
+
+          console.log(`✅ Upserted ${vectors.length} assumption embeddings into Pinecone.`);
+        } catch (embeddingError: any) {
+          console.error('Error creating embeddings:', embeddingError);
+          // Continue anyway - embeddings are not critical for the response
+        }
+      } else if (isMockMode()) {
+        console.log('🎭 Mock mode: Skipping embedding generation');
+      }
+
+      // 5. Transform the assumptions into the standard format
+      console.log('Step 5: Transforming assumptions into standard format...');
       const transformedData = transformBuyerMapDataArray(assumptions);
 
       // Validate the transformed data
