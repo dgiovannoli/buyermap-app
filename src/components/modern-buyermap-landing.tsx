@@ -347,6 +347,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           confidenceScore: number;
           quotes: any[];
           validationStatus?: string;
+          realityFromInterviews?: string;
         }) => {
           const card = byId.get(ia.id);
           if (!card) return;
@@ -377,13 +378,21 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           card.validationStatus = mapValidationStatus(ia.validationStatus || ia.comparisonOutcome);
           card.quotes = ia.quotes || [];
           
+          // ✅ CRITICAL FIX: Map the realityFromInterviews field
+          if (ia.realityFromInterviews) {
+            card.realityFromInterviews = ia.realityFromInterviews;
+            console.log(`📝 Mapped realityFromInterviews for assumption ${ia.id}:`, ia.realityFromInterviews.substring(0, 100) + '...');
+          } else {
+            console.log(`⚠️ No realityFromInterviews found for assumption ${ia.id}`);
+          }
+          
           // Add interview validation to validationAttributes if it exists
           if (card.validationAttributes) {
             card.validationAttributes = [
               ...(card.validationAttributes || []),
               {
                 assumption: card.v1Assumption,
-                reality: `Interview validation: ${ia.comparisonOutcome}`,
+                reality: ia.realityFromInterviews || `Interview validation: ${ia.comparisonOutcome}`,
                 outcome: mapOutcome(ia.comparisonOutcome),
                 confidence: ia.confidenceScore,
                 confidence_explanation: `From ${payload.metadata?.totalInterviews || 'multiple'} interviews – confidence ${ia.confidenceScore}%`,
@@ -468,7 +477,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   // Transform buyerMapData to validationInsights format for DetailedValidationCard
   const validationInsights = useMemo(() => {
     const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-    return allData.map(item => ({
+    const insights = allData.map(item => ({
       id: item.id,
       icpAttribute: item.icpAttribute || '',
       title: item.v1Assumption || item.whyAssumption || '',
@@ -482,6 +491,14 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         role: q.role || ''
       }))
     }));
+    
+    // Debug log to verify reality field mapping
+    console.log('🔍 ValidationInsights transformation:');
+    insights.forEach(insight => {
+      console.log(`  Assumption ${insight.id}: reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}"`);
+    });
+    
+    return insights;
   }, [localBuyerMapData, buyerMapData]);
 
   // Bypass logic for mock mode or when no data is available to show

@@ -408,8 +408,25 @@ Return JSON with topic verification:
         item.classification?.toUpperCase() !== 'IRRELEVANT'
       );
       
-      allClassifiedQuotes.push(...batchClassified);
-      console.log('🔧 Batch result:', batchClassified.length, 'classified quotes');
+      // Map the classified results back to the original quote structure
+      // The OpenAI response has 'quote' property, but we need 'text' property
+      const mappedQuotes = batchClassified.map((classifiedItem: any, index: number) => {
+        // Find the original quote from the batch that matches this classified result
+        const originalQuote = quoteBatch[index] || quoteBatch.find(q => q.text === classifiedItem.quote);
+        
+        return {
+          text: classifiedItem.quote || originalQuote?.text || '',
+          speaker: originalQuote?.speaker || '',
+          role: originalQuote?.role || '',
+          source: originalQuote?.source || '',
+          classification: classifiedItem.classification,
+          topic_relevance: classifiedItem.reasoning,
+          specificity_score: classifiedItem.confidence || 5
+        };
+      });
+      
+      allClassifiedQuotes.push(...mappedQuotes);
+      console.log('🔧 Batch result:', mappedQuotes.length, 'classified quotes');
     } catch (error) {
       console.error('Failed to classify quote batch:', error);
     }

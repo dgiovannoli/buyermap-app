@@ -6,6 +6,11 @@ interface Quote {
   speaker?: string;
   role?: string;
   source: string;
+  // Alternative property names that might be used
+  quoteText?: string;
+  speakerName?: string;
+  speakerRole?: string;
+  sourceDocument?: string;
 }
 
 interface Assumption {
@@ -62,21 +67,42 @@ export default async function handler(
       console.log(`📝 Processing assumption ${assumption.id}: ${assumption.icpAttribute}`);
       
       try {
+        // Map quotes to ensure they are plain objects with proper structure
+        // Use nullish coalescing (??) to preserve actual values and only default when null/undefined
+        const formattedQuotes = assumption.quotes.map((quote) => ({
+          text: quote.text ?? quote.quoteText ?? '',
+          speaker: quote.speaker ?? quote.speakerName ?? '',
+          role: quote.role ?? quote.speakerRole ?? '',
+          source: quote.source ?? quote.sourceDocument ?? ''
+        }));
+
+        // Prepare the payload for aggregate-validation-results
+        const payload = {
+          assumption: assumption.v1Assumption,
+          quotes: formattedQuotes
+        };
+
+        // Enhanced logging to verify quote data
+        console.log(`📤 Sending to aggregate-validation-results for assumption ${assumption.id}:`);
+        console.log(`   Assumption: "${assumption.v1Assumption}"`);
+        console.log(`   Quotes count: ${formattedQuotes.length}`);
+        formattedQuotes.forEach((q, idx) => {
+          console.log(`   Quote ${idx + 1}: text="${q.text?.substring(0, 50)}...", speaker="${q.speaker}", role="${q.role}", source="${q.source}"`);
+        });
+        console.log('📤 Sending to aggregate:', JSON.stringify(payload, null, 2));
+
         // Call the aggregate-validation-results endpoint
         const aggregateResponse = await fetch(`${getBaseUrl(req)}/api/aggregate-validation-results`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            assumption: assumption.v1Assumption,
-            quotes: assumption.quotes
-          })
+          body: JSON.stringify(payload)
         });
 
         if (!aggregateResponse.ok) {
           const errorData = await aggregateResponse.json();
-          console.error(`❌ Error from aggregate-validation-results for assumption ${assumption.id}:`, errorData);
+          console.error(`❌ Error from aggregate-validation-results for assumption ${assumption.id} (${aggregateResponse.status}):`, errorData);
           
           // Continue with empty reality rather than failing the entire request
           enhancedAssumptions.push({
@@ -86,14 +112,17 @@ export default async function handler(
           continue;
         }
 
-        const { realityFromInterviews } = await aggregateResponse.json();
+        const responseData = await aggregateResponse.json();
+        console.log(`📥 Response from aggregate-validation-results for assumption ${assumption.id}:`, responseData);
+        
+        const { realityFromInterviews } = responseData;
         
         enhancedAssumptions.push({
           ...assumption,
           realityFromInterviews
         });
 
-        console.log(`✅ Successfully synthesized reality for assumption ${assumption.id}`);
+        console.log(`✅ Successfully synthesized reality for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
 
       } catch (error) {
         console.error(`❌ Error processing assumption ${assumption.id}:`, error);
