@@ -11,7 +11,7 @@ interface Quote {
 }
 
 interface ValidationData {
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined';
+  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Pending Validation';
   confidence: number;
   confidence_explanation: string;
   reality: string;
@@ -83,15 +83,23 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               onClick={toggleExpanded}
               className="flex items-center space-x-2 text-sm font-medium p-1 hover:bg-gray-100 rounded transition-colors"
             >
-              {/* Confidence % as colored text */}
-              <span style={{ color: outcomeColors.primary }}>
-                {confidence}%
-              </span>
-              <span className="text-gray-400">•</span>
-              {/* Outcome label as colored text */}
-              <span style={{ color: outcomeColors.primary }}>
-                {outcome}
-              </span>
+              {outcome === 'Pending Validation' ? (
+                // Show only "Pending Validation" in grey for pending state
+                <span className="text-gray-500">
+                  Pending Validation
+                </span>
+              ) : (
+                // Show confidence % and outcome for validated states
+                <>
+                  <span style={{ color: outcomeColors.primary }}>
+                    {confidence}%
+                  </span>
+                  <span className="text-gray-400">•</span>
+                  <span style={{ color: outcomeColors.primary }}>
+                    {outcome}
+                  </span>
+                </>
+              )}
               {isExpanded ? (
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               ) : (

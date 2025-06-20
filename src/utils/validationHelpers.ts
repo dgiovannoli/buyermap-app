@@ -37,6 +37,13 @@ export const getOutcomeColors = (outcome: string) => {
         border: '#c4b5fd',
         text: '#5b21b6'
       };
+    case 'Pending Validation':
+      return {
+        primary: '#9ca3af',
+        bg: '#f9fafb',
+        border: '#e5e7eb',
+        text: '#6b7280'
+      };
     default:
       return {
         primary: '#6b7280',
@@ -59,6 +66,8 @@ export const getOutcomeIcon = (outcome: string) => {
       return Plus;
     case 'Refined':
       return Minus;
+    case 'Pending Validation':
+      return Info;
     default:
       return Info;
   }

@@ -478,29 +478,33 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   // Transform buyerMapData to validationInsights format for DetailedValidationCard
   const validationInsights = useMemo(() => {
     const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
+    const hasInterviews = uploadedFiles.interviews.length > 0;
+    
     const insights = allData.map(item => ({
       id: item.id,
       icpAttribute: item.icpAttribute || '',
       title: item.v1Assumption || item.whyAssumption || '',
-      outcome: item.comparisonOutcome,
-      confidence: item.confidenceScore || 0,
+      // Only show actual outcome and confidence if interviews have been uploaded
+      outcome: hasInterviews ? item.comparisonOutcome : 'Pending Validation',
+      confidence: hasInterviews ? (item.confidenceScore || 0) : 0,
       confidenceExplanation: item.confidenceExplanation || '',
       reality: item.realityFromInterviews || '',
       quotes: (item.quotes || []).map(q => ({
         text: q.text || q.quote || '',
         author: q.speaker || 'Anonymous',
         role: q.role || ''
-      }))
+      })),
+      isPending: !hasInterviews
     }));
     
     // Debug log to verify reality field mapping
     console.log('🔍 ValidationInsights transformation:');
     insights.forEach(insight => {
-      console.log(`  Assumption ${insight.id}: reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}"`);
+      console.log(`  Assumption ${insight.id}: outcome="${insight.outcome}", isPending=${insight.isPending}, reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}"`);
     });
     
     return insights;
-  }, [localBuyerMapData, buyerMapData]);
+  }, [localBuyerMapData, buyerMapData, uploadedFiles.interviews.length]);
 
   // Bypass logic for mock mode or when no data is available to show
   if (!uploaded && localBuyerMapData.length === 0 && buyerMapData.length === 0) {
