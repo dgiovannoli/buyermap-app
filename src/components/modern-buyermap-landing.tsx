@@ -156,7 +156,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadingInterviews, setUploadingInterviews] = useState(false);
   const [localBuyerMapData, setLocalBuyerMapData] = useState<BuyerMapData[]>(initialLocalData);
-  const [score, setScore] = useState<number>(overallScore);
+  const [score, setScore] = useState<number | null>(isMock ? overallScore : null);
   const [showUploadMore, setShowUploadMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
@@ -171,7 +171,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       // Simulate the upload completion and jump directly to results
       setUploaded(true);
       setCurrentStep(3);
-      // Set mock score based on the mock data
+      // Set mock score based on the mock data (mock mode exception)
       const mockScore = calculateOverallScore(MOCK_BUYER_MAP_DATA);
       setScore(mockScore);
     }
@@ -239,8 +239,9 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       // Update local state with deck analysis results
       if (data.assumptions) {
         setLocalBuyerMapData(data.assumptions);
-        const calculatedScore = calculateOverallScore(data.assumptions);
-        setScore(calculatedScore);
+        // Don't set score until interviews are processed
+        // const calculatedScore = calculateOverallScore(data.assumptions);
+        // setScore(calculatedScore);
       }
       
       setUploaded(true);
@@ -467,10 +468,10 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     if (hasData && currentStep < 3) {
       setCurrentStep(3);
       setUploaded(true);
-      // Calculate score from the data
-      const dataToScore = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-      const calculatedScore = calculateOverallScore(dataToScore);
-      setScore(calculatedScore);
+      // Don't calculate score until interviews are processed
+      // const dataToScore = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
+      // const calculatedScore = calculateOverallScore(dataToScore);
+      // setScore(calculatedScore);
     }
   }, [localBuyerMapData, buyerMapData, currentStep, setCurrentStep]);
 
@@ -506,7 +507,10 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     return <UploadComponent onComplete={() => {
       // Load mock data directly
       setLocalBuyerMapData(MOCK_BUYER_MAP_DATA);
-      setScore(calculateOverallScore(MOCK_BUYER_MAP_DATA));
+      // Don't set score until interviews are processed (mock mode exception)
+      if (isMock) {
+        setScore(calculateOverallScore(MOCK_BUYER_MAP_DATA));
+      }
       setCurrentStep(3);
       setUploaded(true);
     }} />;
@@ -642,8 +646,41 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         {/* Step 3: Results */}
         {currentStep === 3 && (
           <div className="space-y-8" data-testid={isMock ? "mock-dashboard" : "validation-dashboard"}>
+            {/* Show deck processed message when no interviews uploaded yet */}
+            {uploadedFiles.interviews.length === 0 && !isMock && (
+              <div className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-8 mb-8">
+                <h2 className="text-xl font-medium mb-2">Deck Analysis Complete</h2>
+                <p className="text-lg opacity-90 mb-4">Your assumptions have been extracted from the sales deck.</p>
+                <p className="text-base opacity-80 mb-6">Upload interview transcripts to validate these assumptions and get your alignment score.</p>
+                <button
+                  onClick={() => {
+                    if (fileInputRef.current) fileInputRef.current.click();
+                  }}
+                  disabled={uploadingInterviews}
+                  className={`px-8 py-3 rounded-lg font-semibold transition-colors ${
+                    uploadingInterviews 
+                      ? 'bg-white/20 text-white/60 cursor-not-allowed' 
+                      : 'bg-white text-blue-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {uploadingInterviews ? 'Uploading...' : 'Upload Interview Transcripts'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  accept=".txt,.doc,.docx,.pdf"
+                  onChange={(e) => {
+                    handleFileUpload('interviews', e.target.files);
+                  }}
+                />
+              </div>
+            )}
+            
             {/* Enhanced Overall Score Header with integrated navigation */}
-            {score !== null && (
+            {/* Only show score after interviews have been uploaded and processed */}
+            {score !== null && uploadedFiles.interviews.length > 0 && (
               <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-8 mb-8">
                 {/* Page Title */}
                 <h2 className="text-xl font-medium mb-2 opacity-90">BuyerMap Validation Results</h2>
