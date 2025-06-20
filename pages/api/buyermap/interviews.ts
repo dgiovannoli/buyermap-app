@@ -3,6 +3,7 @@ import formidable, { File, IncomingForm } from 'formidable'
 import fs from 'fs/promises'
 import OpenAI from 'openai'
 import pLimit from 'p-limit'
+import { getPineconeIndex } from '../../../src/lib/pinecone'
 
 // Disable Next's default body parsing
 export const config = { api: { bodyParser: false } }
@@ -13,6 +14,14 @@ if (process.env.OPENAI_API_KEY) {
   openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
+}
+
+// Initialize Pinecone
+let pineconeIndex: any = null;
+try {
+  pineconeIndex = getPineconeIndex();
+} catch (error) {
+  console.warn('Pinecone initialization failed:', error);
 }
 
 // Types
@@ -103,6 +112,56 @@ async function callOpenAIWithRetry(params: any, purpose: string, maxRetries = 2)
     }
   }
   throw lastError;
+}
+
+// Index quote embeddings into Pinecone
+async function indexQuoteEmbeddings(quotes: Quote[], assumptionId: number): Promise<void> {
+  // Skip if in mock mode or Pinecone not available
+  if (process.env.NEXT_PUBLIC_USE_MOCK === "TRUE" || !pineconeIndex || !openai) {
+    console.log('🎭 Skipping Pinecone indexing: mock mode or Pinecone/OpenAI not available');
+    return;
+  }
+
+  const embeddingTasks = quotes
+    .filter(quote => quote.text && quote.text.length > 20)
+    .map(async (quote, index) => {
+      try {
+        // Generate embedding for the quote text
+        const { data: [embeddingResult] } = await openai!.embeddings.create({
+          model: 'text-embedding-ada-002',
+          input: [quote.text],
+        });
+        
+        const vector = embeddingResult.embedding;
+        const quoteId = `${Date.now()}-${index}`;
+        
+        // Upsert into Pinecone under "interviews" namespace
+        const namespacedIndex = pineconeIndex.namespace('interviews');
+        await namespacedIndex.upsert([{
+          id: `intv-${assumptionId}-${quoteId}`,
+          values: vector,
+          metadata: {
+            assumptionId: assumptionId.toString(),
+            quoteId,
+            text: quote.text,
+            speaker: quote.speaker || '',
+            role: quote.role || '',
+            source: quote.source || '',
+            classification: quote.classification || '',
+            topic_relevance: quote.topic_relevance || '',
+            specificity_score: quote.specificity_score || 0
+          },
+        }]);
+        
+        console.log(`📊 Indexed quote embedding: ${quoteId.substring(0, 8)}... (assumption ${assumptionId})`);
+      } catch (error) {
+        console.error(`❌ Failed to index quote embedding:`, error);
+      }
+    });
+
+  // Execute all embedding tasks in parallel
+  await Promise.all(embeddingTasks);
+  console.log(`✅ Indexed ${embeddingTasks.length} quote embeddings for assumption ${assumptionId}`);
 }
 
 // Get topic-specific instructions for each ICP attribute
@@ -643,6 +702,15 @@ export default async function handler(
         quotes: allQuotesForAssumption
       };
     });
+    
+    // Index quote embeddings into Pinecone
+    console.log('📊 Indexing quote embeddings into Pinecone...');
+    const indexingTasks = aggregatedResults
+      .filter(assumption => assumption.quotes.length > 0)
+      .map(assumption => indexQuoteEmbeddings(assumption.quotes, assumption.id));
+    
+    await Promise.all(indexingTasks);
+    console.log('✅ All quote embeddings indexed successfully');
     
     // Count total quotes processed
     const totalQuotes = aggregatedResults.reduce((sum, assumption) => sum + assumption.quotes.length, 0);
