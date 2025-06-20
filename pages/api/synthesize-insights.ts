@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getTopQuotesForSynthesis } from '../../src/lib/rag'
 
 // Types
 interface Quote {
@@ -11,6 +12,11 @@ interface Quote {
   speakerName?: string;
   speakerRole?: string;
   sourceDocument?: string;
+  // RAG-specific fields
+  score?: number;
+  classification?: string;
+  topic_relevance?: string;
+  specificity_score?: number;
 }
 
 interface Assumption {
@@ -58,40 +64,61 @@ export default async function handler(
       }
     }
 
-    console.log(`🔄 Processing ${assumptions.length} assumptions for reality synthesis...`);
+    console.log(`🔄 Processing ${assumptions.length} assumptions for RAG-powered reality synthesis...`);
 
-    // Process each assumption to get realityFromInterviews
+    // Process each assumption to get realityFromInterviews using RAG
     const enhancedAssumptions: Assumption[] = [];
 
     for (const assumption of assumptions) {
       console.log(`📝 Processing assumption ${assumption.id}: ${assumption.icpAttribute}`);
       
       try {
-        // Map quotes to ensure they are plain objects with proper structure
-        // Use nullish coalescing (??) to preserve actual values and only default when null/undefined
-        const formattedQuotes = assumption.quotes.map((quote) => ({
-          text: quote.text ?? quote.quoteText ?? '',
-          speaker: quote.speaker ?? quote.speakerName ?? '',
-          role: quote.role ?? quote.speakerRole ?? '',
-          source: quote.source ?? quote.sourceDocument ?? ''
-        }));
+        // Use RAG to get the most relevant quotes for this assumption
+        console.log(`🔍 Fetching top quotes via RAG for assumption ${assumption.id}...`);
+        const ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5);
+        
+        // Fallback to provided quotes if RAG returns nothing (for compatibility)
+        let quotesToUse: Quote[] = [];
+        
+        if (ragQuotes.length > 0) {
+          console.log(`✅ Using ${ragQuotes.length} RAG-retrieved quotes for assumption ${assumption.id}`);
+          // Convert RAG quotes to proper Quote format
+          quotesToUse = ragQuotes.map(q => ({
+            text: String(q.text || ''),
+            speaker: String(q.speaker || ''),
+            role: String(q.role || ''),
+            source: String(q.source || ''),
+            score: q.score,
+            classification: String(q.classification || ''),
+            topic_relevance: String(q.topic_relevance || ''),
+            specificity_score: typeof q.specificity_score === 'number' ? q.specificity_score : Number(q.specificity_score) || 0
+          }));
+        } else {
+          console.log(`⚠️ No RAG quotes found for assumption ${assumption.id}, falling back to provided quotes`);
+          // Map quotes to ensure they are plain objects with proper structure
+          quotesToUse = assumption.quotes.map((quote) => ({
+            text: quote.text ?? quote.quoteText ?? '',
+            speaker: quote.speaker ?? quote.speakerName ?? '',
+            role: quote.role ?? quote.speakerRole ?? '',
+            source: quote.source ?? quote.sourceDocument ?? ''
+          }));
+        }
 
-        // Prepare the payload for aggregate-validation-results
+        // Prepare the payload for aggregate-validation-results with high-quality quotes
         const payload = {
           assumption: assumption.v1Assumption,
-          quotes: formattedQuotes
+          quotes: quotesToUse
         };
 
         // Enhanced logging to verify quote data
         console.log(`📤 Sending to aggregate-validation-results for assumption ${assumption.id}:`);
         console.log(`   Assumption: "${assumption.v1Assumption}"`);
-        console.log(`   Quotes count: ${formattedQuotes.length}`);
-        formattedQuotes.forEach((q, idx) => {
-          console.log(`   Quote ${idx + 1}: text="${q.text?.substring(0, 50)}...", speaker="${q.speaker}", role="${q.role}", source="${q.source}"`);
+        console.log(`   High-quality quotes count: ${quotesToUse.length}`);
+        quotesToUse.slice(0, 3).forEach((q, idx) => {
+          console.log(`   Quote ${idx + 1}: text="${q.text?.substring(0, 60)}...", speaker="${q.speaker}", score=${q.score || 'N/A'}`);
         });
-        console.log('📤 Sending to aggregate:', JSON.stringify(payload, null, 2));
 
-        // Call the aggregate-validation-results endpoint
+        // Call the aggregate-validation-results endpoint with curated quotes
         const aggregateResponse = await fetch(`${getBaseUrl(req)}/api/aggregate-validation-results`, {
           method: 'POST',
           headers: {
@@ -122,7 +149,7 @@ export default async function handler(
           realityFromInterviews
         });
 
-        console.log(`✅ Successfully synthesized reality for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
+        console.log(`✅ Successfully synthesized RAG-powered reality for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
 
       } catch (error) {
         console.error(`❌ Error processing assumption ${assumption.id}:`, error);
@@ -135,7 +162,7 @@ export default async function handler(
       }
     }
 
-    console.log(`🎉 Successfully processed ${enhancedAssumptions.length} assumptions`);
+    console.log(`🎉 Successfully processed ${enhancedAssumptions.length} assumptions with RAG-powered insights`);
 
     return res.status(200).json({ assumptions: enhancedAssumptions });
 
