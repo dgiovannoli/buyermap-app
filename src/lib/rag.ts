@@ -41,8 +41,18 @@ export async function fetchRelevantQuotes(assumptionId: number, topK = 5) {
       filter: { assumptionId: assumptionId.toString() },
     });
 
+    // [DEBUG] Log RAG query results for fetchRelevantQuotes
+    console.log(`🔍 [DEBUG] fetchRelevantQuotes for assumption ${assumptionId}:`);
+    if (results.matches) {
+      results.matches.forEach((m: any, i: number) => {
+        console.log(`   [${i}] score=${m.score?.toFixed(3)} text="${m.metadata?.text?.slice(0,200)}"`);
+      });
+    } else {
+      console.log('  No matches found');
+    }
+
     // Return the metadata from matching quotes
-    return results.matches?.map(m => m.metadata) || [];
+    return results.matches?.map((m: any) => m.metadata) || [];
   } catch (error) {
     console.error('Error fetching relevant quotes:', error);
     return [];
@@ -89,8 +99,19 @@ export async function fetchQuotesByQuery(query: string, topK = 5, assumptionId?:
     // Query Pinecone
     const results = await namespacedIndex.query(queryOptions);
 
+    // [DEBUG] Log RAG query results for fetchQuotesByQuery
+    console.log(`🔍 [DEBUG] fetchQuotesByQuery for "${query}" (interviews namespace only):`);
+    if (results.matches) {
+      results.matches.forEach((m: any, i: number) => {
+        const isInterview = m.metadata?.type === 'interview' || m.id?.startsWith('interview-');
+        console.log(`   [${i}] score=${m.score?.toFixed(3)} type=${isInterview ? 'INTERVIEW' : 'UNKNOWN'} text="${m.metadata?.text?.slice(0,200)}"`);
+      });
+    } else {
+      console.log('  No matches found');
+    }
+
     // Return the metadata from matching quotes
-    return results.matches?.map(m => ({
+    return results.matches?.map((m: any) => ({
       ...m.metadata,
       score: m.score
     })) || [];
@@ -133,15 +154,25 @@ export async function getTopQuotesForSynthesis(assumptionText: string, assumptio
       filter: { assumptionId: assumptionId.toString() },
     });
 
+    // [DEBUG] Log raw RAG matches verbatim before filtering
+    console.log('🔍 [DEBUG] RAG matches for assumption:', assumptionText);
+    if (results.matches) {
+      results.matches.forEach((m: any, i: number) => {
+        console.log(`   [${i}] score=${m.score?.toFixed(3)} text="${m.metadata?.text?.slice(0,200)}"`);
+      });
+    } else {
+      console.log('  No matches found');
+    }
+
     // Filter and rank results by quality
     const qualityQuotes = results.matches
-      ?.filter(m => 
+      ?.filter((m: any) => 
         m.metadata?.text && 
         m.metadata.text.length > 20 && 
         m.score && m.score > 0.7 // Only high-confidence matches
       )
       .slice(0, topK) // Take top K after filtering
-      .map(m => ({
+      .map((m: any) => ({
         text: m.metadata?.text,
         speaker: m.metadata?.speaker,
         role: m.metadata?.role,

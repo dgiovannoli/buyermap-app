@@ -3,6 +3,7 @@ import formidable, { File, IncomingForm } from 'formidable'
 import fs from 'fs/promises'
 import OpenAI from 'openai'
 import pLimit from 'p-limit'
+import { extractRawText, chunkify } from '../../../src/utils/transcriptParser'
 import { getPineconeIndex } from '../../../src/lib/pinecone'
 
 // Disable Next's default body parsing
@@ -69,6 +70,16 @@ type BuyerMapData = {
 const USE_TARGETED_EXTRACTION = true;
 const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
 
+// Strict transcript-only extraction function
+async function extractTranscriptText(buffer: Buffer, filename: string = ''): Promise<string> {
+  if (!filename.toLowerCase().endsWith('.docx')) {
+    throw new Error('Unsupported transcript format. Only .docx files are supported for interviews.');
+  }
+  
+  const { value: text } = await extractRawText(buffer);
+  return text;
+}
+
 // Timeout wrapper
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -122,46 +133,80 @@ async function indexQuoteEmbeddings(quotes: Quote[], assumptionId: number): Prom
     return;
   }
 
-  const embeddingTasks = quotes
-    .filter(quote => quote.text && quote.text.length > 20)
-    .map(async (quote, index) => {
-      try {
-        // Generate embedding for the quote text
-        const { data: [embeddingResult] } = await openai!.embeddings.create({
-          model: 'text-embedding-ada-002',
-          input: [quote.text],
-        });
-        
-        const vector = embeddingResult.embedding;
-        const quoteId = `${Date.now()}-${index}`;
-        
-        // Upsert into Pinecone under "interviews" namespace
-        const namespacedIndex = pineconeIndex.namespace('interviews');
-        await namespacedIndex.upsert([{
-          id: `intv-${assumptionId}-${quoteId}`,
-          values: vector,
-          metadata: {
-            assumptionId: assumptionId.toString(),
-            quoteId,
-            text: quote.text,
-            speaker: quote.speaker || '',
-            role: quote.role || '',
-            source: quote.source || '',
-            classification: quote.classification || '',
-            topic_relevance: quote.topic_relevance || '',
-            specificity_score: quote.specificity_score || 0
-          },
-        }]);
-        
-        console.log(`📊 Indexed quote embedding: ${quoteId.substring(0, 8)}... (assumption ${assumptionId})`);
-      } catch (error) {
-        console.error(`❌ Failed to index quote embedding:`, error);
-      }
-    });
+  // Validate quotes are actually from interview transcripts (not deck content)
+  const validInterviewQuotes = quotes.filter(quote => {
+    const isValidInterview = (
+      quote.text && 
+      quote.text.length > 20 &&
+      !quote.text.includes('Company Snapshot') &&
+      !quote.text.includes('Forensic Psychology') &&
+      !quote.text.includes('ppt/slides/') &&
+      !quote.text.includes('Content_Types') &&
+      !quote.text.includes('xml')
+    );
+    
+    if (!isValidInterview) {
+      console.warn(`🚫 Rejecting potential deck contamination in quote: "${quote.text.slice(0, 100)}..."`);
+    }
+    
+    return isValidInterview;
+  });
+
+  if (validInterviewQuotes.length === 0) {
+    console.warn(`⚠️ No valid interview quotes to index for assumption ${assumptionId}`);
+    return;
+  }
+
+  console.log(`📊 Indexing ${validInterviewQuotes.length} verified interview quotes for assumption ${assumptionId}`);
+
+  const embeddingTasks = validInterviewQuotes.map(async (quote, index) => {
+    try {
+      // [DEBUG] Log the text being embedded
+      console.log(`🧮 [DEBUG] Embedding INTERVIEW text for assumption ${assumptionId}:`, quote.text.slice(0, 200));
+      
+      // Generate embedding for the quote text
+      const { data: [embeddingResult] } = await openai!.embeddings.create({
+        model: 'text-embedding-ada-002',
+        input: [quote.text],
+      });
+      
+      const vector = embeddingResult.embedding;
+      const quoteId = `${Date.now()}-${index}`;
+      
+      const vectorRecord = {
+        id: `intv-${assumptionId}-${quoteId}`,
+        values: vector,
+        metadata: {
+          assumptionId: assumptionId.toString(),
+          quoteId,
+          text: quote.text,
+          speaker: quote.speaker || '',
+          role: quote.role || '',
+          source: quote.source || '',
+          classification: quote.classification || '',
+          topic_relevance: quote.topic_relevance || '',
+          specificity_score: quote.specificity_score || 0,
+          type: 'interview', // Explicitly mark as interview content
+          indexed_at: new Date().toISOString()
+        },
+      };
+      
+      // [DEBUG] Log the metadata being upserted  
+      console.log(`🔧 [DEBUG] Upserting INTERVIEW metadata for ${quoteId}:`, vectorRecord.metadata.text.slice(0,200));
+      
+      // Upsert into Pinecone under "interviews" namespace
+      const namespacedIndex = pineconeIndex.namespace('interviews');
+      await namespacedIndex.upsert([vectorRecord]);
+      
+      console.log(`📊 Indexed INTERVIEW embedding: ${quoteId.substring(0, 8)}... (assumption ${assumptionId})`);
+    } catch (error) {
+      console.error(`❌ Failed to index quote embedding:`, error);
+    }
+  });
 
   // Execute all embedding tasks in parallel
   await Promise.all(embeddingTasks);
-  console.log(`✅ Indexed ${embeddingTasks.length} quote embeddings for assumption ${assumptionId}`);
+  console.log(`✅ Indexed ${embeddingTasks.length} VERIFIED INTERVIEW quote embeddings for assumption ${assumptionId}`);
 }
 
 // Get topic-specific instructions for each ICP attribute
@@ -308,11 +353,38 @@ function getTopicFocusInstructions(assumption: string): string {
 
 // Extract targeted quotes for a specific assumption
 async function extractTargetedQuotes(interviewText: string, fileName: string, assumption: string): Promise<Quote[]> {
-  const prompt = `You are extracting quotes that are directly ABOUT this business assumption. Stay focused on the topic.
+  // [DEBUG] Log original text length
+  console.log(`📏 [DEBUG] Original transcript length: ${interviewText.length} chars`);
+  
+  // Split large transcripts into chunks to avoid token limits and improve focus
+  const chunks = chunkify(interviewText, 2000);
+  console.log(`📦 [DEBUG] Split into ${chunks.length} chunks for processing`);
+  
+  // [DEBUG] Log first few chunks
+  chunks.slice(0, 2).forEach((chunk, i) => {
+    console.log(`📦 [DEBUG] Chunk ${i}:`, chunk.slice(0, 200));
+  });
+  
+  const allQuotes: Quote[] = [];
+  
+  // Process each chunk separately to extract quotes
+  const TARGET_QUOTES_PER_ASSUMPTION = 5; // Stop when we have enough quality quotes
+  
+  for (let i = 0; i < chunks.length; i++) {
+    // Early bailout: stop processing if we have enough high-quality quotes
+    if (allQuotes.length >= TARGET_QUOTES_PER_ASSUMPTION) {
+      console.log(`✅ Early bailout: Found ${allQuotes.length} quotes, stopping chunk processing`);
+      break;
+    }
+    
+    const chunk = chunks[i];
+    console.log(`🔍 Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars) - Current quotes: ${allQuotes.length}`);
+    
+    const prompt = `You are extracting quotes that are directly ABOUT this business assumption. Stay focused on the topic.
 
 ASSUMPTION: "${assumption}"
 
-INTERVIEW CONTENT: ${interviewText}
+INTERVIEW CONTENT CHUNK: ${chunk}
 SOURCE: ${fileName}
 
 TOPIC FOCUS RULES:
@@ -335,7 +407,7 @@ QUALITY REQUIREMENTS:
 - Must be substantial (not conversation fragments)
 - Speaker attribution helpful when available
 
-Extract 2-3 quotes that are most directly ABOUT this assumption's topic.
+Extract up to 2 quotes that are most directly ABOUT this assumption's topic from this chunk.
 
 Return in this exact JSON format:
 {
@@ -351,46 +423,60 @@ Return in this exact JSON format:
   ]
 }`;
 
-  try {
-    console.log(`[OpenAI][targeted-extraction] Starting for assumption: ${assumption.substring(0, 30)}...`);
-    const response = await withTimeout(
-      callOpenAIWithRetry({
-        model: "gpt-4o-mini",
-        messages: [
-          { 
-            role: "system", 
-            content: "You are an expert at extracting relevant quotes for business assumption validation. Only extract quotes that directly relate to the given assumption." 
-          },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 1500
-      }, 'targeted-extraction'),
-      60000
-    );
+    try {
+      const response = await withTimeout(
+        callOpenAIWithRetry({
+          model: "gpt-4o-mini",
+          messages: [
+            { 
+              role: "system", 
+              content: "You are an expert at extracting relevant quotes for business assumption validation. Only extract quotes that directly relate to the given assumption. Focus only on the provided interview chunk - do not make up or hallucinate content." 
+            },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.1,
+          max_tokens: 1000
+        }, `targeted-extraction-chunk-${i}`),
+        45000
+      );
 
-    const content = response.choices[0].message.content;
-    if (!content) {
-      console.log(`[OpenAI][targeted-extraction] Empty response for assumption`);
-      return [];
+      const content = response.choices[0].message.content;
+      if (!content) {
+        console.log(`[OpenAI][targeted-extraction] Empty response for chunk ${i}`);
+        continue;
+      }
+
+      const parsed = JSON.parse(content);
+      let chunkQuotes = parsed.quotes || [];
+      
+      // Filter out any quotes with no real text (immediate filter as you suggested)
+      const realQuotes = chunkQuotes.filter((quote: any) => 
+        quote.text && 
+        quote.text.length > 20 &&
+        quote.specificity_score >= 6
+      );
+      
+      console.log(`🎯 Chunk ${i + 1}: extracted ${realQuotes.length} real quotes (total now: ${allQuotes.length + realQuotes.length})`);
+      allQuotes.push(...realQuotes);
+      
+    } catch (error) {
+      console.error(`[OpenAI][targeted-extraction] Error processing chunk ${i}:`, error);
+      continue;
     }
-
-    const parsed = JSON.parse(content);
-    let quotes = parsed.quotes || [];
-    
-    // Filter high-quality quotes
-    quotes = quotes.filter((quote: any) => 
-      quote.text && 
-      quote.text.length > 20 && 
-      quote.specificity_score >= 6
-    );
-
-    console.log(`🎯 Extracted ${quotes.length} high-quality targeted quotes for assumption`);
-    return quotes;
-  } catch (error) {
-    console.error(`[OpenAI][targeted-extraction] Error:`, error);
-    return [];
   }
+  
+  // Remove duplicates and take the highest quality quotes
+  const uniqueQuotes = allQuotes.filter((quote, index, array) => 
+    array.findIndex(q => q.text === quote.text) === index
+  );
+  
+  // Sort by specificity score and take top 5
+  const topQuotes = uniqueQuotes
+    .sort((a, b) => (b.specificity_score || 0) - (a.specificity_score || 0))
+    .slice(0, 5);
+  
+  console.log(`🎯 Final result: ${topQuotes.length} high-quality targeted quotes for assumption`);
+  return topQuotes;
 }
 
 // Classify quotes for a single assumption
@@ -500,7 +586,11 @@ async function processSingleInterview(file: File, assumptions: string[]): Promis
   
   // Read file content
   const buffer = await fs.readFile((file as any).filepath);
-  const interviewText = buffer.toString('utf8');
+  const filename = file.originalFilename || file.newFilename || '';
+  const interviewText = await extractTranscriptText(buffer, filename);
+  
+  // [DEBUG] Log raw transcript snippet to verify extraction
+  console.log('📄 [DEBUG] Transcript snippet:', interviewText.slice(0, 300));
   
   const classificationResults: Record<string, Quote[]> = {};
   
@@ -601,20 +691,8 @@ export default async function handler(
       return res.status(400).json({ error: 'No interview files provided' })
     }
 
-    // Get assumptions from the form data
-    const assumptionsJson = data.fields.assumptions;
-    let existingAssumptions: BuyerMapAssumption[] = [];
-    
-    if (assumptionsJson) {
-      try {
-        const parsed = Array.isArray(assumptionsJson) ? assumptionsJson[0] : assumptionsJson;
-        existingAssumptions = JSON.parse(parsed);
-        console.log(`📋 Received ${existingAssumptions.length} existing assumptions`);
-      } catch (error) {
-        console.error('Error parsing assumptions:', error);
-        return res.status(400).json({ error: 'Invalid assumptions format' })
-      }
-    }
+    // PURE INTERVIEW PROCESSING: No deck assumptions accepted
+    console.log('🔒 PURE INTERVIEW MODE: Processing transcripts independently of any deck analysis');
 
     // Check if we should use mock data
     if (process.env.NEXT_PUBLIC_USE_MOCK === "TRUE") {
@@ -622,7 +700,7 @@ export default async function handler(
       // Return mock response structure
       const mockResponse: BuyerMapData = {
         success: true,
-        assumptions: existingAssumptions.length > 0 ? existingAssumptions : [],
+        assumptions: [],
         overallAlignmentScore: 85,
         validatedCount: 2,
         partiallyValidatedCount: 3,
@@ -637,34 +715,25 @@ export default async function handler(
       return res.status(200).json(mockResponse);
     }
 
-    // If no assumptions provided, use default ICP attributes
-    if (existingAssumptions.length === 0) {
-      const defaultAttributes = [
-        'Buyer Titles', 'Company Size', 'Pain Points', 'Desired Outcomes', 
-        'Triggers', 'Barriers', 'Messaging Emphasis'
-      ];
-      existingAssumptions = defaultAttributes.map((attr, index) => ({
-        id: index + 1,
-        icpAttribute: attr,
-        icpTheme: attr.toLowerCase().replace(/\s+/g, '-'),
-        v1Assumption: `Default assumption for ${attr}`,
-        whyAssumption: 'Default assumption for interview validation',
-        evidenceFromDeck: 'No deck analysis available',
-        comparisonOutcome: 'New Data Added',
-        confidenceScore: 50,
-        confidenceExplanation: 'Default assumption pending validation',
-        validationStatus: 'pending',
-        quotes: []
-      }));
-      console.log(`📋 Using ${existingAssumptions.length} default assumptions`);
-    }
+    // PURE INTERVIEW TOPICS: Define interview-focused topics independently
+    const interviewTopics = [
+      'What are your job title and responsibilities?',
+      'What is your company or firm size and structure?', 
+      'What are your main challenges and pain points?',
+      'What outcomes are you trying to achieve?',
+      'What triggers your need for new solutions?',
+      'What barriers prevent you from adopting new tools?',
+      'What messaging or value propositions resonate with you?'
+    ];
+    
+    console.log(`📋 Processing ${interviewTopics.length} interview-focused topics`);
 
     if (!openai) {
       throw new Error('OpenAI client not initialized - missing API key');
     }
 
-    console.log(`🎯 Starting parallel processing for ${interviewFiles.length} interviews, ${existingAssumptions.length} assumptions`);
-    const assumptionsList: string[] = existingAssumptions.map(a => a.v1Assumption);
+    console.log(`🎯 Starting parallel processing for ${interviewFiles.length} interviews, ${interviewTopics.length} topics`);
+    const topicsList: string[] = interviewTopics;
     
     // Set up parallel processing with rate limiting
     const limit = pLimit(CONCURRENT_LIMIT);
@@ -675,14 +744,14 @@ export default async function handler(
         limit(async () => {
           try {
             console.log(`Starting interview: ${file.originalFilename || file.newFilename}`);
-            const result = await processSingleInterview(file, assumptionsList);
+            const result = await processSingleInterview(file, topicsList);
             const elapsed = ((Date.now() - processingStartTime) / 1000).toFixed(1);
             console.log(`✅ Completed interview ${file.originalFilename || file.newFilename} in ${elapsed}s`);
             return { result, fileName: file.originalFilename || file.newFilename || 'interview' };
           } catch (error) {
             console.error(`❌ Error processing interview ${file.originalFilename || file.newFilename}:`, error);
             return { 
-              result: Object.fromEntries(assumptionsList.map(a => [a, []])),
+              result: Object.fromEntries(topicsList.map(topic => [topic, []])),
               fileName: file.originalFilename || file.newFilename || 'interview',
               error: error instanceof Error ? error.message : 'Unknown error'
             };
@@ -691,8 +760,23 @@ export default async function handler(
       )
     );
     
+    // Create mock assumptions structure for interview topics
+    const mockAssumptions = topicsList.map((topic, index) => ({
+      id: index + 1,
+      icpAttribute: 'Interview Insights',
+      icpTheme: topic,
+      v1Assumption: topic,
+      whyAssumption: 'Extracted from interview transcript',
+      evidenceFromDeck: 'N/A - Pure interview analysis',
+      comparisonOutcome: 'pending',
+      confidenceScore: 0,
+      confidenceExplanation: 'To be determined from interview analysis',
+      validationStatus: 'pending',
+      quotes: []
+    }));
+    
     // Flatten and aggregate results from all interviews
-    const aggregatedResults = existingAssumptions.map(assumption => {
+    const aggregatedResults = mockAssumptions.map(assumption => {
       const allQuotesForAssumption = allResults.flatMap(result => 
         result.result[assumption.v1Assumption] || []
       );
@@ -714,7 +798,7 @@ export default async function handler(
     
     // Count total quotes processed
     const totalQuotes = aggregatedResults.reduce((sum, assumption) => sum + assumption.quotes.length, 0);
-    console.log(`📊 Total quotes processed: ${totalQuotes} across ${existingAssumptions.length} assumptions`);
+    console.log(`📊 Total quotes processed: ${totalQuotes} across ${aggregatedResults.length} assumptions`);
     
     // Set comparisonOutcome for each assumption based on quote classifications
     aggregatedResults.forEach(assumption => {
@@ -724,39 +808,59 @@ export default async function handler(
     
     // Call the synthesize-insights endpoint to add realityFromInterviews
     console.log('🔄 Synthesizing interview insights...');
+    
+    // Debug: Log what we're sending to synthesis
+    const synthesisPayload = {
+      assumptions: aggregatedResults.map(assumption => ({
+        id: assumption.id,
+        icpAttribute: assumption.icpAttribute,
+        v1Assumption: assumption.v1Assumption,
+        evidenceFromDeck: assumption.evidenceFromDeck,
+        quotes: assumption.quotes,
+        confidenceScore: assumption.confidenceScore,
+        validationOutcome: assumption.comparisonOutcome
+      }))
+    };
+    
+    console.log('📤 Sending to synthesis endpoint:');
+    synthesisPayload.assumptions.forEach((assumption, idx) => {
+      console.log(`  Assumption ${idx + 1}: "${assumption.v1Assumption}"`);
+      console.log(`    Quotes: ${assumption.quotes.length} interview quotes`);
+      assumption.quotes.slice(0, 2).forEach((q, qIdx) => {
+        console.log(`      Quote ${qIdx + 1}: "${q.text.slice(0, 100)}..." (speaker: ${q.speaker})`);
+      });
+    });
+    
     try {
       const synthesisResponse = await fetch(`${getBaseUrl(req)}/api/synthesize-insights`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          assumptions: aggregatedResults.map(assumption => ({
-            id: assumption.id,
-            icpAttribute: assumption.icpAttribute,
-            v1Assumption: assumption.v1Assumption,
-            evidenceFromDeck: assumption.evidenceFromDeck,
-            quotes: assumption.quotes,
-            confidenceScore: assumption.confidenceScore,
-            validationOutcome: assumption.comparisonOutcome
-          }))
-        })
+        body: JSON.stringify(synthesisPayload)
       });
 
       if (synthesisResponse.ok) {
         const { assumptions: synthesizedAssumptions } = await synthesisResponse.json();
+        
+        console.log('📥 Received from synthesis endpoint:');
+        synthesizedAssumptions.forEach((synthesized: any, idx: number) => {
+          console.log(`  Assumption ${idx + 1}: realityFromInterviews = "${synthesized.realityFromInterviews?.slice(0, 100)}..."`);
+        });
         
         // Merge the realityFromInterviews back into our results
         synthesizedAssumptions.forEach((synthesized: any) => {
           const originalAssumption = aggregatedResults.find(a => a.id === synthesized.id);
           if (originalAssumption && synthesized.realityFromInterviews) {
             (originalAssumption as any).realityFromInterviews = synthesized.realityFromInterviews;
+            console.log(`✅ Merged interview reality for assumption ${originalAssumption.id}: "${synthesized.realityFromInterviews.slice(0, 80)}..."`);
           }
         });
         
         console.log('✅ Interview insights synthesized successfully');
       } else {
-        console.warn('⚠️ Synthesis endpoint failed, continuing without realityFromInterviews');
+        const errorData = await synthesisResponse.text();
+        console.warn(`⚠️ Synthesis endpoint failed (${synthesisResponse.status}):`, errorData);
       }
     } catch (error) {
       console.error('❌ Error calling synthesis endpoint:', error);

@@ -74,8 +74,14 @@ export default async function handler(
       
       try {
         // Use RAG to get the most relevant quotes for this assumption
-        console.log(`🔍 Fetching top quotes via RAG for assumption ${assumption.id}...`);
+        console.log(`🔍 Fetching top quotes via RAG for assumption ${assumption.id}: "${assumption.v1Assumption}"`);
         const ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5);
+        
+        // Debug: Log what RAG returned
+        console.log(`📋 RAG returned ${ragQuotes.length} quotes for assumption ${assumption.id}:`);
+        ragQuotes.forEach((q, idx) => {
+          console.log(`  RAG Quote ${idx + 1}: "${q.text?.slice(0, 100)}..." (score: ${q.score?.toFixed(3)}, speaker: ${q.speaker})`);
+        });
         
         // Fallback to provided quotes if RAG returns nothing (for compatibility)
         let quotesToUse: Quote[] = [];
@@ -95,6 +101,11 @@ export default async function handler(
           }));
         } else {
           console.log(`⚠️ No RAG quotes found for assumption ${assumption.id}, falling back to provided quotes`);
+          console.log(`📋 Provided quotes count: ${assumption.quotes.length}`);
+          assumption.quotes.slice(0, 2).forEach((q, idx) => {
+            console.log(`  Provided Quote ${idx + 1}: "${q.text?.slice(0, 100)}..." (speaker: ${q.speaker})`);
+          });
+          
           // Map quotes to ensure they are plain objects with proper structure
           quotesToUse = assumption.quotes.map((quote) => ({
             text: quote.text ?? quote.quoteText ?? '',
@@ -103,6 +114,11 @@ export default async function handler(
             source: quote.source ?? quote.sourceDocument ?? ''
           }));
         }
+        
+        console.log(`📤 Final quotes to send to aggregate-validation-results: ${quotesToUse.length} quotes`);
+        quotesToUse.slice(0, 2).forEach((q, idx) => {
+          console.log(`  Final Quote ${idx + 1}: "${q.text.slice(0, 100)}..." (speaker: ${q.speaker})`);
+        });
 
         // Prepare the payload for aggregate-validation-results with high-quality quotes
         const payload = {

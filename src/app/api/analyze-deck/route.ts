@@ -226,12 +226,19 @@ AVOID:
             metadata: { text: assumptionsText[idx] }
           }));
 
-          await pineconeIndex.upsert({
-            upsertRequest: {
-              vectors,
-              namespace: 'analyze-deck'
-            }
+          // Sanity check: ensure vectors is actually an Array
+          if (!Array.isArray(vectors)) {
+            console.error('Pinecone upsert failed: `vectors` is not an Array', vectors);
+            throw new Error('vectors is not an Array');
+          }
+
+          console.log('About to upsert vectors:', {
+            vectorsCount: vectors.length,
+            firstVector: vectors[0] ? { id: vectors[0].id, valuesLength: vectors[0].values?.length, metadata: vectors[0].metadata } : null
           });
+
+          // Pinecone v6 JS client: use namespace() method then upsert vectors array
+          await pineconeIndex.namespace("analyze-deck").upsert(vectors);
 
           console.log(`✅ Upserted ${vectors.length} assumption embeddings into Pinecone.`);
         } catch (embeddingError: any) {

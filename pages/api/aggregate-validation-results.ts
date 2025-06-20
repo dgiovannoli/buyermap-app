@@ -97,8 +97,16 @@ export default async function handler(
 
     // If no quotes provided, return empty reality
     if (flattenedQuotes.length === 0) {
+      console.log('⚠️ No quotes provided for synthesis');
       return res.status(200).json({ realityFromInterviews: 'No interview data available for this assumption.' });
     }
+
+    // Debug: Log what quotes we received for synthesis
+    console.log(`📋 Synthesizing for assumption: "${assumption}"`);
+    console.log(`📋 Received ${flattenedQuotes.length} quotes for synthesis:`);
+    flattenedQuotes.forEach((quote, idx) => {
+      console.log(`  Quote ${idx + 1}: "${quote.text.slice(0, 100)}..." (speaker: ${quote.speaker || 'Unknown'})`);
+    });
 
     // Create synthesis prompt
     const synthesisPrompt = `You are an expert business analyst synthesizing customer interview insights. Your task is to analyze quotes from customer interviews and create a single, coherent summary of what the interviews reveal about a specific business assumption.
@@ -150,9 +158,11 @@ Return only the synthesis paragraph as plain text.`;
     const realityFromInterviews = response.choices[0]?.message?.content?.trim();
 
     if (!realityFromInterviews) {
+      console.error('❌ OpenAI returned empty response for synthesis');
       return res.status(500).json({ error: 'OpenAI returned empty response' });
     }
 
+    console.log(`✅ Generated synthesis: "${realityFromInterviews.slice(0, 150)}..."`);
     return res.status(200).json({ realityFromInterviews });
 
   } catch (error: unknown) {
