@@ -7,6 +7,8 @@ import DetailedValidationCard from './DetailedValidationCard';
 import { mapBuyerMapToValidationData } from '../utils/mapToValidationData';
 import UploadComponent from './UploadComponent';
 import { MOCK_BUYER_MAP_DATA } from './__mocks__/buyerMapData';
+import InterviewProcessingOverlay from '../app/components/loading/InterviewProcessingOverlay';
+import { useProcessingProgress } from '../app/hooks/useProcessingProgress';
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -166,6 +168,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [showAllQuotes, setShowAllQuotes] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const interviewProcessing = useProcessingProgress();
 
   // Auto-setup for mock mode
   useEffect(() => {
@@ -311,6 +314,10 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       setUploadingInterviews(true);
       setProcessError(null);
       
+      // Start enhanced interview processing visualization
+      const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
+      interviewProcessing.startInterviewProcessing(newFiles.length, assumptionTexts);
+      
       try {
         const res = await fetch('/api/buyermap/interviews', {
           method: 'POST',
@@ -444,9 +451,11 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         
       } catch (err) {
         console.error('❌ Transcript upload error', err);
+        interviewProcessing.setError(err instanceof Error ? err.message : 'Unknown error');
         setProcessError(`Interview processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setUploadingInterviews(false);
+        interviewProcessing.resetProcessing();
       }
     }
   };
@@ -1019,6 +1028,17 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           </div>
         )}
       </div>
+      
+      {/* Interview Processing Overlay */}
+      <InterviewProcessingOverlay
+        isVisible={uploadingInterviews && interviewProcessing.phase === 'interview'}
+        progress={interviewProcessing.progress}
+        stats={interviewProcessing.stats}
+        assumptions={localBuyerMapData.map(a => a.v1Assumption || '')}
+        onComplete={() => {
+          // Processing visualization completed, API call should finish soon
+        }}
+      />
     </div>
   );
 };

@@ -1,45 +1,74 @@
-import { useState } from 'react';
-import { BuyerMapData, DeckUploadStageProps, ProcessingProgress } from '../../../types/buyer-map';
+import { useState, useEffect } from 'react';
+import { ProcessingProgress } from '../../../types/buyer-map';
+import { ICPValidationResponse } from '../../../types/buyermap';
 import FileDropzone from '../ui/FileDropzone';
+import ProcessVisualization from '../loading/ProcessVisualization';
+import { useProcessingProgress } from '../../hooks/useProcessingProgress';
+
+interface DeckUploadStageProps {
+  onDeckProcessed: (data: ICPValidationResponse) => void;
+  onError: (error: string | null) => void;
+  onProgressUpdate: (progress: ProcessingProgress) => void;
+}
 
 export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUpdate }: DeckUploadStageProps) {
+  console.log('🔄 DeckUploadStage component rendered');
   const [uploadedDeck, setUploadedDeck] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const processingProgress = useProcessingProgress();
+  
+  console.log('🔄 State check:', {
+    isProcessing,
+    phase: processingProgress.phase,
+    progress: processingProgress.progress,
+    uploadedDeck: !!uploadedDeck
+  });
+
+  // Reset processing state when component mounts
+  useEffect(() => {
+    console.log('🔄 Component mounted, resetting processing state');
+    processingProgress.resetProcessing();
+  }, []);
 
   const handleFileUpload = (file: File | null) => {
+    console.log('🔄 File uploaded:', file?.name);
     setUploadedDeck(file);
   };
 
   const handleProcessDeck = async () => {
+    console.log('🔄 handleProcessDeck called, uploadedDeck:', !!uploadedDeck);
     if (!uploadedDeck) return;
 
     setIsProcessing(true);
-    onProgressUpdate({
-      phase: 'deck',
-      step: 'deck-processing',
-      currentBatch: 0,
-      totalBatches: 0,
-      percentage: 0,
-      status: 'processing'
-    });
     onError(null);
+
+    // Start the enhanced processing visualization
+    processingProgress.startDeckProcessing(12); // Assume 12 slides average
 
     try {
       const formData = new FormData();
       formData.append('deck', uploadedDeck);
 
-      const response = await fetch('/api/analyze-deck', {
+      console.log('🔄 Starting API call');
+      
+      // Just make the API call - the visualization will run independently
+      const apiResponse = await fetch('/api/analyze-deck', {
         method: 'POST',
         body: formData
       });
 
-      if (!response.ok) {
+      console.log('🔄 API call completed, status:', apiResponse.status);
+
+      if (!apiResponse.ok) {
         throw new Error('Failed to process deck');
       }
 
-      const data = await response.json();
-      onDeckProcessed(data);
+      const data = await apiResponse.json();
+      console.log('🔄 API data parsed:', data);
 
+      console.log('🔄 About to call onDeckProcessed');
+      onDeckProcessed(data);
+      console.log('🔄 onDeckProcessed called successfully');
       onProgressUpdate({
         phase: 'deck',
         step: 'deck-results',
@@ -49,6 +78,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         status: 'completed'
       });
     } catch (err) {
+      processingProgress.setError(err instanceof Error ? err.message : 'Failed to process deck');
       onError(err instanceof Error ? err.message : 'Failed to process deck');
       onProgressUpdate({
         phase: 'deck',
@@ -63,6 +93,21 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
       setIsProcessing(false);
     }
   };
+
+  // Show processing visualization when processing
+  if (isProcessing && processingProgress.phase === 'deck') {
+    console.log('🔄 Showing ProcessVisualization, progress:', processingProgress.progress);
+    return (
+      <ProcessVisualization
+        phase="deck"
+        progress={processingProgress.progress}
+        stats={processingProgress.stats}
+        onComplete={() => {
+          console.log('🔄 ProcessVisualization onComplete called');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">
@@ -103,11 +148,11 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
             {isProcessing ? 'Processing...' : 'Process & Analyze'}
           </button>
 
-          {isProcessing && (
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          {processingProgress.error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-                <span className="text-blue-800">Processing your deck...</span>
+                <div className="text-red-600 mr-3">⚠️</div>
+                <span className="text-red-800">{processingProgress.error}</span>
               </div>
             </div>
           )}
