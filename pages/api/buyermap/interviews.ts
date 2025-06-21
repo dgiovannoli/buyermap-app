@@ -793,6 +793,7 @@ const applyCardOverrides = (aggregatedResults: any[]): any[] => {
     }
     
     console.log(`✅ Applying override for: \"${assumption.v1Assumption}\" → ${override.validationStatus}`);
+    console.log(`📋 Preserving ${assumption.quotes?.length || 0} original RAG quotes for assumption ${assumption.id}`);
     
     // Create updated assumption with validation-focused overrides
     const updatedAssumption = {
@@ -805,19 +806,8 @@ const applyCardOverrides = (aggregatedResults: any[]): any[] => {
       // Update ICP attribute mapping
       icpAttribute: override.icpAttribute,
       
-      // Enhanced evidence from interviews
-      quotes: override.evidence.map((quote, index) => ({
-        id: `override-${assumption.id}-${index}`,
-        text: quote.text,
-        speaker: quote.speaker,
-        role: quote.role,
-        source: 'Interview Override',
-        classification: override.validationStatus === 'VALIDATED' ? 'ALIGNED' : 
-                       override.validationStatus === 'CONTRADICTED' ? 'MISALIGNED' : 'NEW_INSIGHT',
-        topic_relevance: `Directly addresses: ${assumption.v1Assumption}`,
-        specificity_score: 9,
-        companySnapshot: quote.companySnapshot || ''
-      })),
+      // PRESERVE ORIGINAL RAG QUOTES - Don't replace with synthetic quotes
+      quotes: assumption.quotes || [], // Keep the real interview quotes from RAG
       
       // UI-specific properties with new validation framework
       badge: `${override.badgeIcon} ${override.validationStatus.replace('_', ' ')} (${override.confidence}%)`,

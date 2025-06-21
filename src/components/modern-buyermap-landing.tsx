@@ -387,10 +387,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           
           // Update the card with interview validation results - prioritize validationStatus
           const finalValidationStatus = ia.validationStatus || ia.comparisonOutcome;
-          console.log(`🔍 Processing assumption ${ia.id}: validationStatus="${ia.validationStatus}", comparisonOutcome="${ia.comparisonOutcome}", final="${finalValidationStatus}"`);
           card.comparisonOutcome = mapValidationStatusToOutcome(finalValidationStatus);
           card.validationStatus = mapValidationStatus(finalValidationStatus);
-          console.log(`🎯 Mapped assumption ${ia.id}: comparisonOutcome="${card.comparisonOutcome}", validationStatus="${card.validationStatus}"`);
           card.quotes = ia.quotes || [];
           
           // ✅ CRITICAL FIX: Map the realityFromInterviews field
