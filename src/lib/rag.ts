@@ -110,10 +110,11 @@ export async function fetchQuotesByQuery(query: string, topK = 5, assumptionId?:
       console.log('  No matches found');
     }
 
-    // Return the metadata from matching quotes
+    // Return the metadata from matching quotes with company snapshots
     return results.matches?.map((m: any) => ({
       ...m.metadata,
-      score: m.score
+      score: m.score,
+      companySnapshot: m.metadata?.companySnapshot
     })) || [];
   } catch (error) {
     console.error('Error fetching quotes by query:', error);
@@ -180,7 +181,8 @@ export async function getTopQuotesForSynthesis(assumptionText: string, assumptio
         classification: m.metadata?.classification,
         score: m.score,
         topic_relevance: m.metadata?.topic_relevance,
-        specificity_score: m.metadata?.specificity_score
+        specificity_score: m.metadata?.specificity_score,
+        companySnapshot: m.metadata?.companySnapshot
       })) || [];
 
     console.log(`✅ Retrieved ${qualityQuotes.length} high-quality quotes for assumption ${assumptionId}`);

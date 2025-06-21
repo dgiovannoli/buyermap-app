@@ -17,6 +17,7 @@ interface Quote {
   classification?: string;
   topic_relevance?: string;
   specificity_score?: number;
+  companySnapshot?: string;
 }
 
 interface Assumption {
@@ -97,7 +98,8 @@ export default async function handler(
             score: q.score,
             classification: String(q.classification || ''),
             topic_relevance: String(q.topic_relevance || ''),
-            specificity_score: typeof q.specificity_score === 'number' ? q.specificity_score : Number(q.specificity_score) || 0
+            specificity_score: typeof q.specificity_score === 'number' ? q.specificity_score : Number(q.specificity_score) || 0,
+            companySnapshot: String(q.companySnapshot || '')
           }));
         } else {
           console.log(`⚠️ No RAG quotes found for assumption ${assumption.id}, falling back to provided quotes`);

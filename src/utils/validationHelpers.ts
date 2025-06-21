@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, AlertTriangle, Plus, Minus, Info } from 'lucide-r
 export const getOutcomeColors = (outcome: string) => {
   switch (outcome) {
     case 'Aligned':
+    case 'Validated':
       return {
         primary: '#10b981',
         bg: '#f0fdf4',
@@ -10,6 +11,7 @@ export const getOutcomeColors = (outcome: string) => {
         text: '#065f46'
       };
     case 'Misaligned':
+    case 'Contradicted':
       return {
         primary: '#ef4444',
         bg: '#fef2f2',
@@ -24,6 +26,7 @@ export const getOutcomeColors = (outcome: string) => {
         text: '#92400e'
       };
     case 'New Data Added':
+    case 'Gap Identified':
       return {
         primary: '#3b82f6',
         bg: '#eff6ff',
@@ -37,6 +40,7 @@ export const getOutcomeColors = (outcome: string) => {
         border: '#c4b5fd',
         text: '#5b21b6'
       };
+    case 'Insufficient Data':
     case 'Pending Validation':
       return {
         primary: '#9ca3af',
@@ -57,15 +61,19 @@ export const getOutcomeColors = (outcome: string) => {
 export const getOutcomeIcon = (outcome: string) => {
   switch (outcome) {
     case 'Aligned':
+    case 'Validated':
       return CheckCircle;
     case 'Misaligned':
+    case 'Contradicted':
       return XCircle;
     case 'Challenged':
       return AlertTriangle;
     case 'New Data Added':
+    case 'Gap Identified':
       return Plus;
     case 'Refined':
       return Minus;
+    case 'Insufficient Data':
     case 'Pending Validation':
       return Info;
     default:

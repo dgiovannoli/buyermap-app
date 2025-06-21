@@ -7,7 +7,7 @@ export interface ExampleQuote {
 export interface ValidationAttribute {
   assumption: string;
   reality: string;
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined';
+  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
   quotes: Quote[];
@@ -29,14 +29,14 @@ export interface BuyerMapData {
   whyAssumption: string;
   evidenceFromDeck: string;
   realityFromInterviews?: string;
-  comparisonOutcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined';
+  comparisonOutcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   waysToAdjustMessaging?: string;
   confidenceScore: number;
   confidenceExplanation: string;
   quotes?: Quote[];
   exampleQuotes?: ExampleQuote[];
   effectiveConfidence?: number;
-  validationStatus: 'pending' | 'partial' | 'validated';
+  validationStatus?: 'pending' | 'partial' | 'validated' | 'contradicted' | 'VALIDATED' | 'GAP_IDENTIFIED' | 'CONTRADICTED' | 'INSUFFICIENT_DATA';
   icpValidation?: ICPValidationData;
   validationAttributes?: ValidationAttribute[];
 }
@@ -60,6 +60,7 @@ export interface Quote {
   source: string;
   rejected?: boolean;
   quote?: string;
+  companySnapshot?: string;
 }
 
 export interface AssumptionData {
@@ -114,7 +115,7 @@ export interface ValidationDataObject {
   icpTheme: string;
   assumption: string;
   reality: string;
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined';
+  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
   quotes: Array<{

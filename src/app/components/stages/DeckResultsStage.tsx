@@ -89,7 +89,9 @@ const transformApiResponseToBuyerMapData = (apiResponse: any, originalData: ICPV
   const updatedAssumptions = apiResponse.assumptions.map((processedAssumption: any) => {
     console.log(`[Transform] Processing assumption:`, {
       icpTheme: processedAssumption.icpTheme,
-      v1Assumption: processedAssumption.v1Assumption
+      v1Assumption: processedAssumption.v1Assumption,
+      validationStatus: processedAssumption.validationStatus,
+      comparisonOutcome: processedAssumption.comparisonOutcome
     });
     
     // Extract reality text from the processed assumption
@@ -99,7 +101,7 @@ const transformApiResponseToBuyerMapData = (apiResponse: any, originalData: ICPV
     return {
       ...processedAssumption,
       realityFromInterviews: realityText,
-      comparisonOutcome: mapOutcome(processedAssumption.comparisonOutcome),
+      validationStatus: processedAssumption.validationStatus,
       quotes: (processedAssumption.quotes || []).slice(0, 3) // Limit quotes for display
     };
   });

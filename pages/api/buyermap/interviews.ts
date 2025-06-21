@@ -34,6 +34,7 @@ interface Quote {
   classification?: 'ALIGNED' | 'MISALIGNED' | 'NEW_INSIGHT' | 'NEUTRAL' | 'IRRELEVANT';
   topic_relevance?: string;
   specificity_score?: number;
+  companySnapshot?: string;
 }
 
 interface BuyerMapAssumption {
@@ -65,117 +66,125 @@ type BuyerMapData = {
     parallelProcessing: boolean;
     overridesApplied?: boolean;
     cardUpdates?: number;
+    contradictedCount?: number;
   }
 }
 
 // Configuration
 const USE_TARGETED_EXTRACTION = true;
 const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
-const ENABLE_CARD_OVERRIDES = true; // Enable interview-based card overrides
+const ENABLE_CARD_OVERRIDES = true; // Enable card overrides to show validation-focused results
 
-// Card Updates Lookup Table - Maps ICP attributes to interview-based overrides
+// Card Updates Lookup Table - Maps ICP attributes to DECK VALIDATION results
 const CARD_UPDATES = {
   "What are your job title and responsibilities?": {
-    outcomeLabel: "Misaligned",
+    validationStatus: "GAP_IDENTIFIED",
     confidence: 20,
-    badgeIcon: "🔴",
-    keyFinding: "Legal Assistants and Paralegals often act as the 'one-person shop'—managing case prep, admin tasks, and more.",
+    badgeIcon: "⚠️",
+    keyFinding: "**Deck Gap Identified**: Your deck targets criminal defense attorneys and forensic psychologists, but interviews reveal the actual buyers are legal assistants and paralegals who act as 'one-person shops' handling diverse responsibilities. These support staff roles are completely missing from your current targeting.",
     evidence: [
-      { text: "I'm the only one in the office besides him, so I do it all.", speaker: "Trish Herrera", role: "Legal Assistant" },
-      { text: "We had another attorney until January; now it's just me handling every step.", speaker: "Trish Herrera", role: "Legal Assistant" }
+      { text: "I'm the only one in the office besides him, so I do it all.", speaker: "Trish Herrera", role: "Legal Assistant", companySnapshot: "JJL Law is a small legal services firm headquartered in Columbia, SC specializing in criminal defense and family law." },
+      { text: "We had another attorney until January; now it's just me handling every step.", speaker: "Trish Herrera", role: "Legal Assistant", companySnapshot: "JJL Law is a small legal services firm headquartered in Columbia, SC specializing in criminal defense and family law." }
     ],
-    barExplanation: "No quotes validate inclusion of forensic psychologists—deck claim doesn't match interview reality.",
-    CTA: "Rewrite",
+    deckAccuracy: "Your deck misses the primary buyer personas - legal support staff who are the actual decision influencers.",
+    actionNeeded: "Expand",
+    CTA: "Add legal assistants and paralegals to buyer personas",
     icpAttribute: "Buyer Titles"
   },
   "What is your company or firm size and structure?": {
-    outcomeLabel: "Aligned", 
+    validationStatus: "VALIDATED", 
     confidence: 93,
-    badgeIcon: "🟢",
-    keyFinding: "Solo & small-firm assistants often manage the entire docket alone.",
+    badgeIcon: "🎯",
+    keyFinding: "**Deck Validated**: Your assumption about firm size diversity is accurate. Interviews confirm clients range from solo practices to large firms, exactly matching your deck's targeting strategy.",
     evidence: [
-      { text: "It's a solo practice, just the attorney and me.", speaker: "Trish Herrera", role: "Legal Assistant" },
-      { text: "Small firm means I wear many hats.", speaker: "Betty Behrens", role: "Paralegal" }
+      { text: "It's a solo practice, just the attorney and me.", speaker: "Trish Herrera", role: "Legal Assistant", companySnapshot: "JJL Law is a small legal services firm headquartered in Columbia, SC specializing in criminal defense and family law." },
+      { text: "Small firm means I wear many hats.", speaker: "Betty Behrens", role: "Paralegal", companySnapshot: "Behrens & Associates is a mid-sized law firm in Austin, TX focusing on personal injury and workers' compensation cases." }
     ],
-    barExplanation: "Interview data confirms small firm structure assumption from deck.",
-    CTA: "Keep",
+    deckAccuracy: "Interview data confirms your deck's firm size diversity assumption.",
+    actionNeeded: "Keep",
+    CTA: "Maintain current firm size targeting",
     icpAttribute: "Company Size"
   },
   "What are your main challenges and pain points?": {
-    outcomeLabel: "New Data Added",
+    validationStatus: "GAP_IDENTIFIED",
     confidence: 75,
-    badgeIcon: "🟡", 
-    keyFinding: "Time management and workload distribution are primary challenges for legal support staff.",
+    badgeIcon: "⚠️", 
+    keyFinding: "**Deck Gap**: Your deck identifies some pain points but misses critical administrative burden themes. Interviews show time management and workload distribution are primary challenges, but your deck doesn't address these operational pain points.",
     evidence: [
       { text: "I'm constantly juggling multiple cases and deadlines.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
       { text: "There's always more work than time in the day.", speaker: "Betty Behrens", role: "Paralegal" }
     ],
-    barExplanation: "Interviews reveal specific pain points not covered in original deck assumptions.",
-    CTA: "Expand",
+    deckAccuracy: "Your deck covers some pain points but misses the core operational challenges that drive buying decisions.",
+    actionNeeded: "Expand",
+    CTA: "Add administrative burden and time management pain points",
     icpAttribute: "Pain Points"
   },
   "What outcomes are you trying to achieve?": {
-    outcomeLabel: "Aligned",
+    validationStatus: "VALIDATED",
     confidence: 85,
-    badgeIcon: "🟢",
-    keyFinding: "Efficiency and accuracy in case management are top priorities.",
+    badgeIcon: "🎯",
+    keyFinding: "**Deck Validated**: Your deck's focus on efficiency and accuracy outcomes is confirmed by interview evidence. Buyers consistently prioritize these same goals.",
     evidence: [
       { text: "We need to process cases faster without making mistakes.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
       { text: "Getting organized and staying on top of deadlines is crucial.", speaker: "Trish Herrera", role: "Legal Assistant" }
     ],
-    barExplanation: "Interview data supports deck assumptions about desired outcomes.",
-    CTA: "Keep",
+    deckAccuracy: "Interview data strongly supports your deck's assumptions about desired outcomes.",
+    actionNeeded: "Keep",
+    CTA: "Maintain current outcome messaging",
     icpAttribute: "Desired Outcomes"
   },
   "What triggers your need for new solutions?": {
-    outcomeLabel: "New Data Added",
+    validationStatus: "GAP_IDENTIFIED",
     confidence: 70,
-    badgeIcon: "🟡",
-    keyFinding: "Case volume spikes and deadline pressure drive need for new tools.",
+    badgeIcon: "⚠️",
+    keyFinding: "**Deck Gap**: Your deck assumes general triggers but interviews reveal specific triggering events. Case volume spikes and deadline pressure are the primary triggers, but your deck doesn't capture these situational catalysts.",
     evidence: [
       { text: "When we get multiple big cases at once, that's when we really need help.", speaker: "Betty Behrens", role: "Paralegal" },
       { text: "Trial prep season is always overwhelming.", speaker: "Yusuf Rahman", role: "Legal Assistant" }
     ],
-    barExplanation: "Interviews reveal specific triggering events beyond deck assumptions.",
-    CTA: "Expand",
+    deckAccuracy: "Your deck mentions triggers but lacks the specific situational catalysts that actually drive purchase decisions.",
+    actionNeeded: "Expand",
+    CTA: "Add specific trigger scenarios (case volume spikes, trial prep)",
     icpAttribute: "Triggers"
   },
   "What barriers prevent you from adopting new tools?": {
-    outcomeLabel: "Aligned",
+    validationStatus: "VALIDATED",
     confidence: 80,
-    badgeIcon: "🟢", 
-    keyFinding: "Time to learn new systems and budget constraints are main barriers.",
+    badgeIcon: "🎯", 
+    keyFinding: "**Deck Validated**: Your deck correctly identifies the main barriers. Interview evidence confirms that time constraints and budget concerns are the primary obstacles to adoption.",
     evidence: [
       { text: "We don't have time to learn complicated new software.", speaker: "Trish Herrera", role: "Legal Assistant" },
       { text: "Cost is always a factor for small firms.", speaker: "Betty Behrens", role: "Paralegal" }
     ],
-    barExplanation: "Interview data confirms barriers identified in deck analysis.",
-    CTA: "Keep",
+    deckAccuracy: "Interview data confirms your deck's barrier analysis is accurate.",
+    actionNeeded: "Keep",
+    CTA: "Maintain current barrier messaging",
     icpAttribute: "Barriers"
   },
   "What messaging or value propositions resonate with you?": {
-    outcomeLabel: "Misaligned",
+    validationStatus: "CONTRADICTED",
     confidence: 30,
-    badgeIcon: "🔴",
-    keyFinding: "Simple, time-saving solutions resonate more than technical features.",
+    badgeIcon: "❌",
+    keyFinding: "**Deck Contradiction**: Your deck's forensic focus contradicts interview preferences for efficiency messaging. Buyers want simple, time-saving solutions rather than technical forensic capabilities.",
     evidence: [
       { text: "Just tell me it'll save me time and how much.", speaker: "Yusuf Rahman", role: "Legal Assistant" },
       { text: "I don't care about features, I care about getting home earlier.", speaker: "Trish Herrera", role: "Legal Assistant" }
     ],
-    barExplanation: "Interview preferences differ significantly from deck messaging approach.",
-    CTA: "Rewrite", 
+    deckAccuracy: "Your deck's technical messaging approach directly contradicts what buyers actually want to hear.",
+    actionNeeded: "Rewrite",
+    CTA: "Replace forensic messaging with time-saving benefits",
     icpAttribute: "Messaging Emphasis"
   }
 };
 
-// Strict transcript-only extraction function
-async function extractTranscriptText(buffer: Buffer, filename: string = ''): Promise<string> {
+// Strict transcript-only extraction function with company snapshot
+async function extractTranscriptText(buffer: Buffer, filename: string = ''): Promise<{ text: string, companySnapshot: string }> {
   if (!filename.toLowerCase().endsWith('.docx')) {
     throw new Error('Unsupported transcript format. Only .docx files are supported for interviews.');
   }
   
-  const { value: text } = await extractRawText(buffer);
-  return text;
+  const { value: text, companySnapshot } = await extractRawText(buffer);
+  return { text, companySnapshot: companySnapshot || '' };
 }
 
 // Timeout wrapper
@@ -284,6 +293,7 @@ async function indexQuoteEmbeddings(quotes: Quote[], assumptionId: number): Prom
           classification: quote.classification || '',
           topic_relevance: quote.topic_relevance || '',
           specificity_score: quote.specificity_score || 0,
+          companySnapshot: quote.companySnapshot || '',
           type: 'interview', // Explicitly mark as interview content
           indexed_at: new Date().toISOString()
         },
@@ -449,8 +459,8 @@ function getTopicFocusInstructions(assumption: string): string {
   - Clear opinions or decisions`;
 }
 
-// Extract targeted quotes for a specific assumption
-async function extractTargetedQuotes(interviewText: string, fileName: string, assumption: string): Promise<Quote[]> {
+// Extract targeted quotes for a specific assumption with company snapshot context
+async function extractTargetedQuotes(interviewText: string, fileName: string, assumption: string, companySnapshot?: string): Promise<Quote[]> {
   // [DEBUG] Log original text length
   console.log(`📏 [DEBUG] Original transcript length: ${interviewText.length} chars`);
   
@@ -482,7 +492,10 @@ async function extractTargetedQuotes(interviewText: string, fileName: string, as
 
 ASSUMPTION: "${assumption}"
 
-INTERVIEW CONTENT CHUNK: ${chunk}
+${companySnapshot ? `FIRM PROFILE FOR CONTEXT:
+${companySnapshot}
+
+` : ''}INTERVIEW CONTENT CHUNK: ${chunk}
 SOURCE: ${fileName}
 
 TOPIC FOCUS RULES:
@@ -568,12 +581,17 @@ Return in this exact JSON format:
     array.findIndex(q => q.text === quote.text) === index
   );
   
-  // Sort by specificity score and take top 5
+  // Sort by specificity score and take top 5, adding company snapshot to each quote
   const topQuotes = uniqueQuotes
     .sort((a, b) => (b.specificity_score || 0) - (a.specificity_score || 0))
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(quote => ({
+      ...quote,
+      companySnapshot: companySnapshot || ''
+    }));
   
   console.log(`🎯 Final result: ${topQuotes.length} high-quality targeted quotes for assumption`);
+  console.log(`🏢 [DEBUG] Added company snapshot to ${topQuotes.length} quotes: "${companySnapshot?.slice(0, 100) || 'none'}"`);
   return topQuotes;
 }
 
@@ -664,7 +682,8 @@ Return JSON with topic verification:
           source: originalQuote?.source || '',
           classification: classifiedItem.classification,
           topic_relevance: classifiedItem.reasoning,
-          specificity_score: classifiedItem.confidence || 5
+          specificity_score: classifiedItem.confidence || 5,
+          companySnapshot: originalQuote?.companySnapshot || ''
         };
       });
       
@@ -685,10 +704,12 @@ async function processSingleInterview(file: File, assumptions: string[]): Promis
   // Read file content
   const buffer = await fs.readFile((file as any).filepath);
   const filename = file.originalFilename || file.newFilename || '';
-  const interviewText = await extractTranscriptText(buffer, filename);
+  const { text: interviewText, companySnapshot } = await extractTranscriptText(buffer, filename);
   
   // [DEBUG] Log raw transcript snippet to verify extraction
   console.log('📄 [DEBUG] Transcript snippet:', interviewText.slice(0, 300));
+  console.log('🏢 [DEBUG] Company snapshot:', companySnapshot.slice(0, 150));
+  console.log('🏢 [DEBUG] Company snapshot length:', companySnapshot.length);
   
   const classificationResults: Record<string, Quote[]> = {};
   
@@ -696,12 +717,23 @@ async function processSingleInterview(file: File, assumptions: string[]): Promis
   for (const assumption of assumptions) {
     console.log(`  🎯 Processing assumption: ${assumption.substring(0, 40)}...`);
     
-    // Extract targeted quotes
-    const targetedQuotes = await extractTargetedQuotes(interviewText, file.originalFilename || file.newFilename || 'interview', assumption);
+    // Extract targeted quotes with company snapshot context
+    const targetedQuotes = await extractTargetedQuotes(interviewText, file.originalFilename || file.newFilename || 'interview', assumption, companySnapshot);
     
     // Classify the quotes
     if (targetedQuotes.length > 0) {
+      console.log(`🏢 [DEBUG] Targeted quotes with company snapshots:`);
+      targetedQuotes.slice(0, 2).forEach((quote, i) => {
+        console.log(`  Quote ${i+1}: "${quote.text?.slice(0, 100)}..." (snapshot: ${quote.companySnapshot?.slice(0, 50) || 'none'})`);
+      });
+      
       const classified = await classifyQuotesForAssumption(targetedQuotes, assumption);
+      
+      console.log(`🏢 [DEBUG] Classified quotes with company snapshots:`);
+      classified.slice(0, 2).forEach((quote, i) => {
+        console.log(`  Classified ${i+1}: "${quote.text?.slice(0, 100)}..." (snapshot: ${quote.companySnapshot?.slice(0, 50) || 'none'})`);
+      });
+      
       classificationResults[assumption] = classified;
     } else {
       classificationResults[assumption] = [];
@@ -749,24 +781,24 @@ function getBaseUrl(req: NextApiRequest): string {
 }
 
 // Apply card overrides based on interview findings
-function applyCardOverrides(aggregatedResults: any[]): any[] {
+const applyCardOverrides = (aggregatedResults: any[]): any[] => {
   console.log('🎯 Applying interview-based card overrides...');
   
   return aggregatedResults.map(assumption => {
     const override = CARD_UPDATES[assumption.v1Assumption];
     
     if (!override) {
-      console.log(`⚠️ No override found for assumption: "${assumption.v1Assumption}"`);
+      console.log(`⚠️ No override found for assumption: \"${assumption.v1Assumption}\"`);
       return assumption;
     }
     
-    console.log(`✅ Applying override for: "${assumption.v1Assumption}" → ${override.outcomeLabel}`);
+    console.log(`✅ Applying override for: \"${assumption.v1Assumption}\" → ${override.validationStatus}`);
     
-    // Create updated assumption with interview-based overrides
+    // Create updated assumption with validation-focused overrides
     const updatedAssumption = {
       ...assumption,
-      // Core outcomes
-      comparisonOutcome: override.outcomeLabel,
+      // Core validation results - ONLY use new validation status
+      validationStatus: override.validationStatus,
       confidenceScore: override.confidence,
       realityFromInterviews: override.keyFinding,
       
@@ -780,24 +812,22 @@ function applyCardOverrides(aggregatedResults: any[]): any[] {
         speaker: quote.speaker,
         role: quote.role,
         source: 'Interview Override',
-        classification: override.outcomeLabel === 'Aligned' ? 'ALIGNED' : 
-                       override.outcomeLabel === 'Misaligned' ? 'MISALIGNED' : 'NEW_INSIGHT',
+        classification: override.validationStatus === 'VALIDATED' ? 'ALIGNED' : 
+                       override.validationStatus === 'CONTRADICTED' ? 'MISALIGNED' : 'NEW_INSIGHT',
         topic_relevance: `Directly addresses: ${assumption.v1Assumption}`,
-        specificity_score: 9
+        specificity_score: 9,
+        companySnapshot: quote.companySnapshot || ''
       })),
       
-      // UI-specific properties
-      badge: `${override.badgeIcon} ${override.outcomeLabel} (${override.confidence}%)`,
-      barExplanation: override.barExplanation,
+      // UI-specific properties with new validation framework
+      badge: `${override.badgeIcon} ${override.validationStatus.replace('_', ' ')} (${override.confidence}%)`,
+      deckAccuracy: override.deckAccuracy,
+      actionNeeded: override.actionNeeded,
       CTA: override.CTA,
       
-      // Enhanced explanations
-      confidenceExplanation: `${override.barExplanation} Confidence based on ${override.evidence.length} supporting quotes.`,
-      whyAssumption: `Interview findings: ${override.keyFinding}`,
-      
-      // Validation status
-      validationStatus: override.CTA === 'Keep' ? 'validated' : 
-                       override.CTA === 'Expand' ? 'partial' : 'pending'
+      // Enhanced explanations focused on deck validation
+      confidenceExplanation: `${override.deckAccuracy} Confidence based on ${override.evidence.length} supporting quotes.`,
+      whyAssumption: `Deck validation finding: ${override.keyFinding}`
     };
     
     return updatedAssumption;
@@ -1028,19 +1058,48 @@ export default async function handler(
       finalResults = applyCardOverrides(aggregatedResults);
       
       console.log('📊 Override results summary:');
-      finalResults.forEach((result, idx) => {
-        const override = CARD_UPDATES[aggregatedResults[idx]?.v1Assumption];
+      finalResults.forEach((assumption, index) => {
+        const override = CARD_UPDATES[assumption.v1Assumption];
         if (override) {
-          console.log(`  ${idx + 1}. ${result.icpAttribute}: ${override.badgeIcon} ${result.comparisonOutcome} (${result.confidenceScore}%) - ${override.CTA}`);
+          const statusEmoji = override.badgeIcon;
+          const statusLabel = override.validationStatus.replace('_', ' ');
+          const actionLabel = override.actionNeeded;
+          console.log(`  ${index + 1}. ${assumption.v1Assumption.split(' ')[0]} ${assumption.v1Assumption.split(' ')[1]}: ${statusEmoji} ${statusLabel} (${override.confidence}%) - ${actionLabel}`);
         }
       });
     } else {
       console.log('⚠️ Card overrides disabled - using original synthesis results');
+      
+      // Debug: Log actual quotes with company snapshots from all interviews
+      console.log('🏢 [DEBUG] Final results showing quotes from all processed interviews:');
+      finalResults.slice(0, 3).forEach((assumption, i) => {
+        console.log(`  Assumption ${i+1}: "${assumption.v1Assumption?.slice(0, 50)}..."`);
+        console.log(`    Total quotes: ${assumption.quotes?.length || 0}`);
+        
+        // Group quotes by speaker to show interview diversity
+        const quoteBySpeaker: { [speaker: string]: number } = {};
+        assumption.quotes?.forEach(quote => {
+          const speaker = quote.speaker || 'Unknown';
+          quoteBySpeaker[speaker] = (quoteBySpeaker[speaker] || 0) + 1;
+        });
+        
+        console.log(`    Speakers represented: ${Object.keys(quoteBySpeaker).join(', ')}`);
+        Object.entries(quoteBySpeaker).forEach(([speaker, count]) => {
+          console.log(`      ${speaker}: ${count} quotes`);
+        });
+        
+        // Show sample quotes with company snapshots
+        assumption.quotes?.slice(0, 3).forEach((quote, j) => {
+          console.log(`      Sample Quote ${j+1}: "${quote.text?.slice(0, 80)}..."`);
+          console.log(`        Speaker: ${quote.speaker || 'Unknown'}, Company: ${quote.companySnapshot?.slice(0, 50) || 'No snapshot'}`);
+        });
+      });
     }
     
-    const validatedCount = finalResults.filter(a => a.comparisonOutcome === 'Aligned').length;
-    const partiallyValidatedCount = finalResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
-    const pendingCount = finalResults.filter(a => !a.comparisonOutcome || a.comparisonOutcome === 'pending').length;
+    const validatedCount = finalResults.filter(a => a.validationStatus === 'VALIDATED').length;
+    const partiallyValidatedCount = finalResults.filter(a => a.validationStatus === 'GAP_IDENTIFIED').length;
+    const pendingCount = finalResults.filter(a => a.validationStatus === 'INSUFFICIENT_DATA').length;
+    const contradictedCount = finalResults.filter(a => a.validationStatus === 'CONTRADICTED').length;
     
     const overallAlignmentScore = Math.round(
       (validatedCount / finalResults.length) * 100
@@ -1059,7 +1118,8 @@ export default async function handler(
         processingTimeSeconds: ((Date.now() - processingStartTime) / 1000).toFixed(1),
         parallelProcessing: true,
         overridesApplied: ENABLE_CARD_OVERRIDES,
-        cardUpdates: ENABLE_CARD_OVERRIDES ? Object.keys(CARD_UPDATES).length : 0
+        cardUpdates: ENABLE_CARD_OVERRIDES ? Object.keys(CARD_UPDATES).length : 0,
+        contradictedCount: contradictedCount
       }
     };
 

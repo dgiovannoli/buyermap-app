@@ -1,6 +1,12 @@
 import mammoth from 'mammoth';
 
-export async function extractRawText(buffer: Buffer): Promise<{ value: string }> {
+// Extract company snapshot from transcript
+export function extractSnapshot(rawText: string): string {
+  const match = rawText.match(/Company Snapshot([\s\S]*?)(?:\n{2,}|$)/i);
+  return match ? match[1].trim() : "";
+}
+
+export async function extractRawText(buffer: Buffer): Promise<{ value: string, companySnapshot?: string }> {
   try {
     const { value, messages } = await mammoth.extractRawText({ buffer });
     
@@ -55,7 +61,11 @@ export async function extractRawText(buffer: Buffer): Promise<{ value: string }>
     
     console.log('📄 [DEBUG] Final cleaned text preview:', cleanedText.slice(0, 300));
     
-    return { value: cleanedText };
+    // Extract company snapshot before final cleaning (since we'll remove it in cleaning)
+    const companySnapshot = extractSnapshot(value);
+    console.log('🏢 [DEBUG] Extracted company snapshot:', companySnapshot.slice(0, 200));
+    
+    return { value: cleanedText, companySnapshot };
   } catch (error) {
     console.error('📄 [ERROR] DOCX extraction failed:', error);
     throw new Error(`Failed to extract text from DOCX: ${error instanceof Error ? error.message : 'Unknown error'}`);

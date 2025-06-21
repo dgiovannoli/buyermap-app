@@ -8,10 +8,11 @@ interface Quote {
   author: string;
   speaker?: string;
   role?: string;
+  companySnapshot?: string;
 }
 
 interface ValidationData {
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Pending Validation';
+  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Pending Validation' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
   reality: string;
@@ -213,16 +214,28 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                         <blockquote className="text-gray-800 font-medium text-sm leading-relaxed mb-3 italic">
                           "{quote.text}"
                         </blockquote>
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-600 font-medium">
-                            — {quote.author}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-gray-600 font-medium">
+                              — {quote.author}
+                            </div>
+                            {quote.role && (
+                              <span
+                                className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleStyle(quote.role)}`}
+                              >
+                                {quote.role}
+                              </span>
+                            )}
                           </div>
-                          {quote.role && (
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleStyle(quote.role)}`}
-                            >
-                              {quote.role}
-                            </span>
+                          {quote.companySnapshot && (
+                            <div className="bg-blue-50 border-l-2 border-blue-200 pl-3 py-2 rounded-r">
+                              <div className="text-xs text-blue-600 font-semibold uppercase tracking-wide mb-1">
+                                Firm Profile
+                              </div>
+                              <div className="text-xs text-blue-800 leading-relaxed">
+                                {quote.companySnapshot}
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>

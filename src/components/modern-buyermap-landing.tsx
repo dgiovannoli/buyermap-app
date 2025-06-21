@@ -97,10 +97,14 @@ const getSectionInfo = (icpAttribute: string = '') => {
 
 const getOutcomeTextColor = (outcome: string): string => {
   switch (outcome) {
-    case 'Aligned': return 'text-green-600';
-    case 'New Data Added': return 'text-blue-600'; 
-    case 'Misaligned': return 'text-red-600';
+    case 'Aligned': 
+    case 'Validated': return 'text-green-600';
+    case 'New Data Added': 
+    case 'Gap Identified': return 'text-blue-600'; 
+    case 'Misaligned': 
+    case 'Contradicted': return 'text-red-600';
     case 'Refined': return 'text-orange-600';
+    case 'Insufficient Data': return 'text-gray-600';
     default: return 'text-gray-600';
   }
 };
@@ -353,30 +357,40 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           const card = byId.get(ia.id);
           if (!card) return;
           
-          // Map API outcomes to expected types
-          const mapOutcome = (outcome: string) => {
-            switch (outcome) {
-              case 'Aligned': return 'Aligned' as const;
-              case 'Misaligned': return 'Misaligned' as const;
-              case 'New Data Added': return 'New Data Added' as const;
-              case 'Refined': return 'Refined' as const;
-              case 'Challenged': return 'Challenged' as const;
-              default: return 'New Data Added' as const;
+          const mapValidationStatusToOutcome = (validationStatus: string) => {
+            switch (validationStatus) {
+              case 'VALIDATED': return 'Validated' as const;
+              case 'GAP_IDENTIFIED': return 'Gap Identified' as const;
+              case 'CONTRADICTED': return 'Contradicted' as const;
+              case 'INSUFFICIENT_DATA': return 'Insufficient Data' as const;
+              // Legacy fallback for old comparisonOutcome values
+              case 'Aligned': return 'Validated' as const;
+              case 'Misaligned': return 'Contradicted' as const;
+              case 'New Data Added': return 'Gap Identified' as const;
+              case 'Refined': return 'Gap Identified' as const;
+              case 'Challenged': return 'Contradicted' as const;
+              default: return 'Insufficient Data' as const;
             }
           };
           
           const mapValidationStatus = (status: string) => {
             switch (status.toLowerCase()) {
               case 'validated': return 'validated' as const;
+              case 'gap_identified': return 'partial' as const;
+              case 'contradicted': return 'contradicted' as const;
+              case 'insufficient_data': return 'pending' as const;
               case 'partial': return 'partial' as const;
               case 'pending': return 'pending' as const;
               default: return 'pending' as const;
             }
           };
           
-          // Update the card with interview validation results
-          card.comparisonOutcome = mapOutcome(ia.comparisonOutcome);
-          card.validationStatus = mapValidationStatus(ia.validationStatus || ia.comparisonOutcome);
+          // Update the card with interview validation results - prioritize validationStatus
+          const finalValidationStatus = ia.validationStatus || ia.comparisonOutcome;
+          console.log(`🔍 Processing assumption ${ia.id}: validationStatus="${ia.validationStatus}", comparisonOutcome="${ia.comparisonOutcome}", final="${finalValidationStatus}"`);
+          card.comparisonOutcome = mapValidationStatusToOutcome(finalValidationStatus);
+          card.validationStatus = mapValidationStatus(finalValidationStatus);
+          console.log(`🎯 Mapped assumption ${ia.id}: comparisonOutcome="${card.comparisonOutcome}", validationStatus="${card.validationStatus}"`);
           card.quotes = ia.quotes || [];
           
           // ✅ CRITICAL FIX: Map the realityFromInterviews field
@@ -394,7 +408,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               {
                 assumption: card.v1Assumption,
                 reality: ia.realityFromInterviews || `Interview validation: ${ia.comparisonOutcome}`,
-                outcome: mapOutcome(ia.comparisonOutcome),
+                outcome: card.comparisonOutcome,
                 confidence: ia.confidenceScore,
                 confidence_explanation: `From ${payload.metadata?.totalInterviews || 'multiple'} interviews – confidence ${ia.confidenceScore}%`,
                 quotes: ia.quotes,
@@ -416,8 +430,15 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           processingTime: payload.metadata?.processingTimeSeconds || 'unknown',
           validatedCount: payload.validatedCount,
           partiallyValidatedCount: payload.partiallyValidatedCount,
-          pendingCount: payload.pendingCount
+          pendingCount: payload.pendingCount,
+          mergedDataLength: mergedData.length,
+          firstAssumptionQuotes: mergedData[0]?.quotes?.length || 0,
+          firstAssumptionReality: mergedData[0]?.realityFromInterviews?.slice(0, 100) || 'none'
         });
+        
+        // Force re-render by updating a timestamp
+        console.log('🔄 Forcing UI re-render with updated data...');
+        setLocalBuyerMapData([...mergedData]); // Force new array reference
         
         // ▶️ Advance to results step:
         setCurrentStep(3);
@@ -480,22 +501,52 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
     const hasInterviews = uploadedFiles.interviews.length > 0;
     
-    const insights = allData.map(item => ({
-      id: item.id,
-      icpAttribute: item.icpAttribute || '',
-      title: item.v1Assumption || item.whyAssumption || '',
-      // Only show actual outcome and confidence if interviews have been uploaded
-      outcome: hasInterviews ? item.comparisonOutcome : 'Pending Validation',
-      confidence: hasInterviews ? (item.confidenceScore || 0) : 0,
-      confidenceExplanation: item.confidenceExplanation || '',
-      reality: item.realityFromInterviews || '',
-      quotes: (item.quotes || []).map(q => ({
+    // Debug: Log data transformation
+    console.log('🔄 validationInsights useMemo triggered:', {
+      localBuyerMapDataLength: localBuyerMapData.length,
+      buyerMapDataLength: buyerMapData.length,
+      hasInterviews,
+      allDataLength: allData.length,
+      firstItemQuotes: allData[0]?.quotes?.length || 0,
+      firstItemReality: allData[0]?.realityFromInterviews?.slice(0, 50) || 'none'
+    });
+    
+    const insights = allData.map(item => {
+      // Type-safe outcome mapping for new validation statuses
+      const mapOutcome = (outcome: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' | 'Pending Validation' => {
+        switch (outcome) {
+          case 'Validated': return 'Validated';
+          case 'Contradicted': return 'Contradicted';
+          case 'Gap Identified': return 'Gap Identified';
+          case 'Insufficient Data': return 'Insufficient Data';
+          // Legacy fallback for old values
+          case 'Aligned': return 'Validated';
+          case 'Misaligned': return 'Contradicted';
+          case 'Challenged': return 'Contradicted';
+          case 'New Data Added': return 'Gap Identified';
+          case 'Refined': return 'Gap Identified';
+          default: return 'Pending Validation';
+        }
+      };
+      
+      return {
+        id: item.id,
+        icpAttribute: item.icpAttribute || '',
+        title: item.v1Assumption || item.whyAssumption || '',
+        // Only show actual outcome and confidence if interviews have been uploaded
+        outcome: hasInterviews ? mapOutcome(item.comparisonOutcome || '') : 'Pending Validation',
+        confidence: hasInterviews ? (item.confidenceScore || 0) : 0,
+        confidenceExplanation: item.confidenceExplanation || '',
+        reality: item.realityFromInterviews || '',
+              quotes: (item.quotes || []).map(q => ({
         text: q.text || q.quote || '',
         author: q.speaker || 'Anonymous',
-        role: q.role || ''
+        role: q.role || '',
+        companySnapshot: q.companySnapshot || ''
       })),
-      isPending: !hasInterviews
-    }));
+        isPending: !hasInterviews
+      };
+    });
     
     // Debug log to verify reality field mapping
     console.log('🔍 ValidationInsights transformation:');
@@ -702,15 +753,23 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
                     <h4 className="text-sm font-medium mb-2 opacity-90">Interview Validation Status</h4>
                     <div className="flex justify-center space-x-6 text-sm">
                       <div className="text-center">
-                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => item.comparisonOutcome === 'Aligned').length}</div>
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          item.comparisonOutcome === 'Aligned' || item.comparisonOutcome === 'Validated'
+                        ).length}</div>
                         <div className="opacity-80">✅ Validated</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => item.comparisonOutcome === 'New Data Added').length}</div>
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          item.comparisonOutcome === 'New Data Added' || item.comparisonOutcome === 'Gap Identified'
+                        ).length}</div>
                         <div className="opacity-80">🔄 Partially Validated</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => !item.comparisonOutcome || item.validationStatus === 'pending').length}</div>
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          !item.comparisonOutcome || 
+                          item.validationStatus === 'pending' || 
+                          item.comparisonOutcome === 'Insufficient Data'
+                        ).length}</div>
                         <div className="opacity-80">⚠️ Pending Review</div>
                       </div>
                     </div>
