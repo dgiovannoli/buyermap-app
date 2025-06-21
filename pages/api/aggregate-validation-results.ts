@@ -29,6 +29,57 @@ interface RequestBody {
 
 interface ResponseBody {
   realityFromInterviews: string;
+  conversationStats?: {
+    totalQuotes: number;
+    uniqueConversations: number;
+    uniqueSpeakers: number;
+    conversationCoverage: string;
+    speakerDiversity: string;
+  };
+}
+
+/**
+ * Calculate conversation coverage statistics for product marketers
+ */
+function calculateConversationStats(quotes: Quote[]): NonNullable<ResponseBody['conversationStats']> {
+  const sources = new Set(quotes.map(q => q.source).filter(Boolean));
+  const speakers = new Set(quotes.map(q => q.speaker).filter(Boolean));
+  
+  const totalQuotes = quotes.length;
+  const uniqueConversations = sources.size;
+  const uniqueSpeakers = speakers.size;
+  
+  // Generate human-readable coverage description
+  let conversationCoverage = '';
+  if (uniqueConversations === 0) {
+    conversationCoverage = 'No conversations available';
+  } else if (uniqueConversations === 1) {
+    conversationCoverage = '1 conversation only';
+  } else if (uniqueConversations <= 3) {
+    conversationCoverage = `${uniqueConversations} conversations`;
+  } else {
+    conversationCoverage = `${uniqueConversations} conversations (strong coverage)`;
+  }
+  
+  // Generate speaker diversity description
+  let speakerDiversity = '';
+  if (uniqueSpeakers === 0) {
+    speakerDiversity = 'No speakers identified';
+  } else if (uniqueSpeakers === 1) {
+    speakerDiversity = '1 speaker only';
+  } else if (uniqueSpeakers === totalQuotes) {
+    speakerDiversity = `${uniqueSpeakers} different speakers (high diversity)`;
+  } else {
+    speakerDiversity = `${uniqueSpeakers} different speakers`;
+  }
+  
+  return {
+    totalQuotes,
+    uniqueConversations,
+    uniqueSpeakers,
+    conversationCoverage,
+    speakerDiversity
+  };
 }
 
 // Timeout wrapper
@@ -98,21 +149,40 @@ export default async function handler(
     // If no quotes provided, return empty reality
     if (flattenedQuotes.length === 0) {
       console.log('⚠️ No quotes provided for synthesis');
-      return res.status(200).json({ realityFromInterviews: 'No interview data available for this assumption.' });
+      return res.status(200).json({ 
+        realityFromInterviews: 'No interview data available for this assumption.',
+        conversationStats: {
+          totalQuotes: 0,
+          uniqueConversations: 0,
+          uniqueSpeakers: 0,
+          conversationCoverage: 'No conversations available',
+          speakerDiversity: 'No speakers identified'
+        }
+      });
     }
 
+    // Calculate conversation statistics before synthesis
+    const conversationStats = calculateConversationStats(flattenedQuotes);
+    
     // Debug: Log what quotes we received for synthesis
     console.log(`📋 Synthesizing for assumption: "${assumption}"`);
     console.log(`📋 Received ${flattenedQuotes.length} quotes for synthesis:`);
+    console.log(`📊 Conversation Stats: ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers`);
     flattenedQuotes.forEach((quote, idx) => {
       console.log(`  Quote ${idx + 1}: "${quote.text.slice(0, 100)}..." (speaker: ${quote.speaker || 'Unknown'})`);
     });
 
-    // Create synthesis prompt
+    // Enhanced synthesis prompt that considers conversation coverage
     const synthesisPrompt = `You are an expert business analyst synthesizing customer interview insights. Your task is to analyze quotes from customer interviews and create a single, coherent summary of what the interviews reveal about a specific business assumption.
 
 ASSUMPTION TO ANALYZE:
 "${assumption}"
+
+STATISTICAL CONTEXT:
+- Total quotes: ${conversationStats.totalQuotes}
+- Unique conversations: ${conversationStats.uniqueConversations}
+- Unique speakers: ${conversationStats.uniqueSpeakers}
+- Coverage: ${conversationStats.conversationCoverage}
 
 INTERVIEW QUOTES:
 ${flattenedQuotes.map((quote, index) => `
@@ -125,11 +195,13 @@ ${index + 1}. "${quote.text}"
 INSTRUCTIONS:
 1. Synthesize ALL the quotes into ONE coherent paragraph that captures what the interviews collectively reveal about this assumption
 2. Focus on PATTERNS and THEMES across multiple quotes, not individual responses
-3. Include specific details and examples from the quotes when relevant
-4. Write in a professional, analytical tone
-5. Do NOT include confidence scores, validation outcomes, or recommendations
-6. Do NOT mention individual speakers by name
-7. Keep the synthesis focused on factual observations from the interviews
+3. When you see similar themes from multiple conversations/speakers, emphasize that as stronger evidence
+4. Include specific details and examples from the quotes when relevant
+5. Consider the statistical context - ${conversationStats.uniqueConversations} conversations mentioning this topic ${conversationStats.uniqueConversations > 2 ? 'suggests strong market validation' : conversationStats.uniqueConversations === 2 ? 'provides initial validation' : 'represents single-source insight'}
+6. Write in a professional, analytical tone
+7. Do NOT include confidence scores, validation outcomes, or recommendations
+8. Do NOT mention individual speakers by name
+9. Keep the synthesis focused on factual observations from the interviews
 
 Write a single paragraph (3-5 sentences) that synthesizes what the interview data reveals about this assumption. Start directly with the insights - no preamble like "The interviews show..." or "Based on the data...".
 
@@ -163,7 +235,12 @@ Return only the synthesis paragraph as plain text.`;
     }
 
     console.log(`✅ Generated synthesis: "${realityFromInterviews.slice(0, 150)}..."`);
-    return res.status(200).json({ realityFromInterviews });
+    console.log(`📊 Including conversation stats: ${conversationStats.conversationCoverage}, ${conversationStats.speakerDiversity}`);
+    
+    return res.status(200).json({ 
+      realityFromInterviews,
+      conversationStats 
+    });
 
   } catch (error: unknown) {
     console.error('Error in aggregate-validation-results:', error);

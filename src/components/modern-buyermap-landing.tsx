@@ -99,8 +99,8 @@ const getOutcomeTextColor = (outcome: string): string => {
   switch (outcome) {
     case 'Aligned': 
     case 'Validated': return 'text-green-600';
-    case 'New Data Added': 
-    case 'Gap Identified': return 'text-blue-600'; 
+    case 'New Data Added': return 'text-blue-600'; 
+    case 'Gap Identified': return 'text-amber-600'; 
     case 'Misaligned': 
     case 'Contradicted': return 'text-red-600';
     case 'Refined': return 'text-orange-600';

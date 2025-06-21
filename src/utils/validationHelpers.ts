@@ -26,12 +26,18 @@ export const getOutcomeColors = (outcome: string) => {
         text: '#92400e'
       };
     case 'New Data Added':
-    case 'Gap Identified':
       return {
         primary: '#3b82f6',
         bg: '#eff6ff',
         border: '#bfdbfe',
         text: '#1e40af'
+      };
+    case 'Gap Identified':
+      return {
+        primary: '#f59e0b',
+        bg: '#fffbeb',
+        border: '#fed7aa',
+        text: '#92400e'
       };
     case 'Refined':
       return {
@@ -69,8 +75,9 @@ export const getOutcomeIcon = (outcome: string) => {
     case 'Challenged':
       return AlertTriangle;
     case 'New Data Added':
-    case 'Gap Identified':
       return Plus;
+    case 'Gap Identified':
+      return AlertTriangle;
     case 'Refined':
       return Minus;
     case 'Insufficient Data':
