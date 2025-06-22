@@ -1,7 +1,10 @@
+'use client';
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ChevronRight, ChevronDown, MessageSquare, Quote, Plus, BarChart3 } from 'lucide-react';
 import { getOutcomeIcon, getOutcomeColors, getRoleStyle } from './cardHelpers';
 import { ValidationDataObject } from '../types/buyermap';
+import ConfidenceBreakdown from './ConfidenceBreakdown';
 
 const getSectionInfo = (icpAttribute: string = '') => {
   const attribute = icpAttribute?.toLowerCase() || '';
@@ -86,8 +89,8 @@ const getSectionInfo = (icpAttribute: string = '') => {
   };
 };
 
-const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObject } & React.HTMLAttributes<HTMLDivElement>>> = ({ data, ...rest }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObject; initialExpanded?: boolean } & React.HTMLAttributes<HTMLDivElement>>> = ({ data, initialExpanded = false, ...rest }) => {
+  const [isExpanded, setIsExpanded] = useState(initialExpanded);
   const [progress, setProgress] = useState(0);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
 
@@ -277,7 +280,12 @@ const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObj
                 </div>
               )}
               {/* Confidence Analysis */}
-              {data.confidenceExplanation && (
+              {data.confidenceBreakdown ? (
+                <ConfidenceBreakdown 
+                  breakdown={data.confidenceBreakdown} 
+                  comparisonOutcome={data.comparisonOutcome}
+                />
+              ) : data.confidenceExplanation && (
                 <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm mb-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-2 bg-blue-100 rounded-lg">

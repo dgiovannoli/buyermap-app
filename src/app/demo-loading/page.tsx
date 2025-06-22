@@ -21,7 +21,9 @@ export default function LoadingDemo() {
 
   const startDeckDemo = () => {
     setDemoType('deck');
-    processingProgress.startDeckProcessing(15); // 15 slides
+    // Randomize slide count for demo to show dynamic behavior
+    const randomSlides = Math.floor(Math.random() * 20) + 8; // 8-27 slides
+    processingProgress.startDeckProcessing(randomSlides);
   };
 
   const startInterviewDemo = () => {
@@ -35,13 +37,13 @@ export default function LoadingDemo() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+        <div className="bg-white/10 backdrop-blur-xl rounded-lg shadow-lg border border-white/20 p-8 mb-8">
+          <h1 className="text-3xl font-bold text-white mb-4">
             Enhanced Loading States Demo
           </h1>
-          <p className="text-gray-600 mb-8">
+          <p className="text-white/70 mb-8">
             Experience the new process visualization and value countdown loading states 
             that show users exactly what's happening during deck and interview processing.
           </p>
@@ -51,53 +53,53 @@ export default function LoadingDemo() {
             <button
               onClick={startDeckDemo}
               disabled={processingProgress.phase !== 'idle'}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
             >
               Demo Deck Processing
             </button>
             <button
               onClick={startInterviewDemo}
               disabled={processingProgress.phase !== 'idle'}
-              className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
             >
               Demo Interview Processing
             </button>
             <button
               onClick={resetDemo}
-              className="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700"
+              className="bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-lg font-semibold hover:bg-white/30 transition-colors border border-white/20"
             >
               Reset Demo
             </button>
           </div>
 
           {/* Current Status */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-8">
-            <h3 className="font-semibold text-gray-900 mb-2">Current Status:</h3>
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-8 border border-white/20">
+            <h3 className="font-semibold text-white mb-2">Current Status:</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-gray-600">Phase:</span>
-                <span className="ml-2 font-medium capitalize">{processingProgress.phase}</span>
+                <span className="text-white/70">Phase:</span>
+                <span className="ml-2 font-medium capitalize text-white">{processingProgress.phase}</span>
               </div>
               <div>
-                <span className="text-gray-600">Progress:</span>
-                <span className="ml-2 font-medium">{Math.round(processingProgress.progress)}%</span>
+                <span className="text-white/70">Progress:</span>
+                <span className="ml-2 font-medium text-white">{Math.round(processingProgress.progress)}%</span>
               </div>
               <div>
-                <span className="text-gray-600">Completed:</span>
-                <span className="ml-2 font-medium">{processingProgress.isComplete ? 'Yes' : 'No'}</span>
+                <span className="text-white/70">Completed:</span>
+                <span className="ml-2 font-medium text-white">{processingProgress.isComplete ? 'Yes' : 'No'}</span>
               </div>
               <div>
-                <span className="text-gray-600">Error:</span>
-                <span className="ml-2 font-medium">{processingProgress.error || 'None'}</span>
+                <span className="text-white/70">Error:</span>
+                <span className="ml-2 font-medium text-white">{processingProgress.error || 'None'}</span>
               </div>
             </div>
           </div>
 
           {/* Features Highlight */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="border border-gray-200 rounded-lg p-6">
-              <h3 className="font-semibold text-blue-900 mb-3">Deck Processing Features</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="border border-blue-400/30 bg-blue-500/20 backdrop-blur-sm rounded-lg p-6">
+              <h3 className="font-semibold text-blue-300 mb-3">Deck Processing Features</h3>
+              <ul className="space-y-2 text-sm text-blue-100">
                 <li>• Real-time slide analysis progress</li>
                 <li>• Assumption identification counter</li>
                 <li>• Process step visualization</li>
@@ -105,9 +107,9 @@ export default function LoadingDemo() {
                 <li>• Value creation messaging</li>
               </ul>
             </div>
-            <div className="border border-gray-200 rounded-lg p-6">
-              <h3 className="font-semibold text-purple-900 mb-3">Interview Processing Features</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
+            <div className="border border-purple-400/30 bg-purple-500/20 backdrop-blur-sm rounded-lg p-6">
+              <h3 className="font-semibold text-purple-300 mb-3">Interview Processing Features</h3>
+              <ul className="space-y-2 text-sm text-purple-100">
                 <li>• Conversation-by-conversation progress</li>
                 <li>• Real-time quote discovery counter</li>
                 <li>• Statistical validity indicators</li>

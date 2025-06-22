@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
-import { BuyerMapData, Quote } from '../../../types/buyermap';
+import { BuyerMapData, Quote, StoredInterview } from '../../../types/buyermap';
 import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions, mapComparisonOutcome } from '../../../utils/dataMapping';
 import pLimit from 'p-limit';
 
@@ -526,30 +526,128 @@ Return JSON with topic verification:
   return allClassifiedQuotes;
 }
 
-// Process a single interview file
-async function processSingleInterview(file: File, assumptions: string[]): Promise<Record<string, Quote[]>> {
-  console.log(`📁 Processing interview: ${file.name}`);
+// Enhanced metadata extraction function  
+async function extractInterviewMetadata(interviewText: string, fileName: string): Promise<Partial<StoredInterview>> {
+  console.log(`🔍 Extracting metadata from ${fileName}`);
+  
+  if (!openai) {
+    return {
+      companySize: 'medium', // Default fallback
+      role: 'Unknown',
+      industry: 'Unknown'
+    };
+  }
+
+  try {
+    const response = await callOpenAIWithRetry({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `Extract metadata from this interview transcript. Return a JSON object with:
+          - companySize: "solo" | "small" | "medium" | "large" | "enterprise"
+          - role: primary role/title of the interviewee
+          - industry: industry/sector
+          - region: geographic region if mentioned
+          - uniqueSpeakers: array of speaker names found
+          
+          Company size guidelines:
+          - solo: 1 person, "solo practitioner", "just me"
+          - small: 2-10 people, "small firm", "few employees"
+          - medium: 11-50 people, "mid-size", "growing team"
+          - large: 51-500 people, "large firm", "big company"
+          - enterprise: 500+ people, "enterprise", "Fortune 500"
+          
+          Return only valid JSON without markdown formatting.`
+        },
+        {
+          role: "user", 
+          content: `INTERVIEW TRANSCRIPT:\n${interviewText.substring(0, 2000)}...`
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 500
+    }, "metadata-extraction");
+
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      const metadata = JSON.parse(content);
+      console.log(`✅ Extracted metadata for ${fileName}:`, metadata);
+      return metadata;
+    }
+  } catch (error) {
+    console.warn(`⚠️ Failed to extract metadata for ${fileName}:`, error);
+  }
+
+  // Fallback metadata extraction using simple text analysis
+  const lowerText = interviewText.toLowerCase();
+  let companySize: StoredInterview['companySize'] = 'medium';
+  
+  if (lowerText.includes('solo') || lowerText.includes('just me') || lowerText.includes('one person')) {
+    companySize = 'solo';
+  } else if (lowerText.includes('small firm') || lowerText.includes('few employees') || lowerText.includes('small team')) {
+    companySize = 'small';
+  } else if (lowerText.includes('large firm') || lowerText.includes('big company') || lowerText.includes('large organization')) {
+    companySize = 'large';
+  } else if (lowerText.includes('enterprise') || lowerText.includes('fortune') || lowerText.includes('corporation')) {
+    companySize = 'enterprise';
+  }
+
+  return {
+    companySize,
+    role: 'Unknown',
+    industry: 'Unknown',
+    uniqueSpeakers: [fileName.replace(/\.(docx?|pdf|txt)$/i, '').replace(/_/g, ' ')]
+  };
+}
+
+// Store interview metadata (in real implementation, this would use a database)
+const STORED_INTERVIEWS_KEY = 'buyermap_stored_interviews';
+
+function getStoredInterviews(): StoredInterview[] {
+  if (typeof window === 'undefined') return [];
+  const stored = localStorage.getItem(STORED_INTERVIEWS_KEY);
+  return stored ? JSON.parse(stored) : [];
+}
+
+function saveStoredInterview(interview: StoredInterview): void {
+  if (typeof window === 'undefined') return;
+  const existing = getStoredInterviews();
+  const updated = [...existing.filter(i => i.id !== interview.id), interview];
+  localStorage.setItem(STORED_INTERVIEWS_KEY, JSON.stringify(updated));
+}
+
+// Process a single interview with metadata storage
+async function processSingleInterviewWithStorage(file: File, assumptions: string[]): Promise<{
+  quotes: Record<string, Quote[]>;
+  metadata: StoredInterview;
+}> {
+  console.log(`📁 Processing interview with storage: ${file.name}`);
+  const processingStartTime = Date.now();
+  
   const parsed = await parseFile(file);
   if (parsed.error) {
     throw new Error(`Error parsing interview file ${file.name}: ${parsed.error}`);
   }
   
   const interviewText = parsed.text;
-  const quotesPerAssumption: Record<string, Quote[]> = {};
   
-  // Initialize quotes array for each assumption
+  // Extract metadata
+  const extractedMetadata = await extractInterviewMetadata(interviewText, file.name);
+  
+  // Process quotes for each assumption
+  const quotesPerAssumption: Record<string, Quote[]> = {};
   assumptions.forEach(assumption => {
     quotesPerAssumption[assumption] = [];
   });
   
-  // Extract quotes for each assumption
   for (const assumption of assumptions) {
     console.log(`  🎯 Processing assumption: ${assumption.substring(0, 40)}...`);
     const targetedQuotes = await extractTargetedQuotes(interviewText, file.name, assumption);
     quotesPerAssumption[assumption] = targetedQuotes;
   }
   
-  // Classify all quotes
+  // Classify quotes
   const classificationResults: Record<string, Quote[]> = {};
   for (const assumption of assumptions) {
     const quotesForAssumption = quotesPerAssumption[assumption] || [];
@@ -561,7 +659,32 @@ async function processSingleInterview(file: File, assumptions: string[]): Promis
     }
   }
   
-  return classificationResults;
+  const processingTime = Date.now() - processingStartTime;
+  const totalQuotes = Object.values(classificationResults).flat().length;
+  
+  // Create stored interview record
+  const storedInterview: StoredInterview = {
+    id: `interview_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    filename: file.name,
+    uploadDate: new Date(),
+    status: 'completed',
+    companySize: extractedMetadata.companySize || 'medium',
+    role: extractedMetadata.role || 'Unknown',
+    industry: extractedMetadata.industry || 'Unknown',
+    region: extractedMetadata.region,
+    quotesExtracted: totalQuotes,
+    processingTime: Math.round(processingTime / 1000),
+    uniqueSpeakers: extractedMetadata.uniqueSpeakers || [file.name.replace(/\.(docx?|pdf|txt)$/i, '')],
+    vectorsStored: totalQuotes * 3, // Estimate: each quote generates ~3 vectors
+    tags: [], // Will be populated by user later
+  };
+  
+  console.log(`✅ Created stored interview record:`, storedInterview);
+  
+  return {
+    quotes: classificationResults,
+    metadata: storedInterview
+  };
 }
 
 // Helper: Log processing statistics
@@ -596,6 +719,66 @@ function calculateAssumptionOutcome(quotes: any[]): string {
   if (newInsight > 0 && misaligned <= aligned) return 'new_insight';
   if (aligned === 0 && misaligned === 0 && newInsight === 0) return 'pending';
   return 'neutral';
+}
+
+// Calculate comprehensive alignment score with transparent breakdown
+function calculateOverallAlignmentScore(assumptions: any[]): { 
+  overallScore: number; 
+  breakdown: Record<string, { score: number; outcome: string; weight: number }>;
+  outcomeWeights: Record<string, number>;
+  summary: { aligned: number; newData: number; misaligned: number; pending: number };
+} {
+  const outcomeWeights = {
+    'Aligned': 1.0,        // 100% contribution
+    'New Data Added': 0.75, // 75% contribution (valuable but not perfect alignment)
+    'Challenged': 0.2,      // 20% contribution (identifies gap but useful)
+    'Misaligned': 0.0,      // 0% contribution
+    'Refined': 0.5          // 50% contribution (improved understanding)
+  };
+
+  const scoreBreakdown: Record<string, { score: number; outcome: string; weight: number }> = {};
+  const summary = { aligned: 0, newData: 0, misaligned: 0, pending: 0 };
+  let totalWeightedScore = 0;
+
+  assumptions.forEach(assumption => {
+    const rawOutcome = calculateAssumptionOutcome(assumption.quotes);
+    const mappedOutcome = mapComparisonOutcome(rawOutcome);
+    assumption.comparisonOutcome = mappedOutcome;
+    
+    // Get weight for this outcome
+    const weight = outcomeWeights[mappedOutcome] || 0;
+    
+    // Base confidence score (from deck analysis) adjusted by interview validation
+    const baseConfidence = assumption.confidenceScore || 85;
+    const adjustedScore = Math.round(baseConfidence * weight);
+    
+    scoreBreakdown[assumption.icpAttribute || `Assumption ${assumption.id}`] = {
+      score: adjustedScore,
+      outcome: mappedOutcome,
+      weight: weight
+    };
+    
+    totalWeightedScore += adjustedScore;
+    
+    // Update summary counts
+    switch (mappedOutcome) {
+      case 'Aligned': summary.aligned++; break;
+      case 'New Data Added': summary.newData++; break;
+      case 'Misaligned': summary.misaligned++; break;
+      case 'Challenged': 
+      case 'Refined':
+      default: summary.pending++; break;
+    }
+  });
+
+  const overallScore = Math.round(totalWeightedScore / assumptions.length);
+  
+  return {
+    overallScore,
+    breakdown: scoreBreakdown,
+    outcomeWeights,
+    summary
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -633,7 +816,7 @@ export async function POST(request: NextRequest) {
         limit(async () => {
           try {
             console.log(`Starting interview: ${file.name}`);
-            const result = await processSingleInterview(file, assumptionsList);
+            const result = await processSingleInterviewWithStorage(file, assumptionsList);
             const elapsed = ((Date.now() - processingStartTime) / 1000).toFixed(1);
             console.log(`✅ Completed interview ${file.name} in ${elapsed}s`);
             return { result, fileName: file.name };
@@ -649,11 +832,22 @@ export async function POST(request: NextRequest) {
       )
     );
     
+    // Extract interview metadata for storage (V1: just collect, don't store yet)
+    const interviewMetadata = allResults
+      .filter(result => !result.error)
+      .map(result => result.result)
+      .filter(result => 'metadata' in result)
+      .map(result => (result as { metadata: StoredInterview }).metadata);
+    
+    console.log(`📚 Collected metadata for ${interviewMetadata.length} interviews`);
+    
     // Flatten and aggregate results from all interviews
     const aggregatedResults = existingAssumptions.map(assumption => {
-      const allQuotesForAssumption = allResults.flatMap(result => 
-        result.result[assumption.v1Assumption] || []
-      );
+      const allQuotesForAssumption = allResults.flatMap(result => {
+        if (result.error) return [];
+        const quotesData = 'quotes' in result.result ? result.result.quotes : result.result;
+        return (quotesData as Record<string, Quote[]>)[assumption.v1Assumption] || [];
+      });
       
       return {
         ...assumption,
@@ -668,11 +862,8 @@ export async function POST(request: NextRequest) {
     // Log final stats
     logProcessingStats(allResults, processingStartTime);
     
-    // Set comparisonOutcome for each assumption based on quote classifications
-    aggregatedResults.forEach(assumption => {
-      const rawOutcome = calculateAssumptionOutcome(assumption.quotes);
-      assumption.comparisonOutcome = mapComparisonOutcome(rawOutcome);
-    });
+    // Calculate comprehensive alignment score with transparent breakdown
+    const scoreBreakdown = calculateOverallAlignmentScore(aggregatedResults);
     
     // Transform to final format
     const icpValidation = createICPValidationData(aggregatedResults[0]);
@@ -685,19 +876,17 @@ export async function POST(request: NextRequest) {
     const partiallyValidatedCount = aggregatedResults.filter(a => a.comparisonOutcome === 'New Data Added').length;
     const pendingCount = aggregatedResults.filter(a => !a.comparisonOutcome).length;
     
-    const overallAlignmentScore = Math.round(
-      (validatedCount / aggregatedResults.length) * 100
-    );
-
     return NextResponse.json({
       success: true,
       assumptions: aggregatedResults,
       icpValidation,
       validationAttributes,
-      overallAlignmentScore,
+      overallAlignmentScore: scoreBreakdown.overallScore,
+      scoreBreakdown,
       validatedCount,
       partiallyValidatedCount,
       pendingCount,
+      interviewMetadata, // V1: Return metadata for frontend display
       metadata: {
         totalInterviews: files.length,
         totalQuotes,

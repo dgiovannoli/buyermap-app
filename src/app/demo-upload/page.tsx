@@ -1,9 +1,6 @@
-import { useState, useEffect } from 'react';
-import { ProcessingProgress } from '../../../types/buyer-map';
-import { ICPValidationResponse } from '../../../types/buyermap';
-import FileDropzone from '../ui/FileDropzone';
-import ProcessVisualization from '../loading/ProcessVisualization';
-import { useProcessingProgress } from '../../hooks/useProcessingProgress';
+'use client';
+
+import React, { useState, useCallback } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -18,36 +15,14 @@ import {
   BarChart3
 } from 'lucide-react';
 
-interface DeckUploadStageProps {
-  onDeckProcessed: (data: ICPValidationResponse) => void;
-  onError: (error: string | null) => void;
-  onProgressUpdate: (progress: ProcessingProgress) => void;
-}
-
-export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUpdate }: DeckUploadStageProps) {
-  console.log('🔄 DeckUploadStage component rendered');
-  const [uploadedDeck, setUploadedDeck] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+export default function DemoUploadPage() {
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const processingProgress = useProcessingProgress();
-  
-  console.log('🔄 State check:', {
-    isProcessing,
-    phase: processingProgress.phase,
-    progress: processingProgress.progress,
-    uploadedDeck: !!uploadedDeck
-  });
 
-  // Reset processing state when component mounts
-  useEffect(() => {
-    console.log('🔄 Component mounted, resetting processing state');
-    processingProgress.resetProcessing();
-  }, []);
-
-  const handleFileUpload = (file: File | null) => {
-    console.log('🔄 File uploaded:', file?.name);
-    setUploadedDeck(file);
+  const handleFileUpload = useCallback((file: File | null) => {
+    setUploadedFile(file);
     if (file) {
       // Simulate upload progress
       setUploadProgress(0);
@@ -61,25 +36,34 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         });
       }, 100);
     }
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
-  };
+  }, []);
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileUpload(files[0]);
     }
+  }, [handleFileUpload]);
+
+  const handleProcessDeck = () => {
+    setIsProcessing(true);
+    // Simulate processing
+    setTimeout(() => {
+      setIsProcessing(false);
+      alert('Demo: Processing complete! In the real app, this would navigate to results.');
+    }, 3000);
   };
 
   const getFileIcon = (fileName: string) => {
@@ -103,106 +87,6 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const estimateSlideCount = (file: File): number => {
-    const fileSizeInMB = file.size / (1024 * 1024);
-    const fileName = file.name.toLowerCase();
-    
-    // Rough estimates based on file type and size
-    if (fileName.endsWith('.pdf')) {
-      // PDFs: roughly 0.1-0.5MB per slide depending on content
-      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 0.3)));
-    } else if (fileName.endsWith('.pptx') || fileName.endsWith('.ppt')) {
-      // PowerPoint: roughly 0.5-2MB per slide with images
-      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 1.2)));
-    } else if (fileName.endsWith('.key')) {
-      // Keynote: similar to PowerPoint but often larger files
-      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 1.5)));
-    }
-    
-    // Default fallback
-    return Math.max(5, Math.min(25, Math.round(fileSizeInMB / 0.8)));
-  };
-
-  const handleProcessDeck = async () => {
-    console.log('🔄 handleProcessDeck called, uploadedDeck:', !!uploadedDeck);
-    if (!uploadedDeck) return;
-
-    setIsProcessing(true);
-    onError(null);
-
-    // Estimate slide count based on file size and type for more realistic loading
-    const estimatedSlides = estimateSlideCount(uploadedDeck);
-    console.log('🔄 Estimated slides:', estimatedSlides);
-
-    // Start the enhanced processing visualization with dynamic slide count
-    processingProgress.startDeckProcessing(estimatedSlides);
-
-    try {
-      const formData = new FormData();
-      formData.append('deck', uploadedDeck);
-
-      console.log('🔄 Starting API call');
-      
-      // Just make the API call - the visualization will run independently
-      const apiResponse = await fetch('/api/analyze-deck', {
-        method: 'POST',
-        body: formData
-      });
-
-      console.log('🔄 API call completed, status:', apiResponse.status);
-
-      if (!apiResponse.ok) {
-        throw new Error('Failed to process deck');
-      }
-
-      const data = await apiResponse.json();
-      console.log('🔄 API data parsed:', data);
-
-      console.log('🔄 About to call onDeckProcessed');
-      onDeckProcessed(data);
-      console.log('🔄 onDeckProcessed called successfully');
-      onProgressUpdate({
-        phase: 'deck',
-        step: 'deck-results',
-        currentBatch: 0,
-        totalBatches: 0,
-        percentage: 100,
-        status: 'completed'
-      });
-    } catch (err) {
-      processingProgress.setError(err instanceof Error ? err.message : 'Failed to process deck');
-      onError(err instanceof Error ? err.message : 'Failed to process deck');
-      onProgressUpdate({
-        phase: 'deck',
-        step: 'deck-upload',
-        currentBatch: 0,
-        totalBatches: 0,
-        percentage: 0,
-        status: 'error',
-        error: err instanceof Error ? err.message : 'Failed to process deck'
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Show processing visualization when processing
-  if (isProcessing && processingProgress.phase === 'deck') {
-    console.log('🔄 Showing ProcessVisualization, progress:', processingProgress.progress);
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
-        <ProcessVisualization
-          phase="deck"
-          progress={processingProgress.progress}
-          stats={processingProgress.stats}
-          onComplete={() => {
-            console.log('🔄 ProcessVisualization onComplete called');
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
       {/* Header */}
@@ -210,8 +94,8 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-white">BuyerMap Analysis</h1>
-              <p className="text-sm text-gray-300">Upload & Analyze Your Sales Deck</p>
+              <h1 className="text-xl font-bold text-white">BuyerMap Demo</h1>
+              <p className="text-sm text-gray-300">Enhanced Upload Experience</p>
             </div>
             <div className="flex items-center space-x-2 text-sm">
               <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full font-medium border border-blue-400/30">Step 1 of 3</span>
@@ -277,7 +161,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
 
           {/* Upload Area */}
           <div className="p-6">
-            {!uploadedDeck ? (
+            {!uploadedFile ? (
               <div
                 className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
                   isDragOver 
@@ -345,10 +229,10 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
               <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/20">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-4">
-                    {getFileIcon(uploadedDeck.name)}
+                    {getFileIcon(uploadedFile.name)}
                     <div>
-                      <h4 className="font-medium text-white">{uploadedDeck.name}</h4>
-                      <p className="text-sm text-gray-300">{formatFileSize(uploadedDeck.size)}</p>
+                      <h4 className="font-medium text-white">{uploadedFile.name}</h4>
+                      <p className="text-sm text-gray-300">{formatFileSize(uploadedFile.size)}</p>
                     </div>
                   </div>
                   <button
@@ -388,7 +272,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         </div>
 
         {/* Process Button */}
-        {uploadedDeck && uploadProgress === 100 && (
+        {uploadedFile && uploadProgress === 100 && (
           <div className="text-center">
             <button
               onClick={handleProcessDeck}
@@ -410,16 +294,6 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
             <p className="text-sm text-gray-400 mt-3">
               This will extract assumptions from your deck for validation
             </p>
-          </div>
-        )}
-
-        {/* Error Display */}
-        {processingProgress.error && (
-          <div className="mt-6 p-4 bg-red-500/20 border border-red-400/30 rounded-xl backdrop-blur-sm">
-            <div className="flex items-center">
-              <div className="text-red-400 mr-3">⚠️</div>
-              <span className="text-red-300">{processingProgress.error}</span>
-            </div>
           </div>
         )}
 

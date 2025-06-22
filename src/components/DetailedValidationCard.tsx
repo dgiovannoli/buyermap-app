@@ -1,7 +1,11 @@
+'use client';
+
 import React, { useState, useCallback } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Target, BarChart3, MessageSquare, Quote, Plus, CheckCircle, XCircle, Info, ChartBar } from 'lucide-react';
 import { getOutcomeColors, getOutcomeIcon, getRoleStyle } from '../utils/validationHelpers';
 import { getAttributeIconAndColors } from '../utils/attributeStyles';
+import ConfidenceBreakdown from './ConfidenceBreakdown';
+import { ConfidenceBreakdown as ConfidenceBreakdownType } from '../types/buyermap';
 
 interface Quote {
   text: string;
@@ -17,6 +21,7 @@ interface ValidationData {
   confidence_explanation: string;
   reality: string;
   quotes: Quote[];
+  confidenceBreakdown?: ConfidenceBreakdownType;
 }
 
 interface DetailedValidationCardProps {
@@ -61,8 +66,37 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
     setShowAllQuotes(prev => !prev);
   }, []);
 
+  // Helper function to get diverse quotes (prioritize different speakers)
+  const getDiverseQuotes = useCallback((quotes: Quote[], count: number = 2) => {
+    if (!quotes || quotes.length === 0) return [];
+    
+    const seenSpeakers = new Set<string>();
+    const diverseQuotes: Quote[] = [];
+    const remainingQuotes: Quote[] = [];
+    
+    // First pass: collect quotes from unique speakers (prefer longer, more substantive quotes)
+    const sortedQuotes = [...quotes].sort((a, b) => (b.text?.length || 0) - (a.text?.length || 0));
+    
+    for (const quote of sortedQuotes) {
+      const speaker = quote.author || quote.speaker || 'Unknown';
+      if (!seenSpeakers.has(speaker) && diverseQuotes.length < count) {
+        seenSpeakers.add(speaker);
+        diverseQuotes.push(quote);
+      } else {
+        remainingQuotes.push(quote);
+      }
+    }
+    
+    // Second pass: fill remaining slots if needed
+    while (diverseQuotes.length < count && remainingQuotes.length > 0) {
+      diverseQuotes.push(remainingQuotes.shift()!);
+    }
+    
+    return diverseQuotes;
+  }, []);
+
   return (
-    <div className="bg-white/80 rounded-xl border border-gray-200/50 shadow-lg overflow-hidden transition-all duration-300">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
       <div className="p-6">
         {/* Card Header */}
         <div className="flex items-center justify-between mb-3">
@@ -118,7 +152,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
 
       {/* Expanded Panel */}
       {isExpanded && validation && (
-        <div className="border-t border-gray-200/50 bg-gradient-to-b from-gray-50/30 to-white">
+        <div className="border-t border-gray-200 bg-gradient-to-b from-gray-50/30 to-white">
           <div className="p-6 space-y-6">
             
             {/* Hero Insight Section */}
@@ -159,42 +193,13 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               </div>
             </div>
 
-            {/* Confidence Analysis */}
-            <div className="bg-white rounded-xl p-5 border border-blue-200/50 shadow-sm">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <BarChart3 className="w-5 h-5 text-blue-600" />
-                </div>
-                <h5 className="text-sm font-bold text-blue-800 uppercase tracking-wide">
-                  Confidence Analysis
-                </h5>
-              </div>
-              <div className="flex items-center space-x-4 mb-3">
-                <div className="flex-1 bg-gray-200 rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full transition-all duration-1000 ease-out"
-                    style={{
-                      width: `${validation.confidence}%`,
-                      background: `linear-gradient(90deg, ${colors.primary}dd, ${colors.primary})`
-                    }}
-                  />
-                </div>
-                <span className="text-lg font-bold text-gray-900">
-                  {validation.confidence}%
-                </span>
-              </div>
-              <p className="text-sm text-blue-900 leading-relaxed">
-                {validation.confidence_explanation}
-              </p>
-            </div>
-
             {/* Supporting Evidence */}
             <div>
               <div className="flex items-center space-x-3 mb-4">
                 <div className="p-2 bg-gray-100 rounded-lg">
                   <MessageSquare className="w-5 h-5 text-gray-600" />
                 </div>
-                <h5 className="text-sm font-bold text-gray-700 uppercase tracking-wide">
+                <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
                   Supporting Evidence
                 </h5>
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
@@ -203,10 +208,10 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                {(showAllQuotes ? validation.quotes : validation.quotes.slice(0, 2)).map((quote, idx) => (
+                {(showAllQuotes ? validation.quotes : getDiverseQuotes(validation.quotes, 2)).map((quote, idx) => (
                   <div
                     key={idx}
-                    className="bg-white rounded-xl p-5 border border-gray-200/50 shadow-sm hover:shadow-md transition-shadow"
+                    className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start space-x-3">
                       <Quote className="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" />
@@ -265,6 +270,43 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Enhanced Confidence Analysis */}
+            {validation.confidenceBreakdown ? (
+              <ConfidenceBreakdown 
+                breakdown={validation.confidenceBreakdown}
+                comparisonOutcome={validation.outcome}
+              />
+            ) : (
+              // Fallback to basic confidence display for legacy data
+              <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h5 className="text-sm font-bold text-blue-800 uppercase tracking-wide">
+                    Confidence Analysis
+                  </h5>
+                </div>
+                <div className="flex items-center space-x-4 mb-3">
+                  <div className="flex-1 bg-gray-200 rounded-full h-3">
+                    <div
+                      className="h-3 rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${validation.confidence}%`,
+                        background: `linear-gradient(90deg, ${colors.primary}dd, ${colors.primary})`
+                      }}
+                    />
+                  </div>
+                  <span className="text-lg font-bold text-gray-900">
+                    {validation.confidence}%
+                  </span>
+                </div>
+                <p className="text-sm text-blue-900 leading-relaxed">
+                  {validation.confidence_explanation}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

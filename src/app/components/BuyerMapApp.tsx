@@ -144,9 +144,9 @@ export default function BuyerMapApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="relative">
       {error && (
-        <div className="fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <div className="fixed top-20 right-4 bg-red-500/20 backdrop-blur-sm border border-red-400/30 text-red-200 px-4 py-3 rounded-lg z-50">
           {error}
         </div>
       )}

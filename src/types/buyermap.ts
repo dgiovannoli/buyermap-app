@@ -10,6 +10,7 @@ export interface ValidationAttribute {
   outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
+  confidenceBreakdown?: ConfidenceBreakdown;
   quotes: Quote[];
 }
 
@@ -33,6 +34,7 @@ export interface BuyerMapData {
   waysToAdjustMessaging?: string;
   confidenceScore: number;
   confidenceExplanation: string;
+  confidenceBreakdown?: ConfidenceBreakdown; // New field for detailed confidence
   quotes?: Quote[];
   exampleQuotes?: ExampleQuote[];
   effectiveConfidence?: number;
@@ -56,8 +58,9 @@ export interface Quote {
   id: string;
   text: string;
   speaker: string;
-  role: string;
-  source: string;
+  role?: string;
+  source?: string;
+  author?: string;
   rejected?: boolean;
   quote?: string;
   companySnapshot?: string;
@@ -94,6 +97,71 @@ export interface InterviewBatch {
   error?: string
 }
 
+// New enhanced interview storage for accumulative analysis
+export interface StoredInterview {
+  id: string;
+  filename: string;
+  uploadDate: Date;
+  status: 'processing' | 'completed' | 'failed';
+  
+  // Auto-extracted metadata
+  companySize?: 'solo' | 'small' | 'medium' | 'large' | 'enterprise';
+  role?: string;
+  industry?: string;
+  region?: string;
+  
+  // User-added metadata (future enhancement)
+  tags?: string[];
+  notes?: string;
+  customFields?: Record<string, any>;
+  
+  // Processing results
+  quotesExtracted: number;
+  processingTime: number;
+  uniqueSpeakers: string[];
+  
+  // RAG storage reference
+  pineconeNamespace?: string;
+  vectorsStored: number;
+}
+
+export interface InterviewFilterCriteria {
+  companySize?: string[];
+  roles?: string[];
+  industries?: string[];
+  regions?: string[];
+  tags?: string[];
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+  speakerNames?: string[];
+}
+
+export interface AccumulativeAnalysisState {
+  totalInterviews: number;
+  selectedInterviews: StoredInterview[];
+  filterCriteria: InterviewFilterCriteria;
+  lastAnalysisDate: Date;
+  analysisHistory: AnalysisSnapshot[];
+}
+
+export interface AnalysisSnapshot {
+  id: string;
+  timestamp: Date;
+  interviewIds: string[];
+  filterCriteria: InterviewFilterCriteria;
+  results: {
+    overallAlignmentScore: number;
+    assumptions: BuyerMapData[];
+    scoreBreakdown: any;
+  };
+  metadata: {
+    totalQuotes: number;
+    processingTime: number;
+  };
+}
+
 export interface AssumptionState {
   id: string;
   assumption: string;
@@ -118,6 +186,7 @@ export interface ValidationDataObject {
   outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
+  confidenceBreakdown?: ConfidenceBreakdown;
   quotes: Array<{
     text: string;
     author: string;
@@ -127,4 +196,12 @@ export interface ValidationDataObject {
   confidenceScore: number;
   confidenceExplanation: string;
   waysToAdjustMessaging: string;
+}
+
+export interface ConfidenceBreakdown {
+  overall: number;
+  dataQuality: number;
+  sampleSize: number;
+  alignment: number;
+  explanation: string;
 }

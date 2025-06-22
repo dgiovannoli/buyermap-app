@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare, Info, BarChart3
+  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare
 } from 'lucide-react';
 import { BuyerMapData } from '../types/buyermap';
 import DetailedValidationCard from './DetailedValidationCard';
@@ -9,7 +9,6 @@ import UploadComponent from './UploadComponent';
 import { MOCK_BUYER_MAP_DATA } from './__mocks__/buyerMapData';
 import InterviewProcessingOverlay from '../app/components/loading/InterviewProcessingOverlay';
 import { useProcessingProgress } from '../app/hooks/useProcessingProgress';
-import ProcessVisualization from '../app/components/loading/ProcessVisualization';
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -22,9 +21,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHO',
       category: 'Buyer Titles',
       icon: Users,
-      iconColor: 'text-blue-400',
-      iconBg: 'bg-blue-500/20',
-      titleColor: 'text-blue-300'
+      iconColor: 'text-blue-600',
+      iconBg: 'bg-blue-100',
+      titleColor: 'text-blue-800'
     };
   }
   if (attribute.includes('company') || attribute.includes('size') || attribute.includes('firm')) {
@@ -32,9 +31,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHO',
       category: 'Company Size', 
       icon: Building,
-      iconColor: 'text-purple-400',
-      iconBg: 'bg-purple-500/20',
-      titleColor: 'text-purple-300'
+      iconColor: 'text-purple-600',
+      iconBg: 'bg-purple-100',
+      titleColor: 'text-purple-800'
     };
   }
   if (attribute.includes('pain') || attribute.includes('problem') || attribute.includes('challenge')) {
@@ -42,9 +41,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHAT',
       category: 'Pain Points',
       icon: AlertCircle,
-      iconColor: 'text-red-400', 
-      iconBg: 'bg-red-500/20',
-      titleColor: 'text-red-300'
+      iconColor: 'text-red-600', 
+      iconBg: 'bg-red-100',
+      titleColor: 'text-red-800'
     };
   }
   if (attribute.includes('desired') || attribute.includes('outcome') || attribute.includes('goal')) {
@@ -52,9 +51,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHAT',
       category: 'Desired Outcomes',
       icon: Trophy,
-      iconColor: 'text-emerald-400',
-      iconBg: 'bg-emerald-500/20', 
-      titleColor: 'text-emerald-300'
+      iconColor: 'text-green-600',
+      iconBg: 'bg-green-100', 
+      titleColor: 'text-green-800'
     };
   }
   if (attribute.includes('trigger') || attribute.includes('timing') || attribute.includes('when')) {
@@ -62,9 +61,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHEN',
       category: 'Triggers',
       icon: Zap,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/20',
-      titleColor: 'text-amber-300'
+      iconColor: 'text-orange-600',
+      iconBg: 'bg-orange-100',
+      titleColor: 'text-orange-800'
     };
   }
   if (attribute.includes('barrier') || attribute.includes('objection') || attribute.includes('concern')) {
@@ -72,9 +71,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHY',
       category: 'Barriers',
       icon: Shield,
-      iconColor: 'text-indigo-400',
-      iconBg: 'bg-indigo-500/20',
-      titleColor: 'text-indigo-300'
+      iconColor: 'text-indigo-600',
+      iconBg: 'bg-indigo-100',
+      titleColor: 'text-indigo-800'
     };
   }
   if (attribute.includes('messaging') || attribute.includes('communication') || attribute.includes('emphasis')) {
@@ -82,9 +81,9 @@ const getSectionInfo = (icpAttribute: string = '') => {
       section: 'WHY',
       category: 'Messaging Emphasis',
       icon: MessageSquare,
-      iconColor: 'text-teal-400',
-      iconBg: 'bg-teal-500/20',
-      titleColor: 'text-teal-300'
+      iconColor: 'text-teal-600',
+      iconBg: 'bg-teal-100',
+      titleColor: 'text-teal-800'
     };
   }
   // Default fallback
@@ -92,23 +91,23 @@ const getSectionInfo = (icpAttribute: string = '') => {
     section: 'OTHER',
     category: icpAttribute || 'Unknown',
     icon: Target,
-    iconColor: 'text-gray-400',
-    iconBg: 'bg-gray-500/20',
-    titleColor: 'text-gray-300'
+    iconColor: 'text-gray-600',
+    iconBg: 'bg-gray-100',
+    titleColor: 'text-gray-800'
   };
 };
 
 const getOutcomeTextColor = (outcome: string): string => {
   switch (outcome) {
     case 'Aligned': 
-    case 'Validated': return 'text-emerald-400';
-    case 'New Data Added': return 'text-blue-400'; 
-    case 'Gap Identified': return 'text-amber-400'; 
+    case 'Validated': return 'text-green-600';
+    case 'New Data Added': return 'text-blue-600'; 
+    case 'Gap Identified': return 'text-amber-600'; 
     case 'Misaligned': 
-    case 'Contradicted': return 'text-red-400';
-    case 'Refined': return 'text-orange-400';
-    case 'Insufficient Data': return 'text-gray-400';
-    default: return 'text-gray-400';
+    case 'Contradicted': return 'text-red-600';
+    case 'Refined': return 'text-orange-600';
+    case 'Insufficient Data': return 'text-gray-600';
+    default: return 'text-gray-600';
   }
 };
 
@@ -127,115 +126,6 @@ interface ModernBuyerMapLandingProps {
   setCurrentStep: (step: number) => void;
   initialInsights?: BuyerMapData[]; // Optional prop for testing/mock data
 }
-
-// Component to display score breakdown
-const ScoreBreakdown: React.FC<{ 
-  scoreBreakdown?: Record<string, { score: number; outcome: string; weight: number }>;
-  outcomeWeights?: Record<string, number>;
-  summary?: { aligned: number; newData: number; misaligned: number; pending: number };
-}> = ({ scoreBreakdown, outcomeWeights, summary }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  if (!scoreBreakdown || !outcomeWeights || !summary) {
-    return null;
-  }
-
-  const getOutcomeColor = (outcome: string) => {
-    switch (outcome) {
-      case 'Aligned': return 'text-green-400 bg-green-500/20';
-      case 'New Data Added': return 'text-blue-400 bg-blue-500/20';
-      case 'Misaligned': return 'text-red-400 bg-red-500/20';
-      case 'Challenged': return 'text-yellow-400 bg-yellow-500/20';
-      case 'Refined': return 'text-purple-400 bg-purple-500/20';
-      default: return 'text-gray-400 bg-gray-500/20';
-    }
-  };
-
-  const getOutcomeDescription = (outcome: string) => {
-    switch (outcome) {
-      case 'Aligned': return 'Perfectly matches interview data';
-      case 'New Data Added': return 'Valuable insights gained from interviews';
-      case 'Misaligned': return 'Contradicted by interview evidence';
-      case 'Challenged': return 'Needs further investigation';
-      case 'Refined': return 'Understanding improved through validation';
-      default: return 'Status unclear';
-    }
-  };
-
-  return (
-    <div className="mt-4 bg-white/5 backdrop-blur-sm rounded-lg border border-white/10">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-4 text-left flex items-center justify-between text-white/80 hover:text-white transition-colors"
-      >
-        <div className="flex items-center space-x-2">
-          <Info className="w-4 h-4" />
-          <span className="text-sm font-medium">How is this score calculated?</span>
-        </div>
-        <span className="text-sm">{isExpanded ? '▲' : '▼'}</span>
-      </button>
-      
-      {isExpanded && (
-        <div className="px-4 pb-4 space-y-4">
-          {/* Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="text-center p-2 bg-green-500/10 rounded border border-green-500/20">
-              <div className="text-lg font-bold text-green-400">{summary.aligned}</div>
-              <div className="text-xs text-green-300">Aligned</div>
-            </div>
-            <div className="text-center p-2 bg-blue-500/10 rounded border border-blue-500/20">
-              <div className="text-lg font-bold text-blue-400">{summary.newData}</div>
-              <div className="text-xs text-blue-300">New Data</div>
-            </div>
-            <div className="text-center p-2 bg-red-500/10 rounded border border-red-500/20">
-              <div className="text-lg font-bold text-red-400">{summary.misaligned}</div>
-              <div className="text-xs text-red-300">Misaligned</div>
-            </div>
-            <div className="text-center p-2 bg-gray-500/10 rounded border border-gray-500/20">
-              <div className="text-lg font-bold text-gray-400">{summary.pending}</div>
-              <div className="text-xs text-gray-300">Other</div>
-            </div>
-          </div>
-
-          {/* Detailed Breakdown */}
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-white/80 mb-2">Individual Assumption Scores:</h4>
-            {Object.entries(scoreBreakdown).map(([assumption, data]) => (
-              <div key={assumption} className="flex items-center justify-between p-2 bg-white/5 rounded text-sm">
-                <div className="flex-1">
-                  <div className="text-white/90 font-medium">{assumption}</div>
-                  <div className="text-white/60 text-xs">{getOutcomeDescription(data.outcome)}</div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className={`px-2 py-1 rounded text-xs ${getOutcomeColor(data.outcome)}`}>
-                    {data.outcome}
-                  </span>
-                  <span className="text-white/80 font-medium">{data.score}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Weighting Explanation */}
-          <div className="mt-4 p-3 bg-white/5 rounded border border-white/10">
-            <h4 className="text-sm font-medium text-white/80 mb-2">Scoring Weights:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-white/70">
-              {Object.entries(outcomeWeights).map(([outcome, weight]) => (
-                <div key={outcome} className="flex justify-between">
-                  <span>{outcome}:</span>
-                  <span>{Math.round(weight * 100)}% weight</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-white/60 mt-2">
-              Each assumption's base confidence score is multiplied by its outcome weight to calculate the final contribution to the overall score.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ 
   buyerMapData, 
@@ -273,9 +163,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [uploadingInterviews, setUploadingInterviews] = useState(false);
   const [localBuyerMapData, setLocalBuyerMapData] = useState<BuyerMapData[]>(initialLocalData);
   const [score, setScore] = useState<number | null>(isMock ? overallScore : null);
-  const [scoreBreakdown, setScoreBreakdown] = useState<Record<string, { score: number; outcome: string; weight: number }> | undefined>(undefined);
-  const [outcomeWeights, setOutcomeWeights] = useState<Record<string, number> | undefined>(undefined);
-  const [summary, setSummary] = useState<{ aligned: number; newData: number; misaligned: number; pending: number } | undefined>(undefined);
   const [showUploadMore, setShowUploadMore] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
@@ -543,13 +430,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         const calculatedScore = payload.overallAlignmentScore || calculateOverallScore(mergedData);
         setScore(calculatedScore);
         
-        // Update score breakdown data if available
-        if (payload.scoreBreakdown) {
-          setScoreBreakdown(payload.scoreBreakdown.breakdown);
-          setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
-          setSummary(payload.scoreBreakdown.summary);
-        }
-        
         console.log('✅ Interview validation merged successfully:', {
           totalQuotes: payload.metadata?.totalQuotes || 0,
           processingTime: payload.metadata?.processingTimeSeconds || 'unknown',
@@ -707,21 +587,20 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
   // Main return with step indicator and step conditionals
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
+    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+      <div className="bg-white rounded-lg shadow-sm p-8">
         {/* Step Indicator */}
         <div className="flex items-center justify-center mb-8">
           {[1, 2, 3, 4].map((step) => (
             <div key={step} className="flex items-center">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
-                currentStep >= step ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-white/20 text-white/60'
+                currentStep >= step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
               }`}>
                 {step}
               </div>
               {step < 4 && (
                 <div className={`w-16 h-1 mx-2 ${
-                  currentStep > step ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-white/20'
+                  currentStep > step ? 'bg-blue-600' : 'bg-gray-200'
                 }`} />
               )}
             </div>
@@ -732,17 +611,17 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         {currentStep === 2 && (
           <div className="space-y-8">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white mb-2">Upload Your Materials</h2>
-              <p className="text-white/70">We'll validate your ICP assumptions against interview data</p>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Your Materials</h2>
+              <p className="text-gray-600">We'll validate your ICP assumptions against interview data</p>
             </div>
             {processError && (
-              <div className="text-center text-red-400 font-semibold mb-4">{processError}</div>
+              <div className="text-center text-red-600 font-semibold mb-4">{processError}</div>
             )}
-            <div className="border-2 border-dashed border-white/30 rounded-lg p-8 bg-white/5">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
               <div className="text-center">
-                <div className="w-12 h-12 bg-white/20 mx-auto mb-4 rounded"></div>
-                <h3 className="text-lg font-semibold mb-2 text-white">Sales Deck / Pitch Materials</h3>
-                <p className="text-white/60 mb-4">Upload your current sales presentation</p>
+                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
+                <h3 className="text-lg font-semibold mb-2">Sales Deck / Pitch Materials</h3>
+                <p className="text-gray-500 mb-4">Upload your current sales presentation</p>
                 {uploadedFiles.deck.length > 0 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                     <div className="flex items-center justify-between">
@@ -880,13 +759,38 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
                 {/* Score Message */}
                 <p className="text-lg opacity-90 mb-4">{getScoreMessage(score)}</p>
                 
-                {/* Score Breakdown */}
-                <ScoreBreakdown
-                  scoreBreakdown={scoreBreakdown}
-                  outcomeWeights={outcomeWeights}
-                  summary={summary}
-                />
-
+                {/* Interview Validation Summary */}
+                {uploadedFiles.interviews.length > 0 && (
+                  <div className="bg-white/20 rounded-lg p-4 mb-4 backdrop-blur-sm">
+                    <h4 className="text-sm font-medium mb-2 opacity-90">Interview Validation Status</h4>
+                    <div className="flex justify-center space-x-6 text-sm">
+                      <div className="text-center">
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          item.comparisonOutcome === 'Aligned' || item.comparisonOutcome === 'Validated'
+                        ).length}</div>
+                        <div className="opacity-80">✅ Validated</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          item.comparisonOutcome === 'New Data Added' || item.comparisonOutcome === 'Gap Identified'
+                        ).length}</div>
+                        <div className="opacity-80">🔄 Partially Validated</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold">{localBuyerMapData.filter(item => 
+                          !item.comparisonOutcome || 
+                          item.validationStatus === 'pending' || 
+                          item.comparisonOutcome === 'Insufficient Data'
+                        ).length}</div>
+                        <div className="opacity-80">⚠️ Pending Review</div>
+                      </div>
+                    </div>
+                    <p className="text-xs opacity-75 mt-2">
+                      Based on {uploadedFiles.interviews.length} interview{uploadedFiles.interviews.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                )}
+                
                 {/* Action Buttons */}
                 <div className="flex justify-center space-x-4">
                   <button
@@ -928,15 +832,15 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             )}
 
             {/* Main Container with Glassmorphism */}
-            <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
+            <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
               
 
 
               {/* WHO Section */}
               {getFilteredDataBySection("WHO").length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Users className="w-5 h-5 mr-2 text-blue-400" />
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Users className="w-5 h-5 mr-2 text-blue-600" />
                     WHO • Target Customer Profile
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
@@ -972,8 +876,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               {/* WHAT Section */}
               {getFilteredDataBySection("WHAT").length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-red-400" />
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Target className="w-5 h-5 mr-2 text-red-600" />
                     WHAT • Problems & Solutions
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
@@ -1009,8 +913,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               {/* WHEN Section */}
               {getFilteredDataBySection("WHEN").length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Zap className="w-5 h-5 mr-2 text-amber-400" />
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Zap className="w-5 h-5 mr-2 text-orange-600" />
                     WHEN • Purchase Triggers
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
@@ -1046,8 +950,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               {/* WHY & HOW Section */}
               {getFilteredDataBySection("WHY").length > 0 && (
                 <div>
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Shield className="w-5 h-5 mr-2 text-indigo-400" />
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-indigo-600" />
                     WHY & HOW • Barriers & Messaging
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
@@ -1083,8 +987,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               {/* Fallback for uncategorized items */}
               {getFilteredDataBySection("OTHER").length > 0 && (
                 <div className="mt-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-gray-400" />
+                  <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Target className="w-5 h-5 mr-2 text-gray-600" />
                     Other Insights
                   </h2>
                   <div className="grid grid-cols-1 gap-6">
@@ -1124,11 +1028,10 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         {/* Step 4: Export */}
         {currentStep === 4 && (
           <div className="text-center p-12">
-            <h2 className="text-2xl font-bold text-white mb-4">Export Your BuyerMap Report</h2>
-            <p className="text-white/70">Export functionality coming soon.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Export Your BuyerMap Report</h2>
+            <p className="text-gray-600">Export functionality coming soon.</p>
           </div>
         )}
-        </div>
       </div>
       
       {/* Interview Processing Overlay */}

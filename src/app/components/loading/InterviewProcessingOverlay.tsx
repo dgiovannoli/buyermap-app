@@ -26,8 +26,8 @@ export default function InterviewProcessingOverlay({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-gradient-to-br from-blue-900/90 via-purple-900/90 to-indigo-900/90 backdrop-blur-xl rounded-lg shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-white/20">
         <div className="p-6">
           <ProcessVisualization
             phase="interview"
@@ -38,8 +38,8 @@ export default function InterviewProcessingOverlay({
           
           {/* Assumptions Being Processed */}
           {assumptions.length > 0 && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-semibold text-gray-900 mb-3">
+            <div className="mt-6 p-4 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20">
+              <h4 className="font-semibold text-white mb-3">
                 Validating {assumptions.length} Assumptions
               </h4>
               <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -51,12 +51,12 @@ export default function InterviewProcessingOverlay({
                   return (
                     <div
                       key={index}
-                      className={`p-2 rounded text-sm border ${
+                      className={`p-2 rounded text-sm border backdrop-blur-sm ${
                         isCurrentlyProcessing
-                          ? 'bg-blue-100 border-blue-300 text-blue-800'
+                          ? 'bg-blue-500/30 border-blue-400/50 text-blue-200'
                           : isCompleted
-                          ? 'bg-green-100 border-green-300 text-green-800'
-                          : 'bg-white border-gray-200 text-gray-600'
+                          ? 'bg-green-500/30 border-green-400/50 text-green-200'
+                          : 'bg-white/10 border-white/20 text-white/70'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -65,10 +65,10 @@ export default function InterviewProcessingOverlay({
                         </span>
                         <div className="flex-shrink-0 ml-2">
                           {isCurrentlyProcessing && (
-                            <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                           )}
                           {isCompleted && !isCurrentlyProcessing && (
-                            <div className="w-3 h-3 bg-green-500 rounded-full" />
+                            <div className="w-3 h-3 bg-green-400 rounded-full" />
                           )}
                         </div>
                       </div>
@@ -81,15 +81,15 @@ export default function InterviewProcessingOverlay({
 
           {/* Real-time Insights */}
           {stats.quotesFound && stats.quotesFound > 0 && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-sm text-blue-800">
-                <strong>Discovery in Progress:</strong> Found {stats.quotesFound} relevant quotes 
+            <div className="mt-4 p-3 bg-blue-500/20 backdrop-blur-sm rounded-lg border border-blue-400/30">
+              <div className="text-sm text-blue-200">
+                <strong className="text-blue-100">Discovery in Progress:</strong> Found {stats.quotesFound} relevant quotes 
                 {stats.uniqueSpeakers && ` from ${stats.uniqueSpeakers} different customers`}
                 {stats.statisticalValidity && (
                   <span className={`ml-2 font-medium ${
-                    stats.statisticalValidity === 'strong' ? 'text-green-600' :
-                    stats.statisticalValidity === 'moderate' ? 'text-yellow-600' :
-                    'text-red-600'
+                    stats.statisticalValidity === 'strong' ? 'text-green-400' :
+                    stats.statisticalValidity === 'moderate' ? 'text-yellow-400' :
+                    'text-red-400'
                   }`}>
                     ({stats.statisticalValidity} statistical validity)
                   </span>
