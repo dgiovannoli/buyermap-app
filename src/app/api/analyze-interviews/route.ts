@@ -4,6 +4,7 @@ import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData, Quote, StoredInterview } from '../../../types/buyermap';
 import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions, mapComparisonOutcome } from '../../../utils/dataMapping';
 import pLimit from 'p-limit';
+import { createInterview, createQuote, getCurrentUserServer } from '../../../lib/database-server';
 
 // Initialize OpenAI conditionally
 let openai: OpenAI | null = null;
@@ -601,28 +602,61 @@ async function extractInterviewMetadata(interviewText: string, fileName: string)
   };
 }
 
-// Store interview metadata (in real implementation, this would use a database)
-const STORED_INTERVIEWS_KEY = 'buyermap_stored_interviews';
+// Store interview metadata in Supabase database
+async function saveStoredInterview(interview: StoredInterview): Promise<string> {
+  try {
+    const interviewData = await createInterview({
+      filename: interview.filename,
+      upload_date: interview.uploadDate.toISOString(),
+      status: interview.status,
+      company_size: interview.companySize,
+      role: interview.role,
+      industry: interview.industry,
+      region: interview.region,
+      quotes_extracted: interview.quotesExtracted,
+      processing_time: interview.processingTime,
+      unique_speakers: interview.uniqueSpeakers,
+      vectors_stored: interview.vectorsStored,
+      tags: interview.tags || []
+    });
 
-function getStoredInterviews(): StoredInterview[] {
-  if (typeof window === 'undefined') return [];
-  const stored = localStorage.getItem(STORED_INTERVIEWS_KEY);
-  return stored ? JSON.parse(stored) : [];
+    console.log(`✅ Saved interview to database with ID: ${interviewData.id}`);
+    return interviewData.id;
+  } catch (error) {
+    console.error('❌ Failed to save interview to database:', error);
+    throw error;
+  }
 }
 
-function saveStoredInterview(interview: StoredInterview): void {
-  if (typeof window === 'undefined') return;
-  const existing = getStoredInterviews();
-  const updated = [...existing.filter(i => i.id !== interview.id), interview];
-  localStorage.setItem(STORED_INTERVIEWS_KEY, JSON.stringify(updated));
+// Save quotes to database
+async function saveQuotesToDatabase(interviewId: string, quotes: Quote[], assumption: string): Promise<void> {
+  try {
+    for (const quote of quotes) {
+      await createQuote({
+        interview_id: interviewId,
+        text: quote.text,
+        speaker: quote.speaker || 'Unknown',
+        role: quote.role,
+        source: quote.source || 'Interview',
+        assumption_category: assumption,
+        rejected: quote.rejected || false
+      });
+    }
+
+    console.log(`✅ Saved ${quotes.length} quotes to database for interview ${interviewId}`);
+  } catch (error) {
+    console.error('❌ Failed to save quotes to database:', error);
+    throw error;
+  }
 }
 
-// Process a single interview with metadata storage
+// Process a single interview with database storage
 async function processSingleInterviewWithStorage(file: File, assumptions: string[]): Promise<{
   quotes: Record<string, Quote[]>;
   metadata: StoredInterview;
+  databaseId: string;
 }> {
-  console.log(`📁 Processing interview with storage: ${file.name}`);
+  console.log(`📁 Processing interview with database storage: ${file.name}`);
   const processingStartTime = Date.now();
   
   const parsed = await parseFile(file);
@@ -681,9 +715,20 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
   
   console.log(`✅ Created stored interview record:`, storedInterview);
   
+  // Save to database
+  const databaseId = await saveStoredInterview(storedInterview);
+  
+  // Save all quotes to database
+  for (const [assumption, quotes] of Object.entries(classificationResults)) {
+    if (quotes.length > 0) {
+      await saveQuotesToDatabase(databaseId, quotes, assumption);
+    }
+  }
+  
   return {
     quotes: classificationResults,
-    metadata: storedInterview
+    metadata: storedInterview,
+    databaseId
   };
 }
 
@@ -785,6 +830,15 @@ export async function POST(request: NextRequest) {
   const processingStartTime = Date.now();
   
   try {
+    // Check authentication first
+    const user = await getCurrentUserServer();
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     // Check if we should use mock data
     if (process.env.NEXT_PUBLIC_USE_MOCK === "TRUE") {
       console.log('🎭 Using mock data for interview analysis');
@@ -804,7 +858,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🎯 Starting parallel processing for ${files.length} interviews, ${existingAssumptions.length} assumptions`);
+    console.log(`🎯 Starting parallel processing for ${files.length} interviews, ${existingAssumptions.length} assumptions for user ${user.id}`);
     const assumptionsList: string[] = existingAssumptions.map(a => a.v1Assumption);
     
     // Set up parallel processing with rate limiting
@@ -832,14 +886,14 @@ export async function POST(request: NextRequest) {
       )
     );
     
-    // Extract interview metadata for storage (V1: just collect, don't store yet)
+    // Extract interview metadata for storage
     const interviewMetadata = allResults
       .filter(result => !result.error)
       .map(result => result.result)
       .filter(result => 'metadata' in result)
-      .map(result => (result as { metadata: StoredInterview }).metadata);
+      .map(result => (result as { metadata: StoredInterview; databaseId: string }).metadata);
     
-    console.log(`📚 Collected metadata for ${interviewMetadata.length} interviews`);
+    console.log(`📚 Saved ${interviewMetadata.length} interviews to database`);
     
     // Flatten and aggregate results from all interviews
     const aggregatedResults = existingAssumptions.map(assumption => {

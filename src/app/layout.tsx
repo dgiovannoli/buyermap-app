@@ -4,6 +4,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MSWProvider from "../components/MSWProvider";
 import TopNavigation from "../components/Navigation/TopNavigation";
+import FeedbackButton from "../components/Navigation/FeedbackButton";
+import BetaAppWrapper from "../components/BetaAppWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,12 +34,15 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <MSWProvider />
-        <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
-          <TopNavigation />
-          <main>
-            {children}
-          </main>
-        </div>
+        <BetaAppWrapper>
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+            <TopNavigation />
+            <main>
+              {children}
+            </main>
+            <FeedbackButton variant="floating" position="bottom-right" />
+          </div>
+        </BetaAppWrapper>
       </body>
     </html>
   );

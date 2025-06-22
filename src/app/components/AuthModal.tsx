@@ -49,6 +49,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
               },
             }
           }}
+          providers={[]}
+          onlyThirdPartyProviders={false}
           redirectTo={`${origin}/auth/callback`}
           showLinks={true}
           view="sign_up"

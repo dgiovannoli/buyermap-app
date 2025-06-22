@@ -8,7 +8,14 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "feedback:start": "./scripts/start-fider.sh",
+    "feedback:logs": "docker-compose logs -f fider",
+    "feedback:stop": "docker-compose down",
+    "feedback:restart": "docker-compose restart fider",
+    "feedback:test": "./scripts/test-local-setup.sh",
+    "vps:deploy": "./scripts/vps-setup.sh",
+    "vps:domain": "./scripts/configure-domain.sh"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",

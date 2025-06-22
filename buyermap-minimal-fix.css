@@ -1,0 +1,50 @@
+/* BuyerMap Theme - Minimal Fix (Last Try!) */
+
+/* Dark gradient background to match BuyerMap */
+body {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #000000 100%) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Simple navigation bar at top */
+body::before {
+    content: "← Back to BuyerMap" !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 50px !important;
+    background: rgba(15, 23, 42, 0.95) !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.3) !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    align-items: center !important;
+    padding-left: 20px !important;
+    color: #60a5fa !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+}
+
+body {
+    padding-top: 50px !important;
+}
+
+/* ONLY fix the white cards to have dark text - nothing else */
+.c-card {
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.c-card * {
+    color: #1e293b !important;
+}
+
+/* Make vote buttons blue */
+.c-vote-counter, [class*="vote"], button[class*="vote"] {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border: 2px solid #2563eb !important;
+    border-radius: 8px !important;
+}
+
+/* That's it - minimal changes only */ 

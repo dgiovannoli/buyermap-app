@@ -33,6 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Docker volumes
+docker-volumes/
+
+# Fider data
+fider_data/
+
 # vercel
 .vercel
 

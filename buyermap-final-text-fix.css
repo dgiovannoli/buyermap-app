@@ -1,0 +1,164 @@
+/* BuyerMap Theme - Final Text Fix */
+
+/* Dark gradient background to match BuyerMap */
+body {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #000000 100%) !important;
+    color: #f8fafc !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Simple navigation bar at top - not intrusive */
+body::before {
+    content: "← Back to BuyerMap" !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 50px !important;
+    background: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(10px) !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.3) !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    align-items: center !important;
+    padding-left: 20px !important;
+    color: #60a5fa !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+}
+
+/* Add small padding to body for navigation */
+body {
+    padding-top: 50px !important;
+}
+
+/* Portal title - small and unobtrusive */
+body::after {
+    content: "BuyerMap Feedback" !important;
+    position: fixed !important;
+    top: 15px !important;
+    right: 20px !important;
+    color: #94a3b8 !important;
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    z-index: 1001 !important;
+}
+
+/* Keep Fider's existing header styling mostly intact */
+.c-header, header {
+    background: rgba(15, 23, 42, 0.8) !important;
+    backdrop-filter: blur(10px) !important;
+}
+
+/* AGGRESSIVE TEXT FIXING - Make ALL text in white boxes readable */
+.c-card, .c-segment, .c-list-item, .c-idea-item, .c-modal, .c-form {
+    background: rgba(255, 255, 255, 0.98) !important;
+    color: #1e293b !important;
+}
+
+/* Force ALL text elements to be dark - very aggressive approach */
+* {
+    color: inherit !important;
+}
+
+/* But specifically override for content areas */
+.c-card, .c-card *, 
+.c-segment, .c-segment *, 
+.c-list-item, .c-list-item *, 
+.c-idea-item, .c-idea-item *, 
+.c-modal, .c-modal *, 
+.c-form, .c-form * {
+    color: #1e293b !important;
+}
+
+/* Extra specific targeting for the suggestion box */
+.c-card p, .c-card div, .c-card span, .c-card h1, .c-card h2, .c-card h3, .c-card h4, .c-card h5, .c-card h6,
+.c-segment p, .c-segment div, .c-segment span, .c-segment h1, .c-segment h2, .c-segment h3, .c-segment h4, .c-segment h5, .c-segment h6 {
+    color: #0f172a !important;
+    font-weight: 500 !important;
+}
+
+/* Make sure header and navigation text stays light */
+.c-header, .c-header *, header, header * {
+    color: #f8fafc !important;
+}
+
+body::before, body::after {
+    color: #60a5fa !important;
+}
+
+/* Improve vote buttons without breaking them */
+.c-vote-counter, [class*="vote"], button[class*="vote"] {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: #ffffff !important;
+    border: 2px solid #2563eb !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+}
+
+.c-vote-counter:hover, [class*="vote"]:hover, button[class*="vote"]:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+}
+
+/* Vote button text should stay white */
+.c-vote-counter, .c-vote-counter *, 
+[class*="vote"], [class*="vote"] *, 
+button[class*="vote"], button[class*="vote"] * {
+    color: #ffffff !important;
+}
+
+/* Form inputs - just improve readability */
+.c-input, .c-textarea, .c-select, input, textarea, select {
+    background: rgba(255, 255, 255, 0.98) !important;
+    color: #1e293b !important;
+    border: 1px solid rgba(148, 163, 184, 0.3) !important;
+}
+
+.c-input:focus, .c-textarea:focus, .c-select:focus, input:focus, textarea:focus, select:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Placeholder text */
+.c-input::placeholder, .c-textarea::placeholder, input::placeholder, textarea::placeholder {
+    color: #64748b !important;
+}
+
+/* Primary buttons */
+.c-button--primary, button[class*="primary"] {
+    background: linear-gradient(45deg, #3b82f6, #2563eb) !important;
+    border: none !important;
+    color: #ffffff !important;
+}
+
+.c-button--primary:hover, button[class*="primary"]:hover {
+    background: linear-gradient(45deg, #2563eb, #1d4ed8) !important;
+}
+
+/* Button text should stay white */
+.c-button--primary, .c-button--primary *, 
+button[class*="primary"], button[class*="primary"] * {
+    color: #ffffff !important;
+}
+
+/* Footer */
+.c-footer, footer {
+    background: rgba(15, 23, 42, 0.9) !important;
+    color: #cbd5e1 !important;
+}
+
+/* Footer text should stay light */
+.c-footer, .c-footer *, footer, footer * {
+    color: #cbd5e1 !important;
+}
+
+/* Responsive - hide portal title on mobile */
+@media (max-width: 768px) {
+    body::after {
+        display: none !important;
+    }
+} 

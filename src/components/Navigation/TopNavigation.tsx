@@ -4,6 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Brain, Upload, BarChart3, Library, Settings } from 'lucide-react';
+import FeedbackButton from './FeedbackButton';
+import UserMenu from '../../app/components/UserMenu';
 
 interface NavItem {
   href: string;
@@ -87,7 +89,9 @@ export default function TopNavigation() {
           </div>
 
           {/* Action Button */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <UserMenu />
+            <FeedbackButton variant="minimal" />
             <Link
               href="/upload"
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg"
