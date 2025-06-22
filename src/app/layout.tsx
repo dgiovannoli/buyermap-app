@@ -4,7 +4,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MSWProvider from "../components/MSWProvider";
 import TopNavigation from "../components/Navigation/TopNavigation";
-import FeedbackButton from "../components/Navigation/FeedbackButton";
 import BetaAppWrapper from "../components/BetaAppWrapper";
 
 const geistSans = Geist({
@@ -40,7 +39,6 @@ export default function RootLayout({
             <main>
               {children}
             </main>
-            <FeedbackButton variant="floating" position="bottom-right" />
           </div>
         </BetaAppWrapper>
       </body>

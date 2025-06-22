@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { MockTestButton } from '../../components/MockTestButton';
+'use client';
+
+import React, { useState } from 'react';
+import { Upload, FileText, CheckCircle, X, ArrowRight, Target, BarChart3, Users, MessageSquare, Lightbulb, TrendingUp } from 'lucide-react';
 
 // Mock data
 /* const mockBuyerMapData = [
@@ -364,92 +366,92 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
       <div className="relative max-w-7xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-2 gap-16 items-center min-h-screen">
-          {/* Left Column - Hero Copy & CTA */}
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          {/* Left Column - Content */}
           <div className="space-y-8">
-            {/* Badge/Tag */}
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-              <span className="text-sm font-medium text-blue-300">✨ BuyerMap Analysis</span>
-            </div>
-            
-            {/* Hero Headline */}
-            <div>
-              <h1 className="text-6xl font-bold mb-6 leading-tight bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+            <div className="space-y-6">
+              <h1 className="text-5xl font-bold text-white leading-tight">
                 Validate Your ICP Assumptions
               </h1>
-              <p className="text-xl text-gray-400 mb-8 leading-relaxed">
-                Compare your sales messaging against real customer interviews
+              <p className="text-xl text-gray-300 leading-relaxed">
+                Compare your sales messaging against real customer interview data. 
+                Get insights that help you refine your targeting and messaging.
               </p>
             </div>
 
-            {/* Mock Test Section (Development Only) */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mb-6">
-                <MockTestButton />
-              </div>
-            )}
-
-            {/* Main CTA */}
-            <div className="space-y-4 relative z-10">
+            <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={handleMainCTA}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-2xl hover:shadow-3xl transition-all duration-200 relative z-10"
-                style={{ pointerEvents: 'auto' }}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 Create Your BuyerMap Report
               </button>
-              
-              <p className="text-sm text-gray-500 text-center">
-                Free to try • Export or save with account
-              </p>
+              <button className="border border-white/30 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-white/10 transition-all duration-200">
+                Watch Demo
+              </button>
             </div>
           </div>
 
-          {/* Right Column - Demo Preview */}
+          {/* Right Column - Results Preview */}
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-3xl backdrop-blur-sm"></div>
             <div className="relative bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-white/20">
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                      <span className="text-lg">📊</span>
+                {/* Header with Overall Score */}
+                <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-6">
+                  <h3 className="text-lg font-medium mb-2 opacity-90">BuyerMap Validation Results</h3>
+                  <div className="text-4xl font-bold mb-2">87%</div>
+                  <p className="text-sm opacity-90">Overall Alignment Score</p>
+                  <p className="text-xs opacity-75 mt-1">Based on 12 interviews</p>
+                </div>
+
+                {/* Validation Cards Preview */}
+                <div className="space-y-4">
+                  {/* Validated Assumption */}
+                  <div className="bg-green-500/20 border border-green-400/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-green-400">Buyer Titles</h4>
+                      <span className="text-xs bg-green-500 text-white px-2 py-1 rounded">Validated</span>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">Alignment Score</h3>
-                      <p className="text-sm text-gray-400">Based on 12 interviews</p>
+                    <p className="text-xs text-gray-300 mb-2">Target decision makers confirmed</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">8/10</span>
+                      <span className="text-sm font-medium text-green-400">88%</span>
                     </div>
                   </div>
-                  <div className="text-3xl font-bold text-blue-400">87%</div>
+
+                  {/* New Insight */}
+                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-blue-400">Pain Points</h4>
+                      <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded">New Insights</span>
+                    </div>
+                    <p className="text-xs text-gray-300 mb-2">3 additional pain points discovered</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">3 quotes</span>
+                      <span className="text-sm font-medium text-blue-400">3</span>
+                    </div>
+                  </div>
+
+                  {/* Messaging Adjustments */}
+                  <div className="bg-purple-500/20 border border-purple-400/30 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-purple-400">Company Size</h4>
+                      <span className="text-xs bg-purple-500 text-white px-2 py-1 rounded">Gap Identified</span>
+                    </div>
+                    <p className="text-xs text-gray-300 mb-2">Targeting too broad - refine focus</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">5 quotes</span>
+                      <span className="text-sm font-medium text-purple-400">5</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Validated Assumptions</span>
-                    <span className="text-sm font-medium text-green-400">8/10</span>
-                  </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-green-400 rounded-full" style={{ width: '80%' }}></div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">New Insights</span>
-                    <span className="text-sm font-medium text-blue-400">3</span>
-                  </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-400 rounded-full" style={{ width: '30%' }}></div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Messaging Adjustments</span>
-                    <span className="text-sm font-medium text-purple-400">5</span>
-                  </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-400 rounded-full" style={{ width: '50%' }}></div>
+                {/* Action Preview */}
+                <div className="pt-4 border-t border-white/20">
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span>Export • Share • Refine</span>
+                    <span>✨ AI-Powered</span>
                   </div>
                 </div>
               </div>
@@ -463,17 +465,23 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
               1
             </div>
-            <h3 className="text-xl font-bold mb-4 text-white">Upload Your Deck</h3>
+            <h3 className="text-xl font-bold mb-4 text-white">Upload Your Materials</h3>
             <p className="text-gray-400 mb-6 leading-relaxed">
-              Share your sales deck and customer interview transcripts. We support PDF, PowerPoint, and text files.
+              Upload your sales deck and customer interview transcripts. We extract assumptions and validate them against real customer feedback.
             </p>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
               <div className="flex items-center justify-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                    <span className="text-xs">📄</span>
+                    <FileText className="w-4 h-4 text-blue-400" />
                   </div>
                   <span className="text-sm text-gray-300">Sales Deck</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <span className="text-sm text-gray-300">Interviews</span>
                 </div>
               </div>
             </div>
@@ -483,9 +491,9 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
             <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
               2
             </div>
-            <h3 className="text-xl font-bold mb-4 text-white">AI Analysis</h3>
+            <h3 className="text-xl font-bold mb-4 text-white">AI Validation</h3>
             <p className="text-gray-400 mb-6 leading-relaxed">
-              Our AI extracts assumptions from your deck and validates them against customer quotes from interviews.
+              Our AI extracts ICP assumptions from your deck and validates them against customer quotes, identifying gaps and confirming alignments.
             </p>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
               <div className="space-y-3">
@@ -508,7 +516,7 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
                     <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                     <span className="text-sm text-gray-300">Calculate confidence</span>
                   </div>
-                  <span className="text-xs text-blue-400 font-medium">...</span>
+                  <span className="text-xs text-blue-400 font-medium">87%</span>
                 </div>
               </div>
             </div>
@@ -518,23 +526,23 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
             <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl mx-auto mb-6 shadow-lg group-hover:shadow-xl transition-shadow duration-200">
               3
             </div>
-            <h3 className="text-xl font-bold mb-4 text-white">Get Actionable Results</h3>
+            <h3 className="text-xl font-bold mb-4 text-white">Actionable Insights</h3>
             <p className="text-gray-400 mb-6 leading-relaxed">
-              Receive a detailed report with messaging recommendations, confidence scores, and supporting evidence.
+              Get validation cards showing what's working, what needs adjustment, and new insights discovered from customer interviews.
             </p>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">Alignment Score</span>
-                  <span className="text-lg font-bold text-blue-400">73%</span>
+                  <span className="text-sm text-gray-300">Validated</span>
+                  <span className="text-sm font-bold text-green-400">8</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">Insights Found</span>
-                  <span className="text-lg font-bold text-green-400">3</span>
+                  <span className="text-sm text-gray-300">New Insights</span>
+                  <span className="text-sm font-bold text-blue-400">3</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">Recommendations</span>
-                  <span className="text-lg font-bold text-purple-400">5</span>
+                  <span className="text-sm text-gray-300">Gaps Found</span>
+                  <span className="text-sm font-bold text-purple-400">5</span>
                 </div>
               </div>
             </div>

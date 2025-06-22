@@ -62,7 +62,7 @@ export default function FeedbackButton({
         `}
       >
         <MessageSquare className="h-4 w-4" />
-        <span>Feedback</span>
+        <span>Share Feedback</span>
         <ExternalLink className="h-3 w-3 opacity-60" />
       </button>
     );

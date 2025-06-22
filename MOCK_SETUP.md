@@ -33,11 +33,9 @@ When `NEXT_PUBLIC_USE_MOCK=TRUE`, the following APIs return mock data instead of
    npm run dev
    ```
 
-2. **Check the home page** - A mock test button will appear in development mode
+2. **Test the application flow** - Upload files and verify mock responses are returned
 
-3. **Test environment variables** - Click "Check Environment Variables" to verify setup
-
-4. **Test API endpoints** - Click "Test Deck Analysis API" to verify mock responses
+3. **Check console logs** - Look for mock mode indicators in browser console
 
 ### 5. Expected Behavior
 
@@ -63,39 +61,21 @@ When mocks are working correctly, you should see:
 
 ### 7. Switching Between Mock and Real APIs
 
-**To use mock data (development):**
-```bash
-NEXT_PUBLIC_USE_MOCK=TRUE
-```
+To switch to real APIs:
+1. Set `NEXT_PUBLIC_USE_MOCK=FALSE` in `.env.local`
+2. Add a valid OpenAI API key
+3. Restart the development server
 
-**To use real OpenAI APIs (production):**
-```bash
-NEXT_PUBLIC_USE_MOCK=FALSE
-OPENAI_API_KEY=sk-your-real-openai-key
-```
+To switch back to mocks:
+1. Set `NEXT_PUBLIC_USE_MOCK=TRUE` in `.env.local`
+2. Restart the development server
 
-### 8. Troubleshooting
+## Mock Data Structure
 
-**Mock data not loading:**
-- Check that `.env.local` exists and contains `NEXT_PUBLIC_USE_MOCK=TRUE`
-- Restart the development server after changing environment variables
-- Check browser console for mock-related logs
+The mock data follows the same structure as real API responses:
+- Assumptions with ICP attributes
+- Confidence scores and explanations
+- Validation outcomes and quotes
+- Overall alignment scores
 
-**Still getting OpenAI errors:**
-- Verify environment variable is set correctly
-- Make sure you restarted the dev server
-- Check that the API routes are using the mock helper functions
-
-### 9. Files Modified for Mock System
-
-- **API Routes**: `src/app/api/analyze-deck/route.ts`, `src/app/api/analyze-interviews/route.ts`, `src/app/api/analyze-files/route.ts`
-- **Mock Helper**: `src/utils/mockHelper.ts`
-- **Mock Data**: `src/mocks/fixtures/*.json`
-- **Test Component**: `src/components/MockTestButton.tsx`
-
-## Ready to Test!
-
-1. Set up your `.env.local` file
-2. Start the dev server: `npm run dev`
-3. Visit the home page and use the mock test button
-4. Check console logs for mock confirmation messages 
+This ensures seamless switching between mock and real data during development. 
