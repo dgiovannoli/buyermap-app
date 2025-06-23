@@ -13,11 +13,46 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
   const supabase = createClientComponent()
   const [mounted, setMounted] = useState(false)
   const [origin, setOrigin] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
     setOrigin(window.location.origin)
+    
+    // Debug logging for production
+    console.log('🔧 Auth Modal Debug Info:', {
+      origin: window.location.origin,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      redirectTo: `${window.location.origin}/auth/callback`
+    })
   }, [])
+
+  // Listen for auth errors
+  useEffect(() => {
+    if (!mounted) return
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔐 Auth Event:', event, session?.user?.email)
+        
+        if (event === 'SIGNED_IN') {
+          console.log('✅ User signed in successfully')
+          onClose()
+        }
+        
+        if (event === 'INITIAL_SESSION') {
+          console.log('🔄 Initial session loaded')
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [mounted, supabase, onClose])
+
+  const handleAuthError = (error: any) => {
+    console.error('❌ Auth Error:', error)
+    setError(error.message || 'Authentication failed. Please try again.')
+  }
 
   if (!isOpen || !mounted) return null
 
@@ -34,6 +69,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
             ×
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            <p className="text-sm">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="text-xs underline mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <Auth
           supabaseClient={supabase}
           appearance={{
@@ -54,9 +102,37 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
           redirectTo={`${origin}/auth/callback`}
           showLinks={true}
           view="sign_up"
+          localization={{
+            variables: {
+              sign_up: {
+                email_label: 'Email address',
+                password_label: 'Create a password',
+                button_label: 'Create account',
+                loading_button_label: 'Creating account...',
+                social_provider_text: 'Continue with {{provider}}',
+                link_text: 'Already have an account? Sign in',
+                confirmation_text: 'Check your email for a verification link'
+              },
+              sign_in: {
+                email_label: 'Email address', 
+                password_label: 'Your password',
+                button_label: 'Sign in',
+                loading_button_label: 'Signing in...',
+                social_provider_text: 'Continue with {{provider}}',
+                link_text: "Don't have an account? Sign up"
+              }
+            }
+          }}
         />
+
+        <div className="mt-4 text-xs text-gray-500 text-center">
+          <p>By creating an account, you agree to our terms of service.</p>
+          <p className="mt-1">
+            Having trouble? Check your email for the magic link.
+          </p>
+        </div>
       </div>
     </div>
   )
-}// Updated for Vercel fix
+}
 
