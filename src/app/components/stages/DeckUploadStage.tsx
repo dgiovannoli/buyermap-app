@@ -157,10 +157,73 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
       
       // Step 1: Upload directly to Vercel Blob using client-side upload
       console.log('🔄 Step 1: Uploading directly to Vercel Blob...');
-      const blob = await upload(uploadedDeck.name, uploadedDeck, {
-        access: 'public',
-        handleUploadUrl: '/api/upload-deck',
-      });
+      
+      let blob;
+      try {
+        blob = await upload(uploadedDeck.name, uploadedDeck, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-deck',
+        });
+      } catch (error: any) {
+        // Handle file exists error
+        if (error.status === 409 || (error.message && error.message.includes('FILE_EXISTS'))) {
+          console.log(`🔄 [BLOB] File exists conflict for: ${uploadedDeck.name}`);
+          
+          // Try to parse the error response
+          let existingUrl = null;
+          try {
+            const errorResponse = JSON.parse(error.message);
+            existingUrl = errorResponse.existingUrl;
+          } catch {
+            // If parsing fails, try to extract URL from error message
+            const urlMatch = error.message.match(/https:\/\/[^\s]+/);
+            existingUrl = urlMatch ? urlMatch[0] : null;
+          }
+          
+          if (existingUrl) {
+            const userChoice = confirm(
+              `The file "${uploadedDeck.name}" already exists.\n\n` +
+              `• Click "OK" to use the existing file\n` +
+              `• Click "Cancel" to upload a new version (overwrite)`
+            );
+            
+            if (userChoice) {
+              // Use existing file
+              console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
+              blob = { url: existingUrl };
+            } else {
+              // Upload with overwrite
+              console.log(`🔄 [BLOB] Overwriting file: ${uploadedDeck.name}`);
+              blob = await upload(uploadedDeck.name, uploadedDeck, {
+                access: 'public',
+                handleUploadUrl: '/api/upload-deck',
+                clientPayload: JSON.stringify({ allowOverwrite: true }),
+              });
+              
+              console.log(`✅ [BLOB] Overwrite complete:`, blob.url);
+            }
+          } else {
+            // Fallback: ask user and add random suffix if they don't want to overwrite
+            const userChoice = confirm(
+              `The file "${uploadedDeck.name}" already exists. Would you like to upload it with a unique name?`
+            );
+            
+            if (userChoice) {
+              blob = await upload(uploadedDeck.name, uploadedDeck, {
+                access: 'public',
+                handleUploadUrl: '/api/upload-deck',
+                clientPayload: JSON.stringify({ allowOverwrite: false, addRandomSuffix: true }),
+              });
+              
+              console.log(`✅ [BLOB] Upload with unique name:`, blob.url);
+            } else {
+              throw new Error(`Upload cancelled for file: ${uploadedDeck.name}`);
+            }
+          }
+        } else {
+          throw error; // Re-throw other errors
+        }
+      }
 
       console.log('🔄 Direct upload completed:', blob.url);
       

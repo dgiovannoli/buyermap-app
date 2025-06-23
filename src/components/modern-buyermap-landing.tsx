@@ -430,13 +430,76 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           const file = newFiles[i];
           console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${newFiles.length}:`, file.name);
           
-          const blob = await upload(file.name, file, {
-            access: 'public',
-            handleUploadUrl: '/api/upload-interview',
-          });
-          
-          console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
-          blobUrls.push(blob.url);
+          try {
+            const blob = await upload(file.name, file, {
+              access: 'public',
+              handleUploadUrl: '/api/upload-interview',
+            });
+            
+            console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
+            blobUrls.push(blob.url);
+          } catch (error: any) {
+            // Handle file exists error
+            if (error.status === 409 || (error.message && error.message.includes('FILE_EXISTS'))) {
+              console.log(`🔄 [BLOB] File exists conflict for: ${file.name}`);
+              
+              // Try to parse the error response
+              let existingUrl = null;
+              try {
+                const errorResponse = JSON.parse(error.message);
+                existingUrl = errorResponse.existingUrl;
+              } catch {
+                // If parsing fails, try to extract URL from error message
+                const urlMatch = error.message.match(/https:\/\/[^\s]+/);
+                existingUrl = urlMatch ? urlMatch[0] : null;
+              }
+              
+              if (existingUrl) {
+                const userChoice = confirm(
+                  `The file "${file.name}" already exists.\n\n` +
+                  `• Click "OK" to use the existing file\n` +
+                  `• Click "Cancel" to upload a new version (overwrite)`
+                );
+                
+                if (userChoice) {
+                  // Use existing file
+                  console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
+                  blobUrls.push(existingUrl);
+                } else {
+                  // Upload with overwrite
+                  console.log(`🔄 [BLOB] Overwriting file: ${file.name}`);
+                  const blob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload-interview',
+                    clientPayload: JSON.stringify({ allowOverwrite: true }),
+                  });
+                  
+                  console.log(`✅ [BLOB] Overwrite ${i + 1} complete:`, blob.url);
+                  blobUrls.push(blob.url);
+                }
+              } else {
+                // Fallback: ask user and add random suffix if they don't want to overwrite
+                const userChoice = confirm(
+                  `The file "${file.name}" already exists. Would you like to upload it with a unique name?`
+                );
+                
+                if (userChoice) {
+                  const blob = await upload(file.name, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/upload-interview',
+                    clientPayload: JSON.stringify({ allowOverwrite: false, addRandomSuffix: true }),
+                  });
+                  
+                  console.log(`✅ [BLOB] Upload ${i + 1} with unique name:`, blob.url);
+                  blobUrls.push(blob.url);
+                } else {
+                  throw new Error(`Upload cancelled for file: ${file.name}`);
+                }
+              }
+            } else {
+              throw error; // Re-throw other errors
+            }
+          }
         }
         
         console.log('🎙️ [BLOB] All files uploaded, starting analysis with blob URLs:', blobUrls);
