@@ -152,27 +152,48 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     processingProgress.startDeckProcessing(estimatedSlides);
 
     try {
-      console.log('🔄 Starting API call');
-      
-      // Use regular FormData upload (Vercel Pro supports 50MB)
       console.log('🔄 File size:', uploadedDeck.size, 'bytes');
-      const formData = new FormData();
-      formData.append('deck', uploadedDeck);
       
-      const apiResponse = await fetch('/api/analyze-deck', {
+      // Step 1: Upload file to Vercel Blob
+      console.log('🔄 Step 1: Uploading to Vercel Blob...');
+      const uploadFormData = new FormData();
+      uploadFormData.append('deck', uploadedDeck);
+      
+      const uploadResponse = await fetch('/api/upload-deck', {
         method: 'POST',
-        body: formData
+        body: uploadFormData
       });
 
-      console.log('🔄 API call completed, status:', apiResponse.status);
-
-      if (!apiResponse.ok) {
-        const errorText = await apiResponse.text();
-        throw new Error(`Failed to process deck: ${apiResponse.status} ${errorText}`);
+      if (!uploadResponse.ok) {
+        const uploadError = await uploadResponse.text();
+        throw new Error(`Upload failed: ${uploadResponse.status} ${uploadError}`);
       }
 
-      const data = await apiResponse.json();
-      console.log('🔄 API data parsed:', data);
+      const uploadResult = await uploadResponse.json();
+      console.log('🔄 Upload completed:', uploadResult.url);
+      
+      // Step 2: Analyze the uploaded file
+      console.log('🔄 Step 2: Analyzing deck...');
+      const analysisResponse = await fetch('/api/analyze-deck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrl: uploadResult.url,
+          filename: uploadResult.filename
+        })
+      });
+
+      console.log('🔄 Analysis completed, status:', analysisResponse.status);
+
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text();
+        throw new Error(`Failed to analyze deck: ${analysisResponse.status} ${errorText}`);
+      }
+
+      const data = await analysisResponse.json();
+      console.log('🔄 Analysis data parsed:', data);
 
       console.log('🔄 About to call onDeckProcessed');
       onDeckProcessed(data);

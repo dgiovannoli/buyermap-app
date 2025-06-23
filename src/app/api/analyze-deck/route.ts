@@ -52,42 +52,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(mock.default);
     }
     
-    console.log('Attempting to parse FormData...');
-    let formData;
+    console.log('Attempting to parse request body...');
+    let requestBody;
     try {
-      formData = await req.formData();
-      console.log('FormData parsed successfully');
+      requestBody = await req.json();
+      console.log('Request body parsed successfully');
     } catch (error) {
-      console.error('Failed to parse FormData:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-      }
+      console.error('Failed to parse request body:', error);
       return NextResponse.json({ 
-        error: `Failed to parse upload data: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        error: `Failed to parse request data: ${error instanceof Error ? error.message : 'Unknown error'}` 
       }, { status: 400 });
     }
     
-    const deckFile = formData.get('deck') as File;
-    console.log('File extracted from FormData:', deckFile?.name, deckFile?.size, 'bytes');
+    const { blobUrl, filename } = requestBody;
+    console.log('Blob URL received:', blobUrl, 'Filename:', filename);
 
-    if (!deckFile) {
-      console.error('No file provided in request');
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!blobUrl) {
+      console.error('No blob URL provided in request');
+      return NextResponse.json({ error: 'No blob URL provided' }, { status: 400 });
     }
 
-    // Check file size (50MB limit)
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
-    console.log('File size check:', deckFile.size, 'vs limit:', MAX_FILE_SIZE);
+    console.log('Starting deck analysis for file:', filename, 'from blob:', blobUrl);
     
-    if (deckFile.size > MAX_FILE_SIZE) {
-      console.error('File too large:', deckFile.size, 'bytes');
-      return NextResponse.json({ 
-        error: `File too large. Maximum size is 50MB, but your file is ${(deckFile.size / 1024 / 1024).toFixed(2)}MB.` 
-      }, { status: 413 });
+    // Download the file from Vercel Blob
+    console.log('Downloading file from blob...');
+    const fileResponse = await fetch(blobUrl);
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to download file from blob: ${fileResponse.statusText}`);
     }
-
-    console.log('Starting deck analysis for file:', deckFile.name, 'Size:', (deckFile.size / 1024 / 1024).toFixed(2), 'MB');
+    
+    const fileBuffer = await fileResponse.arrayBuffer();
+    const deckFile = new File([fileBuffer], filename, { 
+      type: fileResponse.headers.get('content-type') || 'application/pdf' 
+    });
+    console.log('File downloaded successfully, size:', deckFile.size, 'bytes');
 
     // 1. Parse the deck file
     console.log('Step 1: Parsing deck file...');
