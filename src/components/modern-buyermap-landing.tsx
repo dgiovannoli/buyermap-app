@@ -636,33 +636,50 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
           // Update state with interview data
           if (payload.success && payload.assumptions) {
-            console.log('🔍 [DEBUG] Interview payload received:', {
-              assumptionsCount: payload.assumptions.length,
-              sampleAssumption: payload.assumptions[0] ? {
+            // Enhanced debugging before processing
+            console.log('🔍 [DEBUG] Raw interview API response:', {
+              payloadSuccess: payload.success,
+              assumptionsLength: payload.assumptions?.length || 0,
+              firstAssumption: payload.assumptions?.[0] ? {
                 id: payload.assumptions[0].id,
+                hasQuotes: !!(payload.assumptions[0].quotes && payload.assumptions[0].quotes.length > 0),
+                quotesLength: payload.assumptions[0].quotes?.length || 0,
                 hasRealityFromInterviews: !!payload.assumptions[0].realityFromInterviews,
-                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100),
-                quotesCount: payload.assumptions[0].quotes?.length || 0
-              } : 'none'
+                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100) || 'empty',
+                hasKeyFinding: !!payload.assumptions[0].keyFinding,
+                hasInterviewInsights: !!payload.assumptions[0].interviewInsights,
+                hasSummary: !!payload.assumptions[0].summary,
+                firstQuote: payload.assumptions[0].quotes?.[0] ? {
+                  hasText: !!payload.assumptions[0].quotes[0].text,
+                  hasSpeaker: !!payload.assumptions[0].quotes[0].speaker,
+                  textPreview: payload.assumptions[0].quotes[0].text?.slice(0, 50) || 'no text'
+                } : 'no quotes'
+              } : 'no first assumption',
+              totalQuotes: payload.assumptions?.reduce((sum: number, a: any) => sum + (a.quotes?.length || 0), 0) || 0,
+              metadataQuotes: payload.metadata?.totalQuotes || 'no metadata'
             });
+
+            // Ensure realityFromInterviews is properly mapped
+            const processedAssumptions = payload.assumptions.map((assumption: any) => ({
+              ...assumption,
+              realityFromInterviews: assumption.realityFromInterviews || 
+                                   assumption.keyFinding || 
+                                   assumption.interviewInsights || 
+                                   assumption.summary ||
+                                   (assumption.quotes?.length > 0 ? 
+                                     'Interview insights available - see supporting quotes for details.' : 
+                                     'No interview data available')
+            }));
             
-                         // Ensure realityFromInterviews is properly mapped
-             const processedAssumptions = payload.assumptions.map((assumption: any) => ({
-               ...assumption,
-               realityFromInterviews: assumption.realityFromInterviews || 
-                                    assumption.keyFinding || 
-                                    assumption.interviewInsights || 
-                                    assumption.summary ||
-                                    (assumption.quotes?.length > 0 ? 
-                                      'Interview insights available - see supporting quotes for details.' : 
-                                      'No interview data available')
-             }));
-            
-                         console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
-               count: processedAssumptions.length,
-               withReality: processedAssumptions.filter((a: any) => a.realityFromInterviews && a.realityFromInterviews !== 'No interview data available').length
-             });
-            
+            console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
+              count: processedAssumptions.length,
+              withReality: processedAssumptions.filter((a: any) => a.realityFromInterviews && a.realityFromInterviews !== 'No interview data available').length,
+              processedFirstAssumption: processedAssumptions[0] ? {
+                reality: processedAssumptions[0].realityFromInterviews?.slice(0, 100) || 'empty',
+                quotesCount: processedAssumptions[0].quotes?.length || 0
+              } : 'no first assumption'
+            });
+
             setLocalBuyerMapData(processedAssumptions);
             
             // Update score if available
@@ -1075,33 +1092,62 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
               <div className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-8 mb-8">
                 <h2 className="text-xl font-medium mb-2">Deck Analysis Complete</h2>
                 <p className="text-lg opacity-90 mb-4">Your assumptions have been extracted from the sales deck.</p>
-                <p className="text-base opacity-80 mb-6">Upload interview transcripts to validate these assumptions and get your alignment score.</p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold mb-2">💡 Next Step: Add Customer Interviews</h3>
+                  <p className="text-sm opacity-90 mb-3">
+                    Upload interview transcripts to validate these assumptions with real customer data.
+                  </p>
+                  <div className="bg-blue-900/50 rounded-lg p-3 text-sm">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="font-semibold">📋 Processing Guidelines:</span>
+                    </div>
+                    <ul className="space-y-1 text-xs opacity-90">
+                      <li>• <strong>Recommended:</strong> 3-5 interviews for balanced insights</li>
+                      <li>• <strong>Maximum:</strong> 10 interviews per upload batch</li>
+                      <li>• <strong>Processing time:</strong> ~3-8 minutes depending on file count</li>
+                      <li>• <strong>File types:</strong> .txt, .doc, .docx, .pdf</li>
+                    </ul>
+                  </div>
+                </div>
                 <button
-                  onClick={() => {
-                    if (fileInputRef.current) fileInputRef.current.click();
-                  }}
-                  disabled={uploadingInterviews}
-                  className={`px-8 py-3 rounded-lg font-semibold transition-colors ${
-                    uploadingInterviews 
-                      ? 'bg-white/20 text-white/60 cursor-not-allowed' 
-                      : 'bg-white text-blue-600 hover:bg-gray-100'
-                  }`}
+                  onClick={() => setCurrentStep(2)}
+                  className="bg-white/20 hover:bg-white/30 text-white px-6 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm border border-white/30"
                 >
-                  {uploadingInterviews ? 'Uploading...' : 'Upload Interview Transcripts'}
+                  Add Interviews
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  accept=".txt,.doc,.docx,.pdf"
-                  onChange={(e) => {
-                    handleFileUpload('interviews', e.target.files);
-                  }}
-                />
               </div>
             )}
-            
+
+            {/* Show interview processing status when interviews are uploaded */}
+            {uploadedFiles.interviews.length > 0 && uploadingInterviews && (
+              <div className="text-center bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl p-8 mb-8">
+                <h2 className="text-xl font-medium mb-2">Processing {uploadedFiles.interviews.length} Interview{uploadedFiles.interviews.length > 1 ? 's' : ''}</h2>
+                <p className="text-lg opacity-90 mb-4">
+                  Extracting insights and validating assumptions...
+                </p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4">
+                  <div className="flex items-center justify-center space-x-2 mb-3">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span className="text-sm">Processing batch of {uploadedFiles.interviews.length} files</span>
+                  </div>
+                  <div className="text-xs opacity-90">
+                    <p>✓ Files are processed in parallel for faster results</p>
+                    <p>✓ Expected completion: ~{Math.ceil(uploadedFiles.interviews.length / 3) * 3} minutes</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Show successful processing when interviews are complete */}
+            {uploadedFiles.interviews.length > 0 && !uploadingInterviews && (
+              <div className="text-center bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl p-6 mb-8">
+                <h2 className="text-xl font-medium mb-2">✅ Analysis Complete</h2>
+                <p className="text-lg opacity-90">
+                  {uploadedFiles.interviews.length} interview{uploadedFiles.interviews.length > 1 ? 's' : ''} processed and integrated with deck assumptions
+                </p>
+              </div>
+            )}
+
             {/* Enhanced Overall Score Header with integrated navigation */}
             {/* Only show score after interviews have been uploaded and processed */}
             {score !== null && uploadedFiles.interviews.length > 0 && (
