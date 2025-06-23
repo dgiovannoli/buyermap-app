@@ -671,13 +671,17 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
   
   // Process quotes for each assumption
   const quotesPerAssumption: Record<string, Quote[]> = {};
-  assumptions.forEach(assumption => {
-    quotesPerAssumption[assumption] = [];
-  });
-  
   for (const assumption of assumptions) {
     console.log(`  🎯 Processing assumption: ${assumption.substring(0, 40)}...`);
     const targetedQuotes = await extractTargetedQuotes(interviewText, file.name, assumption);
+    console.log(`  📊 [DEBUG] Extracted ${targetedQuotes.length} quotes for assumption: ${assumption.substring(0, 40)}`);
+    if (targetedQuotes.length > 0) {
+      console.log(`  📝 [DEBUG] First quote example:`, {
+        text: targetedQuotes[0].text?.slice(0, 100),
+        speaker: targetedQuotes[0].speaker,
+        source: targetedQuotes[0].source
+      });
+    }
     quotesPerAssumption[assumption] = targetedQuotes;
   }
   
@@ -685,8 +689,10 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
   const classificationResults: Record<string, Quote[]> = {};
   for (const assumption of assumptions) {
     const quotesForAssumption = quotesPerAssumption[assumption] || [];
+    console.log(`  🏷️ [DEBUG] Classifying ${quotesForAssumption.length} quotes for assumption: ${assumption.substring(0, 40)}`);
     if (quotesForAssumption.length > 0) {
       const classified = await classifyQuotesForAssumption(quotesForAssumption, assumption);
+      console.log(`  ✅ [DEBUG] Classified ${classified.length} quotes for assumption: ${assumption.substring(0, 40)}`);
       classificationResults[assumption] = classified;
     } else {
       classificationResults[assumption] = [];
@@ -944,11 +950,39 @@ export async function POST(request: NextRequest) {
     
     // Flatten and aggregate results from all interviews
     const aggregatedResults = existingAssumptions.map(assumption => {
+      console.log(`🔍 [DEBUG] Processing assumption: ${assumption.v1Assumption}`);
+      
       const allQuotesForAssumption = allResults.flatMap(result => {
-        if (result.error) return [];
+        if (result.error) {
+          console.log(`⚠️ [DEBUG] Skipping error result for ${result.fileName}: ${result.error}`);
+          return [];
+        }
+        
+        // Enhanced debugging for result structure
+        console.log(`🔍 [DEBUG] Result structure for ${result.fileName}:`, {
+          hasQuotesProperty: 'quotes' in result.result,
+          resultKeys: Object.keys(result.result),
+          quotesType: typeof result.result.quotes,
+          quotesIsArray: Array.isArray(result.result.quotes),
+          quotesStructure: result.result.quotes ? Object.keys(result.result.quotes) : 'no quotes'
+        });
+        
         const quotesData = 'quotes' in result.result ? result.result.quotes : result.result;
-        return (quotesData as Record<string, Quote[]>)[assumption.v1Assumption] || [];
+        const quotesForThisAssumption = (quotesData as Record<string, Quote[]>)[assumption.v1Assumption] || [];
+        
+        console.log(`🔍 [DEBUG] Quotes for "${assumption.v1Assumption}" from ${result.fileName}:`, {
+          quotesCount: quotesForThisAssumption.length,
+          firstQuotePreview: quotesForThisAssumption[0] ? {
+            text: quotesForThisAssumption[0].text?.slice(0, 100),
+            speaker: quotesForThisAssumption[0].speaker,
+            classification: (quotesForThisAssumption[0] as any).classification
+          } : 'no quotes'
+        });
+        
+        return quotesForThisAssumption;
       });
+      
+      console.log(`🔍 [DEBUG] Total quotes aggregated for "${assumption.v1Assumption}": ${allQuotesForAssumption.length}`);
       
       // Ensure each assumption has the correct totalInterviews count
       const updatedICPValidation = assumption.icpValidation ? {
