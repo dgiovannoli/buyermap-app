@@ -6,6 +6,11 @@ import { transformBuyerMapDataArray } from '../../../utils/dataMapping';
 import { isMockMode, logMockUsage } from '../../../utils/mockHelper';
 import { getPineconeIndex } from '../../../lib/pinecone';
 
+// Configure API route for larger file uploads
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // 60 seconds timeout
+
 // Initialize OpenAI with proper error handling (only if not using mocks)
 let openai: OpenAI | null = null;
 if (!isMockMode()) {
@@ -50,6 +55,15 @@ export async function POST(req: NextRequest) {
     if (!deckFile) {
       console.error('No file provided in request');
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    // Check file size (50MB limit)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
+    if (deckFile.size > MAX_FILE_SIZE) {
+      console.error('File too large:', deckFile.size, 'bytes');
+      return NextResponse.json({ 
+        error: `File too large. Maximum size is 50MB, but your file is ${(deckFile.size / 1024 / 1024).toFixed(2)}MB.` 
+      }, { status: 413 });
     }
 
     console.log('Starting deck analysis for file:', deckFile.name);

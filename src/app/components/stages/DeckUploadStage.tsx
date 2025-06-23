@@ -47,6 +47,20 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
 
   const handleFileUpload = (file: File | null) => {
     console.log('🔄 File uploaded:', file?.name);
+    
+    if (file) {
+      // Check file size (50MB limit)
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
+      if (file.size > MAX_FILE_SIZE) {
+        const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+        onError(`File too large. Maximum size is 50MB, but your file is ${fileSizeMB}MB. Please compress your file or convert to a more efficient format.`);
+        return;
+      }
+      
+      // Clear any previous errors
+      onError(null);
+    }
+    
     setUploadedDeck(file);
     if (file) {
       // Simulate upload progress
@@ -310,7 +324,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                   </p>
                   
                   {/* File Format Support */}
-                  <div className="flex items-center justify-center space-x-4 text-xs text-gray-400">
+                  <div className="flex items-center justify-center space-x-4 text-xs text-gray-400 mb-2">
                     <div className="flex items-center space-x-1">
                       <FileText className="w-3 h-3" />
                       <span>PDF</span>
@@ -323,6 +337,11 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                       <FileCheck className="w-3 h-3" />
                       <span>Keynote</span>
                     </div>
+                  </div>
+                  
+                  {/* File Size Limit */}
+                  <div className="text-xs text-gray-500">
+                    Maximum file size: 50MB
                   </div>
                 </div>
 
