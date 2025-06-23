@@ -186,16 +186,16 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
           console.log(`🔄 Upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(uploadedDeck.size / 1024 / 1024).toFixed(2)}MB file`);
           const uploadStartTime = performance.now();
           
-          blob = await upload(sanitizedFileName, uploadedDeck, {
-            access: 'public',
-            handleUploadUrl: '/api/upload-deck',
-            multipart: useMultipart, // Enable multipart for large files
-            onUploadProgress: (progress) => {
-              const percentage = Math.round(progress.percentage);
-              console.log(`📈 Upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+          // Simulate progress updates during upload since onUploadProgress might not work reliably
+          let progressInterval: NodeJS.Timeout | null = null;
+          let currentProgress = 0;
+          
+          const updateProgress = () => {
+            if (currentProgress < 45) { // Stop at 45% to leave room for actual completion
+              currentProgress += Math.random() * 10; // Random increment between 0-10%
+              const uploadPercentage = Math.min(45, currentProgress);
               
-              // Update processing progress with upload percentage
-              const uploadPercentage = Math.min(50, percentage * 0.5); // Upload takes 50% of total progress
+              console.log(`📈 Simulated upload progress: ${uploadPercentage.toFixed(1)}%`);
               onProgressUpdate({
                 phase: 'deck',
                 step: 'deck-upload',
@@ -205,7 +205,46 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                 status: 'processing'
               });
             }
-          });
+          };
+          
+          // Start progress simulation
+          progressInterval = setInterval(updateProgress, 500); // Update every 500ms
+          
+          try {
+            blob = await upload(sanitizedFileName, uploadedDeck, {
+              access: 'public',
+              handleUploadUrl: '/api/upload-deck',
+              multipart: useMultipart, // Enable multipart for large files
+              onUploadProgress: (progress) => {
+                // This may or may not work depending on version
+                if (progress && typeof progress.percentage === 'number') {
+                  const percentage = Math.round(progress.percentage);
+                  console.log(`📈 Real upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+                  
+                  const uploadPercentage = Math.min(50, percentage * 0.5);
+                  onProgressUpdate({
+                    phase: 'deck',
+                    step: 'deck-upload',
+                    currentBatch: 0,
+                    totalBatches: 1,
+                    percentage: uploadPercentage,
+                    status: 'processing'
+                  });
+                  
+                  // Cancel simulation if real progress is working
+                  if (progressInterval) {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                  }
+                }
+              }
+            });
+          } finally {
+            // Clean up progress simulation
+            if (progressInterval) {
+              clearInterval(progressInterval);
+            }
+          }
           
           const uploadEndTime = performance.now();
           const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
@@ -311,18 +350,16 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         console.log(`🔄 Conflict upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(uploadedDeck.size / 1024 / 1024).toFixed(2)}MB file`);
         const uploadStartTime = performance.now();
         
-        const blob = await upload(sanitizedFinalFileName, uploadedDeck, {
-          access: 'public',
-          handleUploadUrl: '/api/upload-deck',
-          multipart: useMultipart,
-          clientPayload: JSON.stringify({ 
-            allowOverwrite: conflictResolution.action === 'overwrite' 
-          }),
-          onUploadProgress: (progress) => {
-            const percentage = Math.round(progress.percentage);
-            console.log(`📈 Conflict upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+        // Simulate progress updates during conflict upload
+        let conflictProgressInterval: NodeJS.Timeout | null = null;
+        let conflictCurrentProgress = 0;
+        
+        const updateConflictProgress = () => {
+          if (conflictCurrentProgress < 45) {
+            conflictCurrentProgress += Math.random() * 10;
+            const uploadPercentage = Math.min(45, conflictCurrentProgress);
             
-            const uploadPercentage = Math.min(50, percentage * 0.5);
+            console.log(`📈 Simulated conflict upload progress: ${uploadPercentage.toFixed(1)}%`);
             onProgressUpdate({
               phase: 'deck',
               step: 'deck-upload',
@@ -332,7 +369,47 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
               status: 'processing'
             });
           }
-        });
+        };
+        
+        conflictProgressInterval = setInterval(updateConflictProgress, 500);
+        
+        let blob;
+        try {
+          blob = await upload(sanitizedFinalFileName, uploadedDeck, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-deck',
+            multipart: useMultipart,
+            clientPayload: JSON.stringify({ 
+              allowOverwrite: conflictResolution.action === 'overwrite' 
+            }),
+            onUploadProgress: (progress) => {
+              if (progress && typeof progress.percentage === 'number') {
+                const percentage = Math.round(progress.percentage);
+                console.log(`📈 Real conflict upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+                
+                const uploadPercentage = Math.min(50, percentage * 0.5);
+                onProgressUpdate({
+                  phase: 'deck',
+                  step: 'deck-upload',
+                  currentBatch: 0,
+                  totalBatches: 1,
+                  percentage: uploadPercentage,
+                  status: 'processing'
+                });
+                
+                if (conflictProgressInterval) {
+                  clearInterval(conflictProgressInterval);
+                  conflictProgressInterval = null;
+                }
+              }
+            }
+          });
+        } finally {
+          // Clean up conflict progress simulation
+          if (conflictProgressInterval) {
+            clearInterval(conflictProgressInterval);
+          }
+        }
         
         const uploadEndTime = performance.now();
         const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
