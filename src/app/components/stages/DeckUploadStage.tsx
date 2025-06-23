@@ -138,7 +138,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
   };
 
   const handleProcessDeck = async () => {
-    console.log('🔄 handleProcessDeck called, uploadedDeck:', !!uploadedDeck);
+    console.log('🔄 [BLOB] handleProcessDeck called with Vercel Blob integration, uploadedDeck:', !!uploadedDeck);
     if (!uploadedDeck) return;
 
     setIsProcessing(true);
