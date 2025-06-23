@@ -10,6 +10,9 @@ import { MOCK_BUYER_MAP_DATA } from './__mocks__/buyerMapData';
 import InterviewProcessingOverlay from '../app/components/loading/InterviewProcessingOverlay';
 import { useProcessingProgress } from '../app/hooks/useProcessingProgress';
 import ProcessVisualization from '../app/components/loading/ProcessVisualization';
+import { upload } from '@vercel/blob/client';
+import FileConflictDialog from './ui/FileConflictDialog';
+import { useFileConflictHandler, type FileConflictResolution } from '../hooks/useFileConflictHandler';
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -283,6 +286,19 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [isDemoMode, setIsDemoMode] = useState(false);
   const interviewProcessing = useProcessingProgress();
 
+  // File conflict handling
+  const {
+    currentConflict,
+    isDialogOpen,
+    checkFilesForConflicts,
+    resolveConflict,
+    cancelConflict,
+    setConflictsAndShow
+  } = useFileConflictHandler();
+
+  // Store files for conflict resolution
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
   // Auto-setup for mock mode
   useEffect(() => {
     if (!isMock) return;         // bail out immediately when mocks are OFF
@@ -343,7 +359,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       setProcessError(null);
 
       // Step 1: Upload deck to Vercel Blob
-      const { upload } = await import('@vercel/blob/client');
       const { head } = await import('@vercel/blob');
       const file = files[0];
       
@@ -387,6 +402,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       
       // Upload the deck if we don't have a URL yet
       if (!blobUrl) {
+        const { upload } = await import('@vercel/blob/client');
         const blob = await upload(file.name, file, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
@@ -465,6 +481,9 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     
     // Automatically process interviews when uploaded
     if (type === 'interviews') {
+      // Store files for conflict resolution
+      setPendingFiles(newFiles);
+      
       setUploadedFiles(prev => {
         console.log('Previous files state:', prev);
         const updated = {
@@ -475,7 +494,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         return updated;
       });
 
-      console.log('🎙️ [BLOB] Starting interview upload process with', newFiles.length, 'files');
+      console.log('🎙️ [BLOB] Starting interview upload process for', newFiles.length, 'files');
       setUploadingInterviews(true);
       setProcessError(null);
       
@@ -484,245 +503,184 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       interviewProcessing.startInterviewProcessing(newFiles.length, assumptionTexts);
       
       try {
-        // Step 1: Upload files to Vercel Blob
-        console.log('🎙️ [BLOB] Step 1: Uploading files to Vercel Blob...');
-        const { upload } = await import('@vercel/blob/client');
+        // Step 1: Check for file conflicts BEFORE starting any uploads
+        console.log('🔍 [BLOB] Checking for file conflicts...');
+        const { conflictFiles, clearFiles } = await checkFilesForConflicts(newFiles);
+        
+        console.log(`📊 [BLOB] Conflict check results: ${conflictFiles.length} conflicts, ${clearFiles.length} clear files`);
+
+        // Step 2: Upload files without conflicts immediately
         const blobUrls: string[] = [];
-        
-        // Import head function for checking file existence
-        const { head } = await import('@vercel/blob');
-        
-        for (let i = 0; i < newFiles.length; i++) {
-          const file = newFiles[i];
-          console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${newFiles.length}:`, file.name);
-          
-          // Check if file already exists
-          let fileExists = false;
-          let existingUrl = null;
-          
-          try {
-            const existingBlob = await head(file.name);
-            if (existingBlob) {
-              fileExists = true;
-              existingUrl = existingBlob.url;
-              console.log(`🔍 [BLOB] File "${file.name}" already exists at: ${existingUrl}`);
-            }
-          } catch (error) {
-            // File doesn't exist, continue with upload
-            console.log(`📁 [BLOB] File "${file.name}" doesn't exist, proceeding with upload`);
-          }
-          
-          if (fileExists && existingUrl) {
-            // Ask user what to do with existing file
-            const userChoice = confirm(
-              `The file "${file.name}" already exists.\n\n` +
-              `• Click "OK" to use the existing file\n` +
-              `• Click "Cancel" to upload a new version (overwrite)`
-            );
+        if (clearFiles.length > 0) {
+          console.log(`✅ [BLOB] Uploading ${clearFiles.length} files without conflicts`);
+          for (let i = 0; i < clearFiles.length; i++) {
+            const file = clearFiles[i];
+            console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${clearFiles.length}:`, file.name);
             
-            if (userChoice) {
-              // Use existing file
-              console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
-              blobUrls.push(existingUrl);
-              continue; // Skip to next file
-            } else {
-              // User wants to overwrite, proceed with upload
-              console.log(`🔄 [BLOB] User chose to overwrite: ${file.name}`);
-            }
-          }
-          
-          // Upload the file (either new file or overwrite existing)
-          try {
             const blob = await upload(file.name, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-interview',
-              clientPayload: JSON.stringify({ 
-                allowOverwrite: fileExists // Allow overwrite if file exists
-              }),
             });
             
             console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
             blobUrls.push(blob.url);
-          } catch (uploadError: any) {
-            console.error(`❌ [BLOB] Upload failed for ${file.name}:`, uploadError);
-            throw uploadError;
           }
         }
-        
-        console.log('🎙️ [BLOB] All files uploaded, starting analysis with blob URLs:', blobUrls);
-        
-        // Step 2: Send blob URLs to analysis API
-        const res = await fetch('/api/analyze-interviews', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            blobUrls: blobUrls,
-            assumptions: JSON.stringify(localBuyerMapData),
-          }),
-        });
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Interview analysis failed: ${res.status} ${errorText}`);
-        }
-        
-        // 🛠️ Grab the real response body here:
-        const payload = await res.json();
-        console.log('📦 interview payload', payload);
-        
-        // 🔍 INSPECT API RESPONSE STRUCTURE (as requested by user)
-        console.log('=== API RESPONSE INSPECTION ===');
-        console.log('payload.success:', payload.success);
-        console.log('payload.assumptionsCount:', payload.assumptions?.length || 0);
-        console.log('payload.filesProcessed:', payload.metadata?.totalInterviews || 'unknown');
-        console.log('payload.totalQuotes:', payload.metadata?.totalQuotes || 'unknown');
-        console.log('payload.processingTime:', payload.metadata?.processingTimeSeconds || 'unknown');
-        console.log('payload.assumptions structure:', payload.assumptions?.[0] ? Object.keys(payload.assumptions[0]) : 'no assumptions');
-        console.log('First assumption example:', payload.assumptions?.[0]);
-        console.log('================================');
-        
-        if (!payload.success) {
-          throw new Error(payload.error || 'Interview analysis failed');
-        }
 
-        // 1) Turn our existing buyerMapData array into a lookup map by id
-        const byId = new Map<number, BuyerMapData>(
-          localBuyerMapData.map((a) => [a.id, { ...a }])
-        );
-
-        // 2) For each returned assumption, merge in new fields:
-        payload.assumptions.forEach((ia: {
-          id: number;
-          comparisonOutcome: string;
-          confidenceScore: number;
-          quotes: any[];
-          validationStatus?: string;
-          realityFromInterviews?: string;
-          icpValidation?: {
-            title: string;
-            subtitle: string;
-            cardNumber: number;
-            series: string;
-            totalInterviews: number;
-          };
-        }) => {
-          const card = byId.get(ia.id);
-          if (!card) return;
+        // Step 3: Handle conflicts if any exist
+        if (conflictFiles.length > 0) {
+          console.log(`⚠️ [BLOB] Found ${conflictFiles.length} file conflicts, will show dialog`);
           
-          const mapValidationStatusToOutcome = (validationStatus: string) => {
-            switch (validationStatus) {
-              case 'VALIDATED': return 'Validated' as const;
-              case 'GAP_IDENTIFIED': return 'Gap Identified' as const;
-              case 'CONTRADICTED': return 'Contradicted' as const;
-              case 'INSUFFICIENT_DATA': return 'Insufficient Data' as const;
-              // Legacy fallback for old comparisonOutcome values
-              case 'Aligned': return 'Validated' as const;
-              case 'Misaligned': return 'Contradicted' as const;
-              case 'New Data Added': return 'Gap Identified' as const;
-              case 'Refined': return 'Gap Identified' as const;
-              case 'Challenged': return 'Contradicted' as const;
-              default: return 'Insufficient Data' as const;
+          // Set conflicts to trigger dialog display
+          setConflictsAndShow(conflictFiles);
+          
+          // For now, we'll handle the first conflict and let the user resolve them one by one
+          // The actual resolution will be handled by the dialog component's onResolve callback
+          console.log('🔄 [BLOB] Dialog will be shown for conflict resolution');
+          
+          // Note: The actual file processing will continue after dialog resolution
+          // This is a simplified implementation - in a full implementation, you'd want to
+          // suspend this function and resume after all conflicts are resolved
+        }
+
+        // Step 4: Process all uploaded files (for now, just the clear files)
+        if (blobUrls.length > 0) {
+          console.log(`🚀 [BLOB] Processing ${blobUrls.length} interview files...`);
+          
+          const analysisResponse = await fetch('/api/analyze-interviews', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              blobUrls,
+              assumptions: JSON.stringify(localBuyerMapData),
+            }),
+          });
+
+          if (!analysisResponse.ok) {
+            throw new Error(`Analysis failed: ${analysisResponse.statusText}`);
+          }
+
+          const payload = await analysisResponse.json();
+          console.log('✅ [BLOB] Interview analysis completed:', payload);
+
+          // Update state with interview data
+          if (payload.success && payload.assumptions) {
+            setLocalBuyerMapData(payload.assumptions);
+            
+            // Update score if available
+            if (payload.overallAlignmentScore) {
+              setScore(payload.overallAlignmentScore);
             }
-          };
-          
-          const mapValidationStatus = (status: string) => {
-            switch (status.toLowerCase()) {
-              case 'validated': return 'validated' as const;
-              case 'gap_identified': return 'partial' as const;
-              case 'contradicted': return 'contradicted' as const;
-              case 'insufficient_data': return 'pending' as const;
-              case 'partial': return 'partial' as const;
-              case 'pending': return 'pending' as const;
-              default: return 'pending' as const;
+            
+            // Update score breakdown data if available
+            if (payload.scoreBreakdown) {
+              setScoreBreakdown(payload.scoreBreakdown.breakdown);
+              setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
+              setSummary(payload.scoreBreakdown.summary);
             }
-          };
-          
-          // Update the card with interview validation results - prioritize validationStatus
-          const finalValidationStatus = ia.validationStatus || ia.comparisonOutcome;
-          card.comparisonOutcome = mapValidationStatusToOutcome(finalValidationStatus);
-          card.validationStatus = mapValidationStatus(finalValidationStatus);
-          card.quotes = ia.quotes || [];
-          
-          // ✅ CRITICAL FIX: Map the realityFromInterviews field
-          if (ia.realityFromInterviews) {
-            card.realityFromInterviews = ia.realityFromInterviews;
-            console.log(`📝 Mapped realityFromInterviews for assumption ${ia.id}:`, ia.realityFromInterviews.substring(0, 100) + '...');
-          } else {
-            console.log(`⚠️ No realityFromInterviews found for assumption ${ia.id}`);
+            
+            setUploadingInterviews(false);
+            interviewProcessing.resetProcessing();
+            setCurrentStep(3);
+            setUploaded(true);
+            console.log('✅ Interview data integrated with buyer map');
           }
-          
-          // ✅ UPDATE: Set icpValidation with correct totalInterviews count
-          card.icpValidation = ia.icpValidation || {
-            title: card.icpAttribute || 'ICP Validation',
-            subtitle: card.icpTheme || 'Validated against customer interviews',
-            cardNumber: card.id || 1,
-            series: 'ICP Collection 2025',
-            totalInterviews: payload.metadata?.totalInterviews || 0
-          };
-          console.log(`✅ Set totalInterviews to ${card.icpValidation.totalInterviews} for assumption ${ia.id}`);
-          
-          // Add interview validation to validationAttributes if it exists
-          if (card.validationAttributes) {
-            card.validationAttributes = [
-              ...(card.validationAttributes || []),
-              {
-                assumption: card.v1Assumption,
-                reality: ia.realityFromInterviews || `Interview validation: ${ia.comparisonOutcome}`,
-                outcome: card.comparisonOutcome,
-                confidence: ia.confidenceScore,
-                confidence_explanation: `From ${payload.metadata?.totalInterviews || 'multiple'} interviews – confidence ${ia.confidenceScore}%`,
-                quotes: ia.quotes,
-              }
-            ];
-          }
-        });
-
-        // 3) Write the merged array back into state:
-        const mergedData = Array.from(byId.values());
-        setLocalBuyerMapData(mergedData);
-        
-        // Update overall score from API response
-        const calculatedScore = payload.overallAlignmentScore || calculateOverallScore(mergedData);
-        setScore(calculatedScore);
-        
-        // Update score breakdown data if available
-        if (payload.scoreBreakdown) {
-          setScoreBreakdown(payload.scoreBreakdown.breakdown);
-          setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
-          setSummary(payload.scoreBreakdown.summary);
+        } else if (conflictFiles.length === 0) {
+          console.log('ℹ️ No files were uploaded');
         }
-        
-        console.log('✅ Interview validation merged successfully:', {
-          totalQuotes: payload.metadata?.totalQuotes || 0,
-          processingTime: payload.metadata?.processingTimeSeconds || 'unknown',
-          validatedCount: payload.validatedCount,
-          partiallyValidatedCount: payload.partiallyValidatedCount,
-          pendingCount: payload.pendingCount,
-          mergedDataLength: mergedData.length,
-          firstAssumptionQuotes: mergedData[0]?.quotes?.length || 0,
-          firstAssumptionReality: mergedData[0]?.realityFromInterviews?.slice(0, 100) || 'none'
-        });
-        
-        // Force re-render by updating a timestamp
-        console.log('🔄 Forcing UI re-render with updated data...');
-        setLocalBuyerMapData([...mergedData]); // Force new array reference
-        
-        // ▶️ Advance to results step:
-        setCurrentStep(3);
-        setUploaded(true);
-        
-      } catch (err) {
-        console.error('❌ Transcript upload error', err);
-        interviewProcessing.setError(err instanceof Error ? err.message : 'Unknown error');
-        setProcessError(`Interview processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+
+      } catch (error: any) {
+        console.error('❌ Interview upload error:', error);
+        setProcessError(`Interview upload failed: ${error.message}`);
+        interviewProcessing.setError(error.message);
       } finally {
         setUploadingInterviews(false);
         interviewProcessing.resetProcessing();
       }
     }
   };
+
+  // Handle conflict resolution from dialog
+  const handleConflictResolve = async (action: 'use-existing' | 'overwrite' | 'rename') => {
+    if (!currentConflict) return;
+
+    console.log(`🔄 [BLOB] Resolving conflict for ${currentConflict.fileName} with action: ${action}`);
+    
+    try {
+      const resolution = resolveConflict({ action });
+      if (!resolution) return;
+
+      // Find the original file from stored pendingFiles
+      const originalFile = pendingFiles.find(f => f.name === currentConflict.fileName);
+      
+      if (!originalFile) {
+        console.error('❌ Original file not found for conflict resolution');
+        return;
+      }
+
+      let resultUrl: string | undefined;
+
+      // Handle the resolution
+      switch (resolution.action) {
+        case 'use-existing':
+          console.log(`♻️ [BLOB] Using existing file: ${resolution.fileName}`);
+          resultUrl = resolution.url;
+          break;
+          
+        case 'overwrite':
+          console.log(`🔄 [BLOB] Overwriting file: ${resolution.fileName}`);
+          const overwriteBlob = await upload(originalFile.name, originalFile, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-interview',
+            clientPayload: JSON.stringify({ allowOverwrite: true })
+          });
+          resultUrl = overwriteBlob.url;
+          break;
+          
+        case 'rename':
+          console.log(`📝 [BLOB] Renaming and uploading file: ${resolution.fileName}`);
+          const renameBlob = await upload(resolution.fileName, originalFile, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-interview',
+          });
+          resultUrl = renameBlob.url;
+          break;
+      }
+
+      if (resultUrl) {
+        console.log(`✅ [BLOB] Conflict resolved, file available at: ${resultUrl}`);
+        
+        // Process the resolved file
+        const analysisResponse = await fetch('/api/analyze-interviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            blobUrls: [resultUrl],
+            assumptions: JSON.stringify(localBuyerMapData),
+          }),
+        });
+
+        if (analysisResponse.ok) {
+          const payload = await analysisResponse.json();
+          console.log('✅ [BLOB] Single file analysis completed:', payload);
+          
+          // Update state with interview data
+          if (payload.success && payload.assumptions) {
+            setLocalBuyerMapData(payload.assumptions);
+            setUploadingInterviews(false);
+            setCurrentStep(3);
+            setUploaded(true);
+            console.log('✅ Interview data integrated with buyer map');
+          }
+        }
+      }
+
+    } catch (error: any) {
+      console.error('❌ Conflict resolution error:', error);
+      setProcessError(`Conflict resolution failed: ${error.message}`);
+    }
+  };
+
   const removeFile = (type: string, index: number | null = null) => {
     if (type === 'deck') {
       setUploadedFiles(prev => ({ ...prev, deck: [] }));
@@ -832,8 +790,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     
     return insights;
   }, [localBuyerMapData, buyerMapData, uploadedFiles.interviews.length]);
-
-
 
   // Bypass logic for mock mode or when no data is available to show
   if (!uploaded && localBuyerMapData.length === 0 && buyerMapData.length === 0) {
@@ -1284,6 +1240,15 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         onComplete={() => {
           // Processing visualization completed, API call should finish soon
         }}
+      />
+
+      {/* File Conflict Dialog */}
+      <FileConflictDialog
+        isOpen={isDialogOpen}
+        fileName={currentConflict?.fileName || ''}
+        existingFileInfo={currentConflict?.existingFileInfo}
+        onResolve={handleConflictResolve}
+        onCancel={cancelConflict}
       />
     </div>
   );
