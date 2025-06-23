@@ -517,7 +517,11 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             const file = clearFiles[i];
             console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${clearFiles.length}:`, file.name);
             
-            const blob = await upload(file.name, file, {
+            // Sanitize filename to avoid URL encoding issues
+            const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+            console.log('🔄 Sanitized interview filename:', file.name, '->', sanitizedFileName);
+            
+            const blob = await upload(sanitizedFileName, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-interview',
             });
@@ -629,7 +633,9 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           
         case 'overwrite':
           console.log(`🔄 [BLOB] Overwriting file: ${resolution.fileName}`);
-          const overwriteBlob = await upload(originalFile.name, originalFile, {
+          const sanitizedOverwriteName = originalFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          console.log('🔄 Sanitized overwrite filename:', originalFile.name, '->', sanitizedOverwriteName);
+          const overwriteBlob = await upload(sanitizedOverwriteName, originalFile, {
             access: 'public',
             handleUploadUrl: '/api/upload-interview',
             clientPayload: JSON.stringify({ allowOverwrite: true })
@@ -639,7 +645,9 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           
         case 'rename':
           console.log(`📝 [BLOB] Renaming and uploading file: ${resolution.fileName}`);
-          const renameBlob = await upload(resolution.fileName, originalFile, {
+          const sanitizedRenameName = resolution.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+          console.log('🔄 Sanitized rename filename:', resolution.fileName, '->', sanitizedRenameName);
+          const renameBlob = await upload(sanitizedRenameName, originalFile, {
             access: 'public',
             handleUploadUrl: '/api/upload-interview',
           });

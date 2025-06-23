@@ -67,9 +67,15 @@ export function useFileConflictHandler() {
     const clearFiles: File[] = [];
 
     for (const file of files) {
-      const conflict = await checkFileExists(file.name);
+      // Use sanitized filename for conflict check to match upload behavior
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const conflict = await checkFileExists(sanitizedFileName);
       if (conflict) {
-        conflictFiles.push(conflict);
+        // Store the original filename for display purposes
+        conflictFiles.push({
+          ...conflict,
+          fileName: file.name // Show original filename in dialog
+        });
       } else {
         clearFiles.push(file);
       }
