@@ -5,6 +5,7 @@ import "./globals.css";
 import MSWProvider from "../components/MSWProvider";
 import TopNavigation from "../components/Navigation/TopNavigation";
 import BetaAppWrapper from "../components/BetaAppWrapper";
+import AuthErrorHandler from "./components/AuthErrorHandler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,7 @@ export default function RootLayout({
         <MSWProvider />
         <BetaAppWrapper>
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+            <AuthErrorHandler />
             <TopNavigation />
             <main>
               {children}

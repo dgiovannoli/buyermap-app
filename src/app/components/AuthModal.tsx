@@ -102,6 +102,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
           redirectTo={`${origin}/auth/callback`}
           showLinks={true}
           view="sign_up"
+          magicLink={true}
+          otpType="magiclink"
           localization={{
             variables: {
               sign_up: {
