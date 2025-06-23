@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProcessingProgress } from '../../../types/buyer-map';
 import { ICPValidationResponse } from '../../../types/buyermap';
 import FileDropzone from '../ui/FileDropzone';
@@ -17,6 +17,7 @@ import {
   Target,
   BarChart3
 } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
 
 interface DeckUploadStageProps {
   onDeckProcessed: (data: ICPValidationResponse) => void;
@@ -154,23 +155,14 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     try {
       console.log('🔄 File size:', uploadedDeck.size, 'bytes');
       
-      // Step 1: Upload file to Vercel Blob
-      console.log('🔄 Step 1: Uploading to Vercel Blob...');
-      const uploadFormData = new FormData();
-      uploadFormData.append('deck', uploadedDeck);
-      
-      const uploadResponse = await fetch('/api/upload-deck', {
-        method: 'POST',
-        body: uploadFormData
+      // Step 1: Upload directly to Vercel Blob using client-side upload
+      console.log('🔄 Step 1: Uploading directly to Vercel Blob...');
+      const blob = await upload(uploadedDeck.name, uploadedDeck, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-deck',
       });
 
-      if (!uploadResponse.ok) {
-        const uploadError = await uploadResponse.text();
-        throw new Error(`Upload failed: ${uploadResponse.status} ${uploadError}`);
-      }
-
-      const uploadResult = await uploadResponse.json();
-      console.log('🔄 Upload completed:', uploadResult.url);
+      console.log('🔄 Direct upload completed:', blob.url);
       
       // Step 2: Analyze the uploaded file
       console.log('🔄 Step 2: Analyzing deck...');
@@ -180,8 +172,8 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          blobUrl: uploadResult.url,
-          filename: uploadResult.filename
+          blobUrl: blob.url,
+          filename: uploadedDeck.name
         })
       });
 

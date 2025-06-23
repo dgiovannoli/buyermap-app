@@ -1,38 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== DECK UPLOAD TO BLOB ===');
+    console.log('=== GENERATING DIRECT UPLOAD URL ===');
     
-    const formData = await request.formData();
-    const file = formData.get('deck') as File;
+    const body = (await request.json()) as HandleUploadBody;
     
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    }
+    console.log('Generating upload URL for client-side upload');
     
-    console.log('Uploading file to Vercel Blob:', file.name, 'Size:', file.size, 'bytes');
-    
-    // Upload to Vercel Blob
-    const blob = await put(file.name, file, {
-      access: 'public',
-      // Add timestamp to avoid conflicts
-      addRandomSuffix: true,
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        console.log('Generating token for:', pathname);
+        return {
+          allowedContentTypes: [
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          ],
+          maximumSizeInBytes: 100 * 1024 * 1024, // 100MB limit
+          addRandomSuffix: true,
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('Upload completed:', blob.url);
+      },
     });
-    
-    console.log('File uploaded successfully:', blob.url);
-    
-    return NextResponse.json({
-      url: blob.url,
-      filename: file.name,
-      size: file.size
-    });
+
+    return NextResponse.json(jsonResponse);
     
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('Upload URL generation error:', error);
     return NextResponse.json(
-      { error: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+      { error: `Upload URL generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }
     );
   }
