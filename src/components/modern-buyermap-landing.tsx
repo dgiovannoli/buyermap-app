@@ -633,7 +633,16 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
           const payload = await analysisResponse.json();
           console.log('✅ [BLOB] Interview analysis completed:', payload);
-
+          
+          // Enhanced debugging to identify field structure
+          console.log('🔍 [DEBUG] Complete payload structure:', {
+            keys: Object.keys(payload),
+            assumptionsExists: !!payload.assumptions,
+            assumptionsLength: payload.assumptions?.length || 0,
+            firstAssumptionKeys: payload.assumptions?.[0] ? Object.keys(payload.assumptions[0]) : [],
+            sampleFirstAssumption: payload.assumptions?.[0] || null
+          });
+          
           // Update state with interview data
           if (payload.success && payload.assumptions) {
             // Enhanced debugging before processing
@@ -645,39 +654,35 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
                 hasQuotes: !!(payload.assumptions[0].quotes && payload.assumptions[0].quotes.length > 0),
                 quotesLength: payload.assumptions[0].quotes?.length || 0,
                 hasRealityFromInterviews: !!payload.assumptions[0].realityFromInterviews,
-                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100) || 'empty',
-                hasKeyFinding: !!payload.assumptions[0].keyFinding,
-                hasInterviewInsights: !!payload.assumptions[0].interviewInsights,
-                hasSummary: !!payload.assumptions[0].summary,
-                firstQuote: payload.assumptions[0].quotes?.[0] ? {
-                  hasText: !!payload.assumptions[0].quotes[0].text,
-                  hasSpeaker: !!payload.assumptions[0].quotes[0].speaker,
-                  textPreview: payload.assumptions[0].quotes[0].text?.slice(0, 50) || 'no text'
-                } : 'no quotes'
-              } : 'no first assumption',
-              totalQuotes: payload.assumptions?.reduce((sum: number, a: any) => sum + (a.quotes?.length || 0), 0) || 0,
-              metadataQuotes: payload.metadata?.totalQuotes || 'no metadata'
+                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100) || 'NONE',
+                // Check all possible reality field names
+                possibleRealityFields: {
+                  realityFromInterviews: payload.assumptions[0].realityFromInterviews ? 'EXISTS' : 'MISSING',
+                  reality: payload.assumptions[0].reality ? 'EXISTS' : 'MISSING', 
+                  interviewInsights: payload.assumptions[0].interviewInsights ? 'EXISTS' : 'MISSING',
+                  summary: payload.assumptions[0].summary ? 'EXISTS' : 'MISSING',
+                  keyFinding: payload.assumptions[0].keyFinding ? 'EXISTS' : 'MISSING'
+                }
+              } : 'no_assumptions'
             });
 
             // Ensure realityFromInterviews is properly mapped
             const processedAssumptions = payload.assumptions.map((assumption: any) => ({
               ...assumption,
               realityFromInterviews: assumption.realityFromInterviews || 
-                                   assumption.keyFinding || 
+                                   assumption.reality ||
                                    assumption.interviewInsights || 
+                                   assumption.keyFinding || 
                                    assumption.summary ||
-                                   (assumption.quotes?.length > 0 ? 
-                                     'Interview insights available - see supporting quotes for details.' : 
+                                   (assumption.quotes && assumption.quotes.length > 0 ? 
+                                     `Based on ${assumption.quotes.length} interview insights: ${assumption.quotes[0]?.text?.slice(0, 100) || 'Interview data available'}...` : 
                                      'No interview data available')
             }));
-            
+
             console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
               count: processedAssumptions.length,
               withReality: processedAssumptions.filter((a: any) => a.realityFromInterviews && a.realityFromInterviews !== 'No interview data available').length,
-              processedFirstAssumption: processedAssumptions[0] ? {
-                reality: processedAssumptions[0].realityFromInterviews?.slice(0, 100) || 'empty',
-                quotesCount: processedAssumptions[0].quotes?.length || 0
-              } : 'no first assumption'
+              sampleRealityData: processedAssumptions[0]?.realityFromInterviews?.slice(0, 100) || 'NONE'
             });
 
             setLocalBuyerMapData(processedAssumptions);
@@ -789,6 +794,15 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         if (analysisResponse.ok) {
           const payload = await analysisResponse.json();
           console.log('✅ [BLOB] Single file analysis completed:', payload);
+          
+          // Enhanced debugging to identify field structure
+          console.log('🔍 [DEBUG] Complete payload structure:', {
+            keys: Object.keys(payload),
+            assumptionsExists: !!payload.assumptions,
+            assumptionsLength: payload.assumptions?.length || 0,
+            firstAssumptionKeys: payload.assumptions?.[0] ? Object.keys(payload.assumptions[0]) : [],
+            sampleFirstAssumption: payload.assumptions?.[0] || null
+          });
           
           // Update state with interview data
           if (payload.success && payload.assumptions) {
