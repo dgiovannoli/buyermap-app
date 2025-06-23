@@ -83,6 +83,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
         )}
 
         <Auth
+          key={`auth-${mounted}`}
           supabaseClient={supabase}
           appearance={{
             theme: ThemeSupa,
@@ -121,7 +122,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
                 button_label: 'Sign in',
                 loading_button_label: 'Signing in...',
                 social_provider_text: 'Continue with {{provider}}',
-                link_text: "Don't have an account? Create one"
+                link_text: "Don't have an account? Sign up"
               }
             }
           }}
