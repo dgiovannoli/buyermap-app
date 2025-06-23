@@ -489,57 +489,56 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   };
 
   // File upload handlers
-  const handleFileUpload = async (type: 'deck' | 'interviews', files: FileList | null) => {
-    console.log('handleFileUpload called with:', { type, files });
-    if (!files) {
-      console.log('No files selected');
-      return;
-    }
-    
-    const newFiles = Array.from(files);
-    console.log('Processing new files:', newFiles.map(f => f.name));
-    
-    // Automatically process deck when uploaded
-    if (type === 'deck') {
-      setUploadedFiles(prev => {
-        console.log('Previous files state:', prev);
-        const updated = {
-          ...prev,
-          deck: [newFiles[0]]
-        };
-        console.log('Updated files state:', updated);
-        return updated;
-      });
-      handleProcessDeck(newFiles);
-    }
-    
-    // Automatically process interviews when uploaded
-    if (type === 'interviews') {
-      // Store files for conflict resolution
-      setPendingFiles(newFiles);
-      
-      setUploadedFiles(prev => {
-        console.log('Previous files state:', prev);
-        const updated = {
-          ...prev,
-          interviews: [...prev.interviews, ...newFiles]
-        };
-        console.log('Updated files state:', updated);
-        return updated;
-      });
+      const handleFileUpload = async (type: 'deck' | 'interviews', files: FileList | null) => {
+      if (!files || files.length === 0) return;
 
-      console.log('🎙️ [BLOB] Starting interview upload process for', newFiles.length, 'files');
-      setUploadingInterviews(true);
-      setProcessError(null);
-      
-      // Start enhanced interview processing visualization
-      const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
-      interviewProcessing.startInterviewProcessing(newFiles.length, assumptionTexts);
-      
-      try {
-        // Step 1: Check for file conflicts BEFORE starting any uploads
-        console.log('🔍 [BLOB] Checking for file conflicts...');
-        const { conflictFiles, clearFiles } = await checkFilesForConflicts(newFiles);
+      console.log(`handleFileUpload called with:`, { type, files });
+
+      if (type === 'deck') {
+        setUploadedFiles(prev => ({ ...prev, deck: Array.from(files) }));
+        await handleProcessDeck(Array.from(files));
+      } else if (type === 'interviews') {
+        const filesArray = Array.from(files);
+        console.log(`Processing new files:`, filesArray.map(f => f.name));
+        
+        // Check interview upload limits
+        const currentInterviewCount = uploadedFiles.interviews.length;
+        const newFileCount = filesArray.length;
+        const maxInterviews = 10;
+        
+        if (currentInterviewCount + newFileCount > maxInterviews) {
+          const allowedCount = maxInterviews - currentInterviewCount;
+          const excessCount = (currentInterviewCount + newFileCount) - maxInterviews;
+          
+          alert(`⚠️ Upload Limit: You can upload ${allowedCount} more interview(s). ${excessCount} file(s) will be skipped.\n\nFor best results, limit to 10 interviews total to avoid processing timeouts.`);
+          
+          // Take only the allowed number of files
+          if (allowedCount > 0) {
+            const allowedFiles = filesArray.slice(0, allowedCount);
+            setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...allowedFiles] }));
+          } else {
+            console.log('❌ No more interviews can be uploaded (limit reached)');
+            return;
+          }
+        } else {
+          setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...filesArray] }));
+        }
+
+              console.log('🎙️ [BLOB] Starting interview upload process for', filesArray.length, 'files');
+        setUploadingInterviews(true);
+        setProcessError(null);
+        
+        // Store files for conflict resolution
+        setPendingFiles(filesArray);
+        
+        // Start enhanced interview processing visualization
+        const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
+        interviewProcessing.startInterviewProcessing(filesArray.length, assumptionTexts);
+        
+        try {
+          // Step 1: Check for file conflicts BEFORE starting any uploads
+          console.log('🔍 [BLOB] Checking for file conflicts...');
+          const { conflictFiles, clearFiles } = await checkFilesForConflicts(filesArray);
         
         console.log(`📊 [BLOB] Conflict check results: ${conflictFiles.length} conflicts, ${clearFiles.length} clear files`);
 
@@ -637,7 +636,34 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
           // Update state with interview data
           if (payload.success && payload.assumptions) {
-            setLocalBuyerMapData(payload.assumptions);
+            console.log('🔍 [DEBUG] Interview payload received:', {
+              assumptionsCount: payload.assumptions.length,
+              sampleAssumption: payload.assumptions[0] ? {
+                id: payload.assumptions[0].id,
+                hasRealityFromInterviews: !!payload.assumptions[0].realityFromInterviews,
+                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100),
+                quotesCount: payload.assumptions[0].quotes?.length || 0
+              } : 'none'
+            });
+            
+                         // Ensure realityFromInterviews is properly mapped
+             const processedAssumptions = payload.assumptions.map((assumption: any) => ({
+               ...assumption,
+               realityFromInterviews: assumption.realityFromInterviews || 
+                                    assumption.keyFinding || 
+                                    assumption.interviewInsights || 
+                                    assumption.summary ||
+                                    (assumption.quotes?.length > 0 ? 
+                                      'Interview insights available - see supporting quotes for details.' : 
+                                      'No interview data available')
+             }));
+            
+                         console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
+               count: processedAssumptions.length,
+               withReality: processedAssumptions.filter((a: any) => a.realityFromInterviews && a.realityFromInterviews !== 'No interview data available').length
+             });
+            
+            setLocalBuyerMapData(processedAssumptions);
             
             // Update score if available
             if (payload.overallAlignmentScore) {
@@ -820,7 +846,14 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       hasInterviews,
       allDataLength: allData.length,
       firstItemQuotes: allData[0]?.quotes?.length || 0,
-      firstItemReality: allData[0]?.realityFromInterviews?.slice(0, 50) || 'none'
+      firstItemReality: allData[0]?.realityFromInterviews?.slice(0, 50) || 'none',
+      // Enhanced debugging for quote data flow
+      sampleQuoteData: allData[0]?.quotes?.[0] ? {
+        hasText: !!allData[0].quotes[0].text,
+        hasSpeaker: !!allData[0].quotes[0].speaker,
+        hasRole: !!allData[0].quotes[0].role,
+        quotesCount: allData[0].quotes.length
+      } : 'no_quotes'
     });
     
     const insights = allData.map(item => {
@@ -853,12 +886,23 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         confidence: hasInterviews ? (item.confidenceScore || 0) : 0,
         confidenceExplanation: item.confidenceExplanation || '',
         reality: item.realityFromInterviews || '',
-        quotes: (item.quotes || []).map(q => ({
-          text: q.text || q.quote || '',
-          author: q.speaker || 'Anonymous',
-          role: q.role || '',
-          companySnapshot: q.companySnapshot || ''
-        })),
+        quotes: (item.quotes || []).map((q, qIndex) => {
+          // Enhanced debugging for quote mapping
+          if (qIndex === 0) {
+            console.log(`🔍 [QUOTES] Mapping first quote for assumption ${item.id}:`, {
+              hasOriginalQuotes: !!(item.quotes && item.quotes.length > 0),
+              originalQuoteStructure: q ? Object.keys(q) : 'no_quote',
+              quotesArrayLength: item.quotes?.length || 0
+            });
+          }
+          
+          return {
+            text: q.text || (q as any).quote || (q as any).quoteText || '',
+            author: q.speaker || (q as any).author || (q as any).speakerName || 'Anonymous',
+            role: q.role || (q as any).speakerRole || '',
+            companySnapshot: q.companySnapshot || ''
+          };
+        }),
         // Include enhanced confidence breakdown
         confidenceBreakdown: hasInterviews ? validationData.confidenceBreakdown : undefined,
         isPending: !hasInterviews

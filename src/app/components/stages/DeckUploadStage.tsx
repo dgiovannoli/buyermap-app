@@ -17,7 +17,8 @@ import {
   ArrowRight,
   Sparkles,
   Target,
-  BarChart3
+  BarChart3,
+  Mic
 } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 
@@ -671,28 +672,29 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                 </div>
 
                 {/* Upload Progress */}
-                {uploadProgress < 100 && (
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-300">Uploading...</span>
-                      <span className="text-sm text-blue-400">{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
+                <div className="w-full bg-white/20 rounded-full h-3 mb-4">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                
+                {/* Progress Text */}
+                <div className="text-center text-white/90 mb-6">
+                  <div className="text-lg font-semibold mb-2">
+                    {uploadProgress < 30 && "Reading your presentation..."}
+                    {uploadProgress >= 30 && uploadProgress < 60 && "Extracting ICP assumptions..."}
+                    {uploadProgress >= 60 && uploadProgress < 90 && "Analyzing messaging framework..."}
+                    {uploadProgress >= 90 && "Finalizing analysis..."}
                   </div>
-                )}
-
-                {/* Success State */}
-                {uploadProgress === 100 && (
-                  <div className="flex items-center space-x-2 text-green-400 mb-4">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Upload complete</span>
+                  <div className="text-sm text-white/70">
+                    {uploadProgress < 50 ? (
+                      "This typically takes 30-45 seconds for larger presentations"
+                    ) : (
+                      "Almost done - generating your buyer map..."
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>
@@ -769,6 +771,27 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
             </p>
           </div>
         </div>
+
+                  {/* Interview Upload Information */}
+          <div className="border-2 border-dashed border-white/30 rounded-lg p-8 bg-white/5 hover:bg-white/10 transition-colors">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-green-500/30 mx-auto mb-4 rounded-full flex items-center justify-center">
+                <Mic className="h-6 w-6 text-green-400" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2 text-white">Next: Add Interview Transcripts</h3>
+              <p className="text-white/60 mb-2">Upload customer interview transcripts to validate your assumptions</p>
+              <p className="text-sm text-white/40 mb-4">
+                📝 Supports: .txt, .doc, .docx, .pdf files<br/>
+                🎯 Limit: Up to 10 interviews for optimal processing<br/>
+                ⏱️ Processing time: ~3-8 minutes depending on file count
+              </p>
+              <div className="bg-blue-500/20 border border-blue-500/40 rounded-lg p-3 mt-4">
+                <div className="text-sm text-blue-200">
+                  ℹ️ You'll be able to upload interviews after your deck analysis completes
+                </div>
+              </div>
+            </div>
+          </div>
       </div>
       
       {/* File Conflict Dialog */}

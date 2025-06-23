@@ -39,6 +39,26 @@ interface ResponseBody {
   assumptions: Assumption[];
 }
 
+// Helper function to generate fallback reality text from quotes
+function generateFallbackReality(assumption: string, quotes: Quote[]): string {
+  if (quotes.length === 0) {
+    return 'No specific interview data available for this assumption. Consider conducting targeted interviews to validate this insight.';
+  }
+  
+  const speakers = new Set(quotes.map(q => q.speaker || 'Anonymous').filter(s => s !== 'Anonymous'));
+  const speakerCount = speakers.size;
+  const quoteCount = quotes.length;
+  
+  if (quoteCount === 1) {
+    return `Based on interview feedback: "${quotes[0].text.slice(0, 150)}..." This insight needs additional validation from more interviews.`;
+  } else if (quoteCount <= 3) {
+    return `Interview insights suggest: ${quotes.map(q => `"${q.text.slice(0, 100)}..."`).join(' | ')} (${quoteCount} quotes from ${speakerCount} speaker${speakerCount !== 1 ? 's' : ''})`;
+  } else {
+    const topQuotes = quotes.slice(0, 2);
+    return `Interview analysis reveals: ${topQuotes.map(q => `"${q.text.slice(0, 80)}..."`).join(' | ')} and ${quoteCount - 2} additional supporting insights from ${speakerCount} speakers.`;
+  }
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResponseBody | { error: string }>
@@ -76,7 +96,14 @@ export default async function handler(
       try {
         // Use RAG to get the most relevant quotes for this assumption
         console.log(`🔍 Fetching top quotes via RAG for assumption ${assumption.id}: "${assumption.v1Assumption}"`);
-        const ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5);
+        
+        let ragQuotes: any[] = [];
+        try {
+          ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5);
+        } catch (ragError) {
+          console.warn(`⚠️ RAG system error for assumption ${assumption.id}:`, ragError);
+          ragQuotes = [];
+        }
         
         // Debug: Log what RAG returned
         console.log(`📋 RAG returned ${ragQuotes.length} quotes for assumption ${assumption.id}:`);
@@ -84,7 +111,7 @@ export default async function handler(
           console.log(`  RAG Quote ${idx + 1}: "${q.text?.slice(0, 100)}..." (score: ${q.score?.toFixed(3)}, speaker: ${q.speaker})`);
         });
         
-        // Fallback to provided quotes if RAG returns nothing (for compatibility)
+        // Determine quotes to use (RAG first, then provided as fallback)
         let quotesToUse: Quote[] = [];
         
         if (ragQuotes.length > 0) {
@@ -102,7 +129,7 @@ export default async function handler(
             companySnapshot: String(q.companySnapshot || '')
           }));
         } else {
-          console.log(`⚠️ No RAG quotes found for assumption ${assumption.id}, falling back to provided quotes`);
+          console.log(`⚠️ No RAG quotes found for assumption ${assumption.id}, using provided quotes`);
           console.log(`📋 Provided quotes count: ${assumption.quotes.length}`);
           assumption.quotes.slice(0, 2).forEach((q, idx) => {
             console.log(`  Provided Quote ${idx + 1}: "${q.text?.slice(0, 100)}..." (speaker: ${q.speaker})`);
@@ -117,70 +144,69 @@ export default async function handler(
           }));
         }
         
-        console.log(`📤 Final quotes to send to aggregate-validation-results: ${quotesToUse.length} quotes`);
-        quotesToUse.slice(0, 2).forEach((q, idx) => {
-          console.log(`  Final Quote ${idx + 1}: "${q.text.slice(0, 100)}..." (speaker: ${q.speaker})`);
-        });
-
-        // Prepare the payload for aggregate-validation-results with high-quality quotes
-        const payload = {
-          assumption: assumption.v1Assumption,
-          quotes: quotesToUse
-        };
-
-        // Enhanced logging to verify quote data
-        console.log(`📤 Sending to aggregate-validation-results for assumption ${assumption.id}:`);
-        console.log(`   Assumption: "${assumption.v1Assumption}"`);
-        console.log(`   High-quality quotes count: ${quotesToUse.length}`);
-        quotesToUse.slice(0, 3).forEach((q, idx) => {
-          console.log(`   Quote ${idx + 1}: text="${q.text?.substring(0, 60)}...", speaker="${q.speaker}", score=${q.score || 'N/A'}`);
-        });
-
-        // Call the aggregate-validation-results endpoint with curated quotes
-        const aggregateResponse = await fetch(`${getBaseUrl(req)}/api/aggregate-validation-results`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!aggregateResponse.ok) {
-          const errorData = await aggregateResponse.json();
-          console.error(`❌ Error from aggregate-validation-results for assumption ${assumption.id} (${aggregateResponse.status}):`, errorData);
-          
-          // Continue with empty reality rather than failing the entire request
-          enhancedAssumptions.push({
-            ...assumption,
-            realityFromInterviews: 'Unable to synthesize interview insights at this time.'
-          });
-          continue;
-        }
-
-        const responseData = await aggregateResponse.json();
-        console.log(`📥 Response from aggregate-validation-results for assumption ${assumption.id}:`, responseData);
+        let realityFromInterviews = '';
         
-        const { realityFromInterviews } = responseData;
+        // Try to synthesize reality using aggregate-validation-results if we have substantial quotes
+        if (quotesToUse.length >= 2) {
+          console.log(`📤 Sending ${quotesToUse.length} quotes to aggregate-validation-results for assumption ${assumption.id}`);
+          
+          try {
+            const payload = {
+              assumption: assumption.v1Assumption,
+              quotes: quotesToUse
+            };
+
+            // Call the aggregate-validation-results endpoint
+            const aggregateResponse = await fetch(`${getBaseUrl(req)}/api/aggregate-validation-results`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payload)
+            });
+
+            if (aggregateResponse.ok) {
+              const responseData = await aggregateResponse.json();
+              realityFromInterviews = responseData.realityFromInterviews || '';
+              console.log(`✅ Got synthesis for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
+            } else {
+              console.warn(`⚠️ Synthesis endpoint failed for assumption ${assumption.id}, using fallback`);
+              realityFromInterviews = generateFallbackReality(assumption.v1Assumption, quotesToUse);
+            }
+          } catch (synthesisError) {
+            console.warn(`⚠️ Synthesis request failed for assumption ${assumption.id}:`, synthesisError);
+            realityFromInterviews = generateFallbackReality(assumption.v1Assumption, quotesToUse);
+          }
+        } else {
+          // Use fallback for insufficient quotes
+          realityFromInterviews = generateFallbackReality(assumption.v1Assumption, quotesToUse);
+        }
+        
+        // Ensure we always have meaningful reality text
+        if (!realityFromInterviews || realityFromInterviews.trim().length < 10) {
+          realityFromInterviews = `Analysis of "${assumption.v1Assumption}" requires additional interview data. ${quotesToUse.length} quotes available but insufficient for comprehensive insights.`;
+        }
         
         enhancedAssumptions.push({
           ...assumption,
           realityFromInterviews
         });
 
-        console.log(`✅ Successfully synthesized RAG-powered reality for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
+        console.log(`✅ Finalized reality for assumption ${assumption.id}: "${realityFromInterviews?.substring(0, 100)}..."`);
 
       } catch (error) {
         console.error(`❌ Error processing assumption ${assumption.id}:`, error);
         
-        // Continue with empty reality rather than failing the entire request
+        // Always provide fallback content rather than failing
+        const fallbackReality = generateFallbackReality(assumption.v1Assumption, assumption.quotes);
         enhancedAssumptions.push({
           ...assumption,
-          realityFromInterviews: 'Unable to synthesize interview insights at this time.'
+          realityFromInterviews: fallbackReality
         });
       }
     }
 
-    console.log(`🎉 Successfully processed ${enhancedAssumptions.length} assumptions with RAG-powered insights`);
+    console.log(`🎉 Successfully processed ${enhancedAssumptions.length} assumptions with interview insights`);
 
     return res.status(200).json({ assumptions: enhancedAssumptions });
 
