@@ -5,6 +5,17 @@ export async function POST(request: NextRequest) {
   try {
     console.log('=== GENERATING DIRECT UPLOAD URL ===');
     
+    // Check if BLOB_READ_WRITE_TOKEN is available
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      console.error('❌ BLOB_READ_WRITE_TOKEN environment variable is not set');
+      return NextResponse.json(
+        { error: 'Server configuration error: BLOB_READ_WRITE_TOKEN not found' },
+        { status: 500 }
+      );
+    }
+    console.log('✅ BLOB_READ_WRITE_TOKEN is available');
+    
     const body = (await request.json()) as HandleUploadBody;
     
     console.log('Generating upload URL for client-side upload');
@@ -28,7 +39,7 @@ export async function POST(request: NextRequest) {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
           ],
           maximumSizeInBytes: 100 * 1024 * 1024, // 100MB limit
-          addRandomSuffix: payload.addRandomSuffix || false,
+          addRandomSuffix: payload.addRandomSuffix !== undefined ? payload.addRandomSuffix : true, // Default to true for safety
           allowOverwrite: payload.allowOverwrite || false,
         };
       },

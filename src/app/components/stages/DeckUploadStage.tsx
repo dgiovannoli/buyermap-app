@@ -189,10 +189,21 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         const sanitizedFileName = uploadedDeck.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         console.log('🔄 Sanitized filename:', uploadedDeck.name, '->', sanitizedFileName);
         
-        const blob = await upload(sanitizedFileName, uploadedDeck, {
-          access: 'public',
-          handleUploadUrl: '/api/upload-deck',
-        });
+        let blob;
+        try {
+          blob = await upload(sanitizedFileName, uploadedDeck, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-deck',
+          });
+        } catch (uploadError: any) {
+          console.error('❌ Upload failed:', uploadError);
+          console.error('❌ Upload error details:', {
+            message: uploadError.message,
+            stack: uploadError.stack,
+            cause: uploadError.cause
+          });
+          throw new Error(`Upload failed: ${uploadError.message || 'Unknown error'}`);
+        }
         
         blobUrl = blob.url;
         console.log('🔄 Direct upload completed:', blobUrl);
