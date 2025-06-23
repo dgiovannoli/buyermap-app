@@ -236,25 +236,47 @@ export default function BuyerMapHome({ onStart }: BuyerMapHomeProps) {
 
       // Phase 2: Process interviews if available
       if (uploadedFiles.interviews.length > 0) {
-        setProcessingStep('Phase 2: Validating with interviews...');
+        setProcessingStep('Phase 2: Uploading interviews to storage...');
         
         console.log('=== PHASE 2: INTERVIEW VALIDATION ===');
-        console.log('Processing interviews:', uploadedFiles.interviews.map(f => f.name));
+        console.log('🎙️ [BLOB] Processing interviews:', uploadedFiles.interviews.map(f => f.name));
         
-        const interviewFormData = new FormData();
-        uploadedFiles.interviews.forEach(file => {
-          interviewFormData.append('interviews', file);
-        });
-        interviewFormData.append('assumptions', JSON.stringify(transformedResults));
+        // Step 1: Upload files to Vercel Blob
+        console.log('🎙️ [BLOB] Step 1: Uploading files to Vercel Blob...');
+        const { upload } = await import('@vercel/blob/client');
+        const blobUrls: string[] = [];
+        
+        for (let i = 0; i < uploadedFiles.interviews.length; i++) {
+          const file = uploadedFiles.interviews[i];
+          setProcessingStep(`Uploading interview ${i + 1}/${uploadedFiles.interviews.length}: ${file.name}`);
+          console.log(`🎙️ [BLOB] Uploading file ${i + 1}:`, file.name);
+          
+          const blob = await upload(file.name, file, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-interview',
+          });
+          
+          console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
+          blobUrls.push(blob.url);
+        }
+        
+        setProcessingStep('Phase 2: Analyzing interviews...');
+        console.log('🎙️ [BLOB] All files uploaded, starting analysis with blob URLs:', blobUrls);
 
         const interviewResponse = await fetch('/api/analyze-interviews', {
           method: 'POST',
-          body: interviewFormData
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blobUrls: blobUrls,
+            assumptions: JSON.stringify(transformedResults),
+          }),
         });
 
         if (!interviewResponse.ok) {
           const errorText = await interviewResponse.text();
-          throw new Error(`Interview validation failed: ${errorText}`);
+          throw new Error(`Interview analysis failed: ${interviewResponse.status} ${errorText}`);
         }
 
         const interviewResults = await interviewResponse.json();

@@ -412,18 +412,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         return updated;
       });
 
-      // 🚀 Send to your backend with existing assumptions for context
-      const form = new FormData();
-      newFiles.forEach(file => form.append('transcripts', file));
-      
-      // Include existing assumptions for interview validation
-      if (localBuyerMapData.length > 0) {
-        form.append('assumptions', JSON.stringify(localBuyerMapData));
-      }
-      
-      console.log('🚀 Sending transcripts to API…');
-      console.log('📁 FormData contents:', newFiles.map(f => f.name));
-      console.log('📋 Existing assumptions:', localBuyerMapData.length);
+      console.log('🎙️ [BLOB] Starting interview upload process with', newFiles.length, 'files');
       setUploadingInterviews(true);
       setProcessError(null);
       
@@ -432,13 +421,41 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       interviewProcessing.startInterviewProcessing(newFiles.length, assumptionTexts);
       
       try {
-        const res = await fetch('/api/buyermap/interviews', {
+        // Step 1: Upload files to Vercel Blob
+        console.log('🎙️ [BLOB] Step 1: Uploading files to Vercel Blob...');
+        const { upload } = await import('@vercel/blob/client');
+        const blobUrls: string[] = [];
+        
+        for (let i = 0; i < newFiles.length; i++) {
+          const file = newFiles[i];
+          console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${newFiles.length}:`, file.name);
+          
+          const blob = await upload(file.name, file, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-interview',
+          });
+          
+          console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
+          blobUrls.push(blob.url);
+        }
+        
+        console.log('🎙️ [BLOB] All files uploaded, starting analysis with blob URLs:', blobUrls);
+        
+        // Step 2: Send blob URLs to analysis API
+        const res = await fetch('/api/analyze-interviews', {
           method: 'POST',
-          body: form,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blobUrls: blobUrls,
+            assumptions: JSON.stringify(localBuyerMapData),
+          }),
         });
         
         if (!res.ok) {
-          throw new Error(`Upload failed: ${res.statusText}`);
+          const errorText = await res.text();
+          throw new Error(`Interview analysis failed: ${res.status} ${errorText}`);
         }
         
         // 🛠️ Grab the real response body here:

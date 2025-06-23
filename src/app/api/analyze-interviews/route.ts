@@ -846,10 +846,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(mock.default);
     }
     
-    const formData = await request.formData();
-    const files = formData.getAll('files') as File[];
-    const assumptionsJson = formData.get('assumptions') as string;
-    const existingAssumptions: BuyerMapData[] = JSON.parse(assumptionsJson);
+    // Support both FormData (legacy) and JSON (new blob URLs)
+    const contentType = request.headers.get('content-type');
+    
+    let files: File[] = [];
+    let existingAssumptions: BuyerMapData[] = [];
+    
+    if (contentType?.includes('application/json')) {
+      // New: JSON payload with blob URLs
+      const body = await request.json();
+      const blobUrls: string[] = body.blobUrls || [];
+      const assumptionsJson = body.assumptions;
+      existingAssumptions = JSON.parse(assumptionsJson);
+      
+      console.log(`📦 [BLOB] Received ${blobUrls.length} blob URLs for interview analysis`);
+      
+      // Download files from blob URLs
+      files = await Promise.all(
+        blobUrls.map(async (url, index) => {
+          console.log(`📥 [BLOB] Downloading file ${index + 1} from: ${url}`);
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to download file from ${url}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          const filename = url.split('/').pop() || `interview-${index + 1}.pdf`;
+          return new File([arrayBuffer], filename, {
+            type: response.headers.get('content-type') || 'application/pdf'
+          });
+        })
+      );
+      
+      console.log(`✅ [BLOB] Successfully downloaded ${files.length} files from blob storage`);
+    } else {
+      // Legacy: FormData with direct file uploads
+      console.log(`📁 [LEGACY] Processing direct file uploads`);
+      const formData = await request.formData();
+      files = formData.getAll('files') as File[];
+      const assumptionsJson = formData.get('assumptions') as string;
+      existingAssumptions = JSON.parse(assumptionsJson);
+    }
 
     if (!files.length) {
       return NextResponse.json(

@@ -145,36 +145,54 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
 
   const handleInterviewAnalysis = async (files: FileList, currentData: ICPValidationResponse) => {
     try {
-      console.log('[Parent] Starting REAL interview analysis API call...');
-      onProgressUpdate?.(10);
+      console.log('[Parent] Starting BLOB interview analysis with', files.length, 'files');
+      onProgressUpdate?.(5);
+      
+      // Import upload function dynamically to ensure it's available
+      const { upload } = await import('@vercel/blob/client');
 
-      // Create FormData for file upload
-      const formData = new FormData();
-      // Add files with correct field name
-      Array.from(files).forEach((file) => {
-        formData.append('files', file);
-      });
-      // Always use currentData.assumptions directly
-      formData.append('assumptions', JSON.stringify(currentData.assumptions));
-      // Add debugging
-      console.log('[Parent] FormData being sent:');
-      console.log('- Files count:', files.length);
-      console.log('- File names:', Array.from(files).map(f => f.name));
-      console.log('- Assumptions count:', currentData.assumptions.length);
+      // Step 1: Upload files to Vercel Blob
+      console.log('[Parent] Step 1: Uploading files to Vercel Blob...');
+      const blobUrls: string[] = [];
+      
+      const fileArray = Array.from(files);
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        console.log(`[Parent] Uploading file ${i + 1}/${fileArray.length}:`, file.name);
+        
+        const blob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-interview',
+        });
+        
+        console.log(`[Parent] File ${i + 1} uploaded to:`, blob.url);
+        blobUrls.push(blob.url);
+        
+        // Update progress during upload
+        const uploadProgress = 5 + (i + 1) / fileArray.length * 25; // 5-30%
+        onProgressUpdate?.(uploadProgress);
+      }
 
-      onProgressUpdate?.(30);
-      console.log('[Parent] Making API call to /api/analyze-interviews...');
+      console.log('[Parent] All files uploaded to blob storage:', blobUrls);
+      onProgressUpdate?.(35);
 
-      // Make the actual API call
+      // Step 2: Send blob URLs to analysis API
+      console.log('[Parent] Step 2: Analyzing interviews from blob URLs...');
       const response = await fetch('/api/analyze-interviews', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrls: blobUrls,
+          assumptions: JSON.stringify(currentData.assumptions),
+        }),
       });
 
       onProgressUpdate?.(70);
 
       if (!response.ok) {
-        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+        throw new Error(`Analysis failed: ${response.status} ${response.statusText}`);
       }
 
       const apiResult = await response.json();
@@ -190,7 +208,7 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
       console.log('[Parent] Returning updated data:', updatedData);
       return updatedData;
     } catch (error) {
-      console.error('[Parent] API call failed:', error);
+      console.error('[Parent] BLOB interview analysis failed:', error);
       onProgressUpdate?.(0);
       throw error;
     }

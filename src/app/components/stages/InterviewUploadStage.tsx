@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { upload } from '@vercel/blob/client';
 import { BuyerMapData } from '../../../types/buyermap';
 
 interface InterviewUploadStageProps {
@@ -16,18 +17,71 @@ export default function InterviewUploadStage({
 }: InterviewUploadStageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     setUploadedFiles(files);
   };
 
-  const handleUpload = () => {
-    if (uploadedFiles.length > 0) {
-      onUpload(uploadedFiles, assumptions, (data) => {
-        console.log('Upload successful:', data);
-        onUploaded();
+  const handleUpload = async () => {
+    if (uploadedFiles.length === 0) return;
+    
+    try {
+      setIsUploading(true);
+      setUploadProgress('Uploading files to storage...');
+      console.log('🎙️ [BLOB] Starting interview upload process with', uploadedFiles.length, 'files');
+      
+      // Step 1: Upload files to Vercel Blob
+      const blobUrls: string[] = [];
+      
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        setUploadProgress(`Uploading file ${i + 1} of ${uploadedFiles.length}: ${file.name}`);
+        
+        console.log(`🎙️ [BLOB] Uploading file ${i + 1}:`, file.name);
+        const blob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-interview',
+        });
+        
+        console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
+        blobUrls.push(blob.url);
+      }
+      
+      setUploadProgress('Processing interviews...');
+      console.log('🎙️ [BLOB] All files uploaded, starting analysis with blob URLs:', blobUrls);
+      
+      // Step 2: Send blob URLs to analysis API
+      const response = await fetch('/api/analyze-interviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrls: blobUrls,
+          assumptions: JSON.stringify(assumptions),
+        }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`Analysis failed: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ [BLOB] Interview analysis completed:', data);
+      
+      // Call the success callback with the analysis results
+      onUploaded();
+      
+    } catch (error) {
+      console.error('❌ [BLOB] Interview upload/analysis failed:', error);
+      setUploadProgress(`Error: ${error instanceof Error ? error.message : 'Upload failed'}`);
+      // Don't call onUploaded() if there was an error
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setUploadProgress(''), 3000); // Clear progress message after 3 seconds
     }
   };
 
@@ -112,13 +166,29 @@ export default function InterviewUploadStage({
             ))}
           </div>
           
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={handleUpload}
-              className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Upload & Validate Assumptions
-            </button>
+          <div className="mt-6 space-y-3">
+            {uploadProgress && (
+              <div className="text-center">
+                <div className="inline-flex items-center px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  {uploadProgress}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-center">
+              <button
+                onClick={handleUpload}
+                disabled={isUploading}
+                className={`px-6 py-3 font-medium rounded-lg transition-colors ${
+                  isUploading
+                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isUploading ? 'Processing...' : 'Upload & Validate Assumptions'}
+              </button>
+            </div>
           </div>
         </div>
       )}
