@@ -41,6 +41,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function POST(req: NextRequest) {
   try {
     console.log('=== SALES DECK ANALYSIS PHASE ===');
+    console.log('Request method:', req.method);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+    console.log('Request URL:', req.url);
     
     // Check if we should use mock data
     if (isMockMode()) {
@@ -49,44 +52,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(mock.default);
     }
     
-    const contentType = req.headers.get('content-type') || '';
-    let deckFile: File;
+    console.log('Attempting to parse FormData...');
+    let formData;
+    try {
+      formData = await req.formData();
+      console.log('FormData parsed successfully');
+    } catch (error) {
+      console.error('Failed to parse FormData:', error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
+      return NextResponse.json({ 
+        error: `Failed to parse upload data: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      }, { status: 400 });
+    }
     
-    // Handle both regular FormData uploads and chunked base64 uploads
-    if (contentType.includes('application/json')) {
-      // Handle chunked upload (base64 encoded)
-      const body = await req.json();
-      const { fileName, fileData, mimeType } = body;
-      
-      if (!fileName || !fileData) {
-        console.error('Missing fileName or fileData in chunked upload');
-        return NextResponse.json({ error: 'Missing file data' }, { status: 400 });
-      }
-      
-      try {
-        // Decode base64 data
-        const binaryData = Buffer.from(fileData, 'base64');
-        deckFile = new File([binaryData], fileName, { type: mimeType || 'application/pdf' });
-        console.log('Chunked upload received:', fileName, 'Size:', binaryData.length, 'bytes');
-      } catch (err) {
-        console.error('Failed to decode base64 file data:', err);
-        return NextResponse.json({ error: 'Invalid file data encoding' }, { status: 400 });
-      }
-    } else {
-      // Handle regular FormData upload
-      const formData = await req.formData();
-      const uploadedFile = formData.get('deck') as File;
-      
-      if (!uploadedFile) {
-        console.error('No file provided in request');
-        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-      }
-      
-      deckFile = uploadedFile;
+    const deckFile = formData.get('deck') as File;
+    console.log('File extracted from FormData:', deckFile?.name, deckFile?.size, 'bytes');
+
+    if (!deckFile) {
+      console.error('No file provided in request');
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
     // Check file size (50MB limit)
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
+    console.log('File size check:', deckFile.size, 'vs limit:', MAX_FILE_SIZE);
+    
     if (deckFile.size > MAX_FILE_SIZE) {
       console.error('File too large:', deckFile.size, 'bytes');
       return NextResponse.json({ 
@@ -94,7 +87,7 @@ export async function POST(req: NextRequest) {
       }, { status: 413 });
     }
 
-    console.log('Starting deck analysis for file:', deckFile.name);
+    console.log('Starting deck analysis for file:', deckFile.name, 'Size:', (deckFile.size / 1024 / 1024).toFixed(2), 'MB');
 
     // 1. Parse the deck file
     console.log('Step 1: Parsing deck file...');
