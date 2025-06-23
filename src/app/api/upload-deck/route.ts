@@ -1,61 +1,62 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request): Promise<NextResponse> {
+  const body = (await request.json()) as HandleUploadBody;
+
   try {
-    console.log('=== GENERATING DIRECT UPLOAD URL ===');
-    
-    // Check if BLOB_READ_WRITE_TOKEN is available
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!token) {
-      console.error('❌ BLOB_READ_WRITE_TOKEN environment variable is not set');
-      return NextResponse.json(
-        { error: 'Server configuration error: BLOB_READ_WRITE_TOKEN not found' },
-        { status: 500 }
-      );
-    }
-    console.log('✅ BLOB_READ_WRITE_TOKEN is available');
-    
-    const body = (await request.json()) as HandleUploadBody;
-    
-    console.log('Generating upload URL for client-side upload');
-    
+    console.log('🔄 Processing upload request for deck');
+
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
-        console.log('Generating token for:', pathname);
+      onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
+        console.log('🔐 Generating token for:', { pathname, multipart });
         
-        // Parse client payload to check for preferences
+        // Allow overwrite if specified in client payload
         const payload = clientPayload ? JSON.parse(clientPayload) : {};
-        
+        const allowOverwrite = payload.allowOverwrite === true;
+
         return {
           allowedContentTypes: [
             'application/vnd.ms-powerpoint',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            'application/pdf'
           ],
-          maximumSizeInBytes: 100 * 1024 * 1024, // 100MB limit
-          addRandomSuffix: payload.addRandomSuffix !== undefined ? payload.addRandomSuffix : true, // Default to true for safety
-          allowOverwrite: payload.allowOverwrite || false,
+          addRandomSuffix: true,
+          allowOverwrite,
+          // Optimize cache for better performance
+          cacheControlMaxAge: 31536000, // 1 year cache
+          // Enable compression for better transfer speeds
+          maximumSizeInBytes: 500 * 1024 * 1024, // 500MB limit
+          tokenPayload: JSON.stringify({
+            uploadTime: Date.now(),
+            allowOverwrite
+          }),
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('Upload completed:', blob.url);
+        console.log('✅ Upload completed:', {
+          url: blob.url,
+          contentType: blob.contentType
+        });
+
+        try {
+          const payload = tokenPayload ? JSON.parse(tokenPayload) : {};
+          const uploadDuration = Date.now() - (payload.uploadTime || 0);
+          console.log(`📊 Upload metrics: ${uploadDuration}ms total time`);
+        } catch (error) {
+          console.warn('Failed to parse token payload:', error);
+        }
       },
     });
 
     return NextResponse.json(jsonResponse);
-    
-  } catch (error: any) {
-    console.error('Upload URL generation error:', error);
-    
+  } catch (error) {
+    console.error('❌ Upload error:', error);
     return NextResponse.json(
-      { error: `Upload URL generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
+      { error: (error as Error).message },
+      { status: 400 }
     );
   }
 } 

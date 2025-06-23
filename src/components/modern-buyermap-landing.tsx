@@ -240,6 +240,40 @@ const ScoreBreakdown: React.FC<{
   );
 };
 
+const ProcessingTimeEstimate: React.FC<{
+  interviewCount: number;
+  isProcessing: boolean;
+  currentStep: number;
+}> = ({ interviewCount, isProcessing, currentStep }) => {
+  if (!isProcessing || currentStep !== 2) return null;
+
+  const estimatedTimeSeconds = Math.max(60, interviewCount * 30); // Minimum 1 minute, ~30 seconds per interview
+  const estimatedMinutes = Math.ceil(estimatedTimeSeconds / 60);
+  
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+      <div className="flex items-start space-x-3">
+        <div className="flex-shrink-0">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+        </div>
+        <div>
+          <h4 className="text-sm font-medium text-blue-900 mb-2">
+            Processing {interviewCount} interview file{interviewCount !== 1 ? 's' : ''}
+          </h4>
+          <div className="text-sm text-blue-700 space-y-1">
+            <p>• <strong>Estimated time:</strong> {estimatedMinutes} minute{estimatedMinutes !== 1 ? 's' : ''}</p>
+            <p>• <strong>Current task:</strong> AI-powered quote extraction and classification</p>
+            <p>• <strong>Progress:</strong> Processing files in parallel for faster results</p>
+          </div>
+          <div className="mt-3 text-xs text-blue-600 bg-blue-100 rounded px-2 py-1">
+            💡 <strong>Tip:</strong> Interview analysis takes longer than deck processing due to detailed AI analysis of customer quotes
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ 
   buyerMapData, 
   overallScore, 
@@ -521,12 +555,26 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
             console.log('🔄 Sanitized interview filename:', file.name, '->', sanitizedFileName);
             
+            // Use multipart upload for files larger than 10MB for better performance
+            const useMultipart = file.size > 10 * 1024 * 1024;
+            console.log(`🔄 Interview upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(file.size / 1024 / 1024).toFixed(2)}MB file`);
+            
+            const uploadStartTime = performance.now();
             const blob = await upload(sanitizedFileName, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-interview',
+              multipart: useMultipart,
+              onUploadProgress: (progress) => {
+                const percentage = Math.round(progress.percentage);
+                console.log(`📈 Interview upload progress: ${percentage}% (${file.name})`);
+              }
             });
             
-            console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
+            const uploadEndTime = performance.now();
+            const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
+            const throughputMbps = (file.size / 1024 / 1024) / uploadDuration;
+            console.log(`✅ [BLOB] Interview uploaded in ${uploadDuration.toFixed(2)}s (${throughputMbps.toFixed(2)} MB/s): ${file.name} -> ${blob.url}`);
+            
             blobUrls.push(blob.url);
           }
         }
@@ -551,7 +599,19 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         if (blobUrls.length > 0) {
           console.log(`🚀 [BLOB] Processing ${blobUrls.length} interview files...`);
           
-          const analysisResponse = await fetch('/api/analyze-interviews', {
+          // Update progress indicator
+          const resetProgress = interviewProcessing.startInterviewProcessing(blobUrls.length, localBuyerMapData.map(d => d.v1Assumption));
+          // Note: The progress will be automatically managed by the processing hooks
+          
+          // Create a timeout for the analysis request (5 minutes)
+          const timeoutMs = 5 * 60 * 1000; // 5 minutes
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Analysis request timed out after 5 minutes')), timeoutMs)
+          );
+
+          console.log(`⏰ [BLOB] Starting analysis with ${timeoutMs/1000}s timeout...`);
+          
+          const analysisPromise = fetch('/api/analyze-interviews', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -560,8 +620,16 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             }),
           });
 
+          const analysisResponse = await Promise.race([analysisPromise, timeoutPromise]) as Response;
+
           if (!analysisResponse.ok) {
-            throw new Error(`Analysis failed: ${analysisResponse.statusText}`);
+            const errorText = await analysisResponse.text();
+            console.error('❌ Analysis response error:', {
+              status: analysisResponse.status,
+              statusText: analysisResponse.statusText,
+              body: errorText
+            });
+            throw new Error(`Analysis failed (${analysisResponse.status}): ${analysisResponse.statusText || errorText}`);
           }
 
           const payload = await analysisResponse.json();
@@ -658,8 +726,13 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       if (resultUrl) {
         console.log(`✅ [BLOB] Conflict resolved, file available at: ${resultUrl}`);
         
-        // Process the resolved file
-        const analysisResponse = await fetch('/api/analyze-interviews', {
+        // Process the resolved file with timeout protection
+        const timeoutMs = 5 * 60 * 1000; // 5 minutes
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Single file analysis timed out after 5 minutes')), timeoutMs)
+        );
+
+        const analysisPromise = fetch('/api/analyze-interviews', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -667,6 +740,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             assumptions: JSON.stringify(localBuyerMapData),
           }),
         });
+
+        const analysisResponse = await Promise.race([analysisPromise, timeoutPromise]) as Response;
 
         if (analysisResponse.ok) {
           const payload = await analysisResponse.json();
@@ -930,9 +1005,16 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
                     View Results
                   </button>
                   {uploadingInterviews && (
-                    <div className="mt-4 flex items-center justify-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                      <p className="text-blue-600">🚀 Uploading and processing interviews...</p>
+                    <div className="mt-4">
+                      <div className="flex items-center justify-center space-x-2 mb-3">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <p className="text-blue-600">🚀 Uploading and processing interviews...</p>
+                      </div>
+                      <ProcessingTimeEstimate
+                        interviewCount={uploadedFiles.interviews.length || 1}
+                        isProcessing={uploadingInterviews}
+                        currentStep={currentStep}
+                      />
                     </div>
                   )}
                 </div>

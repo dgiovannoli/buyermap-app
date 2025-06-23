@@ -19,7 +19,7 @@ if (process.env.NEXT_PUBLIC_USE_MOCK !== "TRUE") {
 
 // === FEATURE FLAG ===
 const USE_TARGETED_EXTRACTION = true;
-const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
+const CONCURRENT_LIMIT = 3; // Process max 3 interviews simultaneously to avoid timeouts
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -36,8 +36,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-// Helper: Robust OpenAI call with retries, logging, and response_format enforcement
-async function callOpenAIWithRetry(params: any, purpose: string, maxRetries = 2) {
+// Helper: Robust OpenAI call with retries, logging, and response_format enforcement (reduced retries for faster processing)
+async function callOpenAIWithRetry(params: any, purpose: string, maxRetries = 1) {
   const apiKeyPresent = !!process.env.OPENAI_API_KEY;
   console.log(`[OpenAI][${purpose}] API key present:`, apiKeyPresent ? 'YES' : 'NO');
   let lastError = null;
@@ -65,7 +65,7 @@ async function callOpenAIWithRetry(params: any, purpose: string, maxRetries = 2)
       lastError = err;
       console.error(`[OpenAI][${purpose}] Error on attempt ${attempt}:`, (err as Error).message);
       if (attempt <= maxRetries) {
-        await new Promise(res => setTimeout(res, 500 * attempt));
+        await new Promise(res => setTimeout(res, 200 * attempt)); // Reduced retry delay
         continue;
       }
       throw err;
@@ -897,16 +897,25 @@ export async function POST(request: NextRequest) {
     console.log(`🎯 Starting parallel processing for ${files.length} interviews, ${existingAssumptions.length} assumptions for user ${user.id}`);
     const assumptionsList: string[] = existingAssumptions.map(a => a.v1Assumption);
     
-    // Set up parallel processing with rate limiting
+    // Set up parallel processing with rate limiting and timeout protection
     const limit = pLimit(CONCURRENT_LIMIT);
     console.log(`🚀 Processing ${files.length} interviews in parallel (max ${CONCURRENT_LIMIT} concurrent)...`);
     
-    const allResults = await Promise.all(
+    // Add overall timeout protection (4.5 minutes for Vercel Pro)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Overall processing timeout after 270 seconds')), 270000);
+    });
+    
+    const processingPromise = Promise.all(
       files.map(file => 
         limit(async () => {
           try {
             console.log(`Starting interview: ${file.name}`);
-            const result = await processSingleInterviewWithStorage(file, assumptionsList);
+            // Add per-file timeout (45 seconds)
+            const result = await withTimeout(
+              processSingleInterviewWithStorage(file, assumptionsList),
+              45000
+            );
             const elapsed = ((Date.now() - processingStartTime) / 1000).toFixed(1);
             console.log(`✅ Completed interview ${file.name} in ${elapsed}s`);
             return { result, fileName: file.name };
@@ -921,6 +930,8 @@ export async function POST(request: NextRequest) {
         })
       )
     );
+    
+    const allResults = await Promise.race([processingPromise, timeoutPromise]) as any[];
     
     // Extract interview metadata for storage
     const interviewMetadata = allResults

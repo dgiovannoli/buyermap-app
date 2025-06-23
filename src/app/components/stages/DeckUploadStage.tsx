@@ -35,6 +35,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
   const [uploadProgress, setUploadProgress] = useState(0);
   const processingProgress = useProcessingProgress();
   const fileConflictHandler = useFileConflictHandler();
+  const [useCompression, setUseCompression] = useState(false);
   
   console.log('🔄 State check:', {
     isProcessing,
@@ -53,31 +54,19 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     console.log('🔄 File uploaded:', file?.name);
     
     if (file) {
-      // Check file size (50MB limit)
-      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
-      if (file.size > MAX_FILE_SIZE) {
-        const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-        onError(`File too large. Maximum size is 50MB, but your file is ${fileSizeMB}MB. Please compress your file or convert to a more efficient format.`);
+      const maxSize = 500 * 1024 * 1024; // 500MB limit
+      if (file.size > maxSize) {
+        onError(`File size (${formatFileSize(file.size)}) exceeds maximum limit of ${formatFileSize(maxSize)}`);
         return;
       }
       
-      // Clear any previous errors
-      onError(null);
-    }
-    
-    setUploadedDeck(file);
-    if (file) {
-      // Simulate upload progress
-      setUploadProgress(0);
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
-          }
-          return prev + 10;
-        });
-      }, 100);
+      setUploadedDeck(file);
+      // Auto-enable compression for files larger than 50MB
+      setUseCompression(file.size > 50 * 1024 * 1024);
+      onError(null); // Clear any previous errors
+    } else {
+      setUploadedDeck(null);
+      setUseCompression(false);
     }
   };
 
@@ -191,10 +180,41 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         
         let blob;
         try {
+          // Use multipart upload for files larger than 10MB for better performance
+          const useMultipart = uploadedDeck.size > 10 * 1024 * 1024;
+          
+          console.log(`🔄 Upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(uploadedDeck.size / 1024 / 1024).toFixed(2)}MB file`);
+          const uploadStartTime = performance.now();
+          
           blob = await upload(sanitizedFileName, uploadedDeck, {
             access: 'public',
             handleUploadUrl: '/api/upload-deck',
+            multipart: useMultipart, // Enable multipart for large files
+            onUploadProgress: (progress) => {
+              const percentage = Math.round(progress.percentage);
+              console.log(`📈 Upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+              
+              // Update processing progress with upload percentage
+              const uploadPercentage = Math.min(50, percentage * 0.5); // Upload takes 50% of total progress
+              onProgressUpdate({
+                phase: 'deck',
+                step: 'deck-upload',
+                currentBatch: 0,
+                totalBatches: 1,
+                percentage: uploadPercentage,
+                status: 'processing'
+              });
+            }
           });
+          
+          const uploadEndTime = performance.now();
+          const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
+          const throughputMbps = (uploadedDeck.size / 1024 / 1024) / uploadDuration;
+          
+          console.log(`✅ Upload completed in ${uploadDuration.toFixed(2)}s (${throughputMbps.toFixed(2)} MB/s throughput)`);
+          
+          blobUrl = blob.url;
+          console.log('🔄 Direct upload completed:', blobUrl);
         } catch (uploadError: any) {
           console.error('❌ Upload failed:', uploadError);
           console.error('❌ Upload error details:', {
@@ -204,9 +224,6 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
           });
           throw new Error(`Upload failed: ${uploadError.message || 'Unknown error'}`);
         }
-        
-        blobUrl = blob.url;
-        console.log('🔄 Direct upload completed:', blobUrl);
       }
       
       // Step 2: Analyze the uploaded file
@@ -289,13 +306,38 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         const sanitizedFinalFileName = finalFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
         console.log('🔄 Sanitized conflict filename:', finalFileName, '->', sanitizedFinalFileName);
         
+        // Use multipart upload for files larger than 10MB for better performance
+        const useMultipart = uploadedDeck.size > 10 * 1024 * 1024;
+        console.log(`🔄 Conflict upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(uploadedDeck.size / 1024 / 1024).toFixed(2)}MB file`);
+        const uploadStartTime = performance.now();
+        
         const blob = await upload(sanitizedFinalFileName, uploadedDeck, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
+          multipart: useMultipart,
           clientPayload: JSON.stringify({ 
             allowOverwrite: conflictResolution.action === 'overwrite' 
           }),
+          onUploadProgress: (progress) => {
+            const percentage = Math.round(progress.percentage);
+            console.log(`📈 Conflict upload progress: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB)`);
+            
+            const uploadPercentage = Math.min(50, percentage * 0.5);
+            onProgressUpdate({
+              phase: 'deck',
+              step: 'deck-upload',
+              currentBatch: 0,
+              totalBatches: 1,
+              percentage: uploadPercentage,
+              status: 'processing'
+            });
+          }
         });
+        
+        const uploadEndTime = performance.now();
+        const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
+        const throughputMbps = (uploadedDeck.size / 1024 / 1024) / uploadDuration;
+        console.log(`✅ Conflict upload completed in ${uploadDuration.toFixed(2)}s (${throughputMbps.toFixed(2)} MB/s throughput)`);
         
         blobUrl = blob.url;
         console.log('🔄 File uploaded:', blobUrl);
@@ -489,7 +531,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                   
                   {/* File Size Limit */}
                   <div className="text-xs text-gray-500">
-                    Maximum file size: 50MB
+                    Maximum file size: 500MB (optimized uploads available)
                   </div>
                 </div>
 
@@ -513,9 +555,29 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-4">
                     {getFileIcon(uploadedDeck.name)}
-                    <div>
+                    <div className="flex-1">
                       <h4 className="font-medium text-white">{uploadedDeck.name}</h4>
                       <p className="text-sm text-gray-300">{formatFileSize(uploadedDeck.size)}</p>
+                      
+                      {/* Upload Optimization Info */}
+                      {uploadedDeck.size > 10 * 1024 * 1024 && (
+                        <div className="mt-2 flex items-center space-x-2 text-xs">
+                          <div className="flex items-center space-x-1 text-green-400">
+                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                            <span>Multipart upload</span>
+                          </div>
+                          <div className="flex items-center space-x-1 text-blue-400">
+                            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                            <span>Progress tracking</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadedDeck.size > 50 * 1024 * 1024 && (
+                        <div className="mt-1 text-xs text-amber-400">
+                          ⚡ Large file detected - using optimized upload strategy
+                        </div>
+                      )}
                     </div>
                   </div>
                   <button
