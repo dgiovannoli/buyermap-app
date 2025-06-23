@@ -41,7 +41,9 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     isProcessing,
     phase: processingProgress.phase,
     progress: processingProgress.progress,
-    uploadedDeck: !!uploadedDeck
+    uploadedDeck: !!uploadedDeck,
+    uploadProgress: uploadProgress,
+    shouldShowProcessButton: !!(uploadedDeck && uploadProgress === 100)
   });
 
   // Reset processing state when component mounts
@@ -61,11 +63,14 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
       }
       
       setUploadedDeck(file);
+      setUploadProgress(100); // Mark file selection as complete
       // Auto-enable compression for files larger than 50MB
       setUseCompression(file.size > 50 * 1024 * 1024);
       onError(null); // Clear any previous errors
+      console.log('🔄 File upload progress set to 100%, process button should now be visible');
     } else {
       setUploadedDeck(null);
+      setUploadProgress(0); // Reset progress when file is removed
       setUseCompression(false);
     }
   };
@@ -697,7 +702,10 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         {uploadedDeck && uploadProgress === 100 && (
           <div className="text-center">
             <button
-              onClick={handleProcessDeck}
+              onClick={() => {
+                console.log('🔄 Process button clicked!');
+                handleProcessDeck();
+              }}
               disabled={isProcessing}
               className="inline-flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all duration-200"
             >
