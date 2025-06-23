@@ -25,6 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'text/plain'
           ],
+          addRandomSuffix: true,
           tokenPayload: JSON.stringify({
             uploadedBy: 'user-id', // Replace with actual user ID
             uploadType: 'interview'
