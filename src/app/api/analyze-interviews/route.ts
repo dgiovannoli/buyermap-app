@@ -939,9 +939,22 @@ export async function POST(request: NextRequest) {
         return (quotesData as Record<string, Quote[]>)[assumption.v1Assumption] || [];
       });
       
+      // Ensure each assumption has the correct totalInterviews count
+      const updatedICPValidation = assumption.icpValidation ? {
+        ...assumption.icpValidation,
+        totalInterviews: files.length
+      } : {
+        title: assumption.icpAttribute || 'ICP Validation',
+        subtitle: assumption.icpTheme || 'Validated against customer interviews',
+        cardNumber: assumption.id || 1,
+        series: 'ICP Collection 2025',
+        totalInterviews: files.length
+      };
+      
       return {
         ...assumption,
-        quotes: allQuotesForAssumption
+        quotes: allQuotesForAssumption,
+        icpValidation: updatedICPValidation
       };
     });
     
@@ -956,9 +969,8 @@ export async function POST(request: NextRequest) {
     const scoreBreakdown = calculateOverallAlignmentScore(aggregatedResults);
     
     // Transform to final format
-    const icpValidation = createICPValidationData(aggregatedResults[0]);
+    const icpValidation = createICPValidationData(aggregatedResults[0], files.length);
     icpValidation.subtitle = 'Validated against customer interviews';
-    icpValidation.totalInterviews = files.length;
     
     const validationAttributes = Object.values(createValidationData(aggregatedResults));
     

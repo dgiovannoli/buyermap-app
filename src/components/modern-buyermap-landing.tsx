@@ -490,6 +490,13 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           quotes: any[];
           validationStatus?: string;
           realityFromInterviews?: string;
+          icpValidation?: {
+            title: string;
+            subtitle: string;
+            cardNumber: number;
+            series: string;
+            totalInterviews: number;
+          };
         }) => {
           const card = byId.get(ia.id);
           if (!card) return;
@@ -535,6 +542,16 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           } else {
             console.log(`⚠️ No realityFromInterviews found for assumption ${ia.id}`);
           }
+          
+          // ✅ UPDATE: Set icpValidation with correct totalInterviews count
+          card.icpValidation = ia.icpValidation || {
+            title: card.icpAttribute || 'ICP Validation',
+            subtitle: card.icpTheme || 'Validated against customer interviews',
+            cardNumber: card.id || 1,
+            series: 'ICP Collection 2025',
+            totalInterviews: payload.metadata?.totalInterviews || 0
+          };
+          console.log(`✅ Set totalInterviews to ${card.icpValidation.totalInterviews} for assumption ${ia.id}`);
           
           // Add interview validation to validationAttributes if it exists
           if (card.validationAttributes) {

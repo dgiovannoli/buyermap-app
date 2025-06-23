@@ -168,14 +168,14 @@ export function createValidationData(assumptions: BuyerMapData[]): Record<string
 /**
  * Creates ICPValidationData from existing BuyerMapData
  */
-export function createICPValidationData(data: BuyerMapData): ICPValidationData {
+export function createICPValidationData(data: BuyerMapData, totalInterviewCount?: number): ICPValidationData {
   console.log('Creating ICP validation data from:', data);
   return {
     title: data.icpAttribute || 'ICP Validation',
     subtitle: data.icpTheme || 'Validate your ICP assumptions against real customer interviews',
     cardNumber: data.id || 1,
     series: 'ICP Collection 2025',
-    totalInterviews: calculateTotalInterviews(data.quotes || [])
+    totalInterviews: totalInterviewCount || calculateTotalInterviews(data.quotes || [])
   };
 }
 
