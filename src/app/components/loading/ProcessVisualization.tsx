@@ -38,7 +38,7 @@ interface ProcessVisualizationProps {
 // Time estimation functions based on real data
 const estimateProcessingTime = (phase: 'deck' | 'interview', fileCount: number = 1): number => {
   if (phase === 'deck') {
-    return 10; // ~10 seconds for deck processing
+    return 40; // ~40 seconds for deck processing (updated based on real timing: 38s average)
   } else {
     // Interview processing: ~78 seconds for 3 interviews, scales with batching
     const baseTimePerBatch = 78; // seconds for 3 interviews
