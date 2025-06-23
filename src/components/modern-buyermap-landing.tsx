@@ -338,19 +338,82 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     }
 
     try {
-      const form = new FormData();
-      form.append('deck', files[0]);
-      console.log('🚀 Sending deck to real API…');
+      console.log('🚀 [BLOB] Starting deck upload process...');
       setIsProcessing(true);
       setProcessError(null);
 
+      // Step 1: Upload deck to Vercel Blob
+      const { upload } = await import('@vercel/blob/client');
+      const { head } = await import('@vercel/blob');
+      const file = files[0];
+      
+      console.log(`📊 [BLOB] Uploading deck: ${file.name}`);
+      
+      // Check if file already exists
+      let fileExists = false;
+      let existingUrl = null;
+      
+      try {
+        const existingBlob = await head(file.name);
+        if (existingBlob) {
+          fileExists = true;
+          existingUrl = existingBlob.url;
+          console.log(`🔍 [BLOB] Deck "${file.name}" already exists at: ${existingUrl}`);
+        }
+      } catch (error) {
+        // File doesn't exist, continue with upload
+        console.log(`📁 [BLOB] Deck "${file.name}" doesn't exist, proceeding with upload`);
+      }
+      
+      let blobUrl = null;
+      
+      if (fileExists && existingUrl) {
+        // Ask user what to do with existing file
+        const userChoice = confirm(
+          `The deck "${file.name}" already exists.\n\n` +
+          `• Click "OK" to use the existing file\n` +
+          `• Click "Cancel" to upload a new version (overwrite)`
+        );
+        
+        if (userChoice) {
+          // Use existing file
+          console.log(`🔄 [BLOB] Using existing deck: ${existingUrl}`);
+          blobUrl = existingUrl;
+        } else {
+          // User wants to overwrite, proceed with upload
+          console.log(`🔄 [BLOB] User chose to overwrite deck: ${file.name}`);
+        }
+      }
+      
+      // Upload the deck if we don't have a URL yet
+      if (!blobUrl) {
+        const blob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-deck',
+          clientPayload: JSON.stringify({ 
+            allowOverwrite: fileExists // Allow overwrite if file exists
+          }),
+        });
+        
+        console.log(`✅ [BLOB] Deck uploaded:`, blob.url);
+        blobUrl = blob.url;
+      }
+
+      // Step 2: Send blob URL to analysis API
+      console.log('📊 [BLOB] Sending deck blob URL to analysis API...');
       const res = await fetch('/api/analyze-deck', {
         method: 'POST',
-        body: form,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrl: blobUrl,
+        }),
       });
       
       if (!res.ok) {
-        throw new Error(`Upload failed: ${res.statusText}`);
+        const errorText = await res.text();
+        throw new Error(`Deck analysis failed: ${res.status} ${errorText}`);
       }
 
       const data = await res.json();
@@ -426,79 +489,63 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         const { upload } = await import('@vercel/blob/client');
         const blobUrls: string[] = [];
         
+        // Import head function for checking file existence
+        const { head } = await import('@vercel/blob');
+        
         for (let i = 0; i < newFiles.length; i++) {
           const file = newFiles[i];
           console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${newFiles.length}:`, file.name);
           
+          // Check if file already exists
+          let fileExists = false;
+          let existingUrl = null;
+          
+          try {
+            const existingBlob = await head(file.name);
+            if (existingBlob) {
+              fileExists = true;
+              existingUrl = existingBlob.url;
+              console.log(`🔍 [BLOB] File "${file.name}" already exists at: ${existingUrl}`);
+            }
+          } catch (error) {
+            // File doesn't exist, continue with upload
+            console.log(`📁 [BLOB] File "${file.name}" doesn't exist, proceeding with upload`);
+          }
+          
+          if (fileExists && existingUrl) {
+            // Ask user what to do with existing file
+            const userChoice = confirm(
+              `The file "${file.name}" already exists.\n\n` +
+              `• Click "OK" to use the existing file\n` +
+              `• Click "Cancel" to upload a new version (overwrite)`
+            );
+            
+            if (userChoice) {
+              // Use existing file
+              console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
+              blobUrls.push(existingUrl);
+              continue; // Skip to next file
+            } else {
+              // User wants to overwrite, proceed with upload
+              console.log(`🔄 [BLOB] User chose to overwrite: ${file.name}`);
+            }
+          }
+          
+          // Upload the file (either new file or overwrite existing)
           try {
             const blob = await upload(file.name, file, {
               access: 'public',
               handleUploadUrl: '/api/upload-interview',
+              clientPayload: JSON.stringify({ 
+                allowOverwrite: fileExists // Allow overwrite if file exists
+              }),
             });
             
             console.log(`✅ [BLOB] File ${i + 1} uploaded:`, blob.url);
             blobUrls.push(blob.url);
-          } catch (error: any) {
-            // Handle file exists error
-            if (error.status === 409 || (error.message && error.message.includes('FILE_EXISTS'))) {
-              console.log(`🔄 [BLOB] File exists conflict for: ${file.name}`);
-              
-              // Try to parse the error response
-              let existingUrl = null;
-              try {
-                const errorResponse = JSON.parse(error.message);
-                existingUrl = errorResponse.existingUrl;
-              } catch {
-                // If parsing fails, try to extract URL from error message
-                const urlMatch = error.message.match(/https:\/\/[^\s]+/);
-                existingUrl = urlMatch ? urlMatch[0] : null;
-              }
-              
-              if (existingUrl) {
-                const userChoice = confirm(
-                  `The file "${file.name}" already exists.\n\n` +
-                  `• Click "OK" to use the existing file\n` +
-                  `• Click "Cancel" to upload a new version (overwrite)`
-                );
-                
-                if (userChoice) {
-                  // Use existing file
-                  console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
-                  blobUrls.push(existingUrl);
-                } else {
-                  // Upload with overwrite
-                  console.log(`🔄 [BLOB] Overwriting file: ${file.name}`);
-                  const blob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload-interview',
-                    clientPayload: JSON.stringify({ allowOverwrite: true }),
-                  });
-                  
-                  console.log(`✅ [BLOB] Overwrite ${i + 1} complete:`, blob.url);
-                  blobUrls.push(blob.url);
-                }
-              } else {
-                // Fallback: ask user and add random suffix if they don't want to overwrite
-                const userChoice = confirm(
-                  `The file "${file.name}" already exists. Would you like to upload it with a unique name?`
-                );
-                
-                if (userChoice) {
-                  const blob = await upload(file.name, file, {
-                    access: 'public',
-                    handleUploadUrl: '/api/upload-interview',
-                    clientPayload: JSON.stringify({ allowOverwrite: false, addRandomSuffix: true }),
-                  });
-                  
-                  console.log(`✅ [BLOB] Upload ${i + 1} with unique name:`, blob.url);
-                  blobUrls.push(blob.url);
-                } else {
-                  throw new Error(`Upload cancelled for file: ${file.name}`);
-                }
-              }
-            } else {
-              throw error; // Re-throw other errors
-            }
+          } catch (uploadError: any) {
+            console.error(`❌ [BLOB] Upload failed for ${file.name}:`, uploadError);
+            throw uploadError;
           }
         }
         
