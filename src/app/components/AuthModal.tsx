@@ -27,7 +27,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
     })
   }, [])
 
-  // Listen for auth errors
+  // Listen for auth events
   useEffect(() => {
     if (!mounted) return
 
@@ -119,7 +119,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps): ReactEle
                 button_label: 'Sign in',
                 loading_button_label: 'Signing in...',
                 social_provider_text: 'Continue with {{provider}}',
-                link_text: "Don't have an account? Sign up"
+                link_text: "Don't have an account? Create one"
               }
             }
           }}
