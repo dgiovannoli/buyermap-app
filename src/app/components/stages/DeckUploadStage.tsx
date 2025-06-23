@@ -4,6 +4,8 @@ import { ICPValidationResponse } from '../../../types/buyermap';
 import FileDropzone from '../ui/FileDropzone';
 import ProcessVisualization from '../loading/ProcessVisualization';
 import { useProcessingProgress } from '../../hooks/useProcessingProgress';
+import { useFileConflictHandler } from '../../../hooks/useFileConflictHandler';
+import FileConflictDialog from '../../../components/ui/FileConflictDialog';
 import { 
   Upload, 
   FileText, 
@@ -32,6 +34,7 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const processingProgress = useProcessingProgress();
+  const fileConflictHandler = useFileConflictHandler();
   
   console.log('🔄 State check:', {
     isProcessing,
@@ -149,83 +152,39 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     const estimatedSlides = estimateSlideCount(uploadedDeck);
     console.log('🔄 Estimated slides:', estimatedSlides);
 
-    // Start the enhanced processing visualization with dynamic slide count
-    processingProgress.startDeckProcessing(estimatedSlides);
-
     try {
       console.log('🔄 File size:', uploadedDeck.size, 'bytes');
       
-      // Step 1: Upload directly to Vercel Blob using client-side upload
-      console.log('🔄 Step 1: Uploading directly to Vercel Blob...');
+      // Step 1: Check for conflicts first
+      console.log('🔄 Step 1: Checking for file conflicts...');
       
-      let blob;
-      try {
-        blob = await upload(uploadedDeck.name, uploadedDeck, {
+      const conflict = await fileConflictHandler.checkFileExists(uploadedDeck.name);
+      
+      let blobUrl: string;
+      let finalFileName = uploadedDeck.name;
+      
+      if (conflict) {
+        // Set conflicts and wait for user resolution
+        fileConflictHandler.setConflictsAndShow([conflict]);
+        // The dialog will handle the resolution
+        // For now, we'll exit and let the dialog handle the upload
+        setIsProcessing(false);
+        return;
+      } else {
+        // No conflict, proceed with direct upload
+        console.log('🔄 No conflicts, uploading directly...');
+        
+        // Start processing visualization
+        processingProgress.startDeckProcessing(estimatedSlides);
+        
+        const blob = await upload(uploadedDeck.name, uploadedDeck, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
         });
-      } catch (error: any) {
-        // Handle file exists error
-        if (error.status === 409 || (error.message && error.message.includes('FILE_EXISTS'))) {
-          console.log(`🔄 [BLOB] File exists conflict for: ${uploadedDeck.name}`);
-          
-          // Try to parse the error response
-          let existingUrl = null;
-          try {
-            const errorResponse = JSON.parse(error.message);
-            existingUrl = errorResponse.existingUrl;
-          } catch {
-            // If parsing fails, try to extract URL from error message
-            const urlMatch = error.message.match(/https:\/\/[^\s]+/);
-            existingUrl = urlMatch ? urlMatch[0] : null;
-          }
-          
-          if (existingUrl) {
-            const userChoice = confirm(
-              `The file "${uploadedDeck.name}" already exists.\n\n` +
-              `• Click "OK" to use the existing file\n` +
-              `• Click "Cancel" to upload a new version (overwrite)`
-            );
-            
-            if (userChoice) {
-              // Use existing file
-              console.log(`🔄 [BLOB] Using existing file: ${existingUrl}`);
-              blob = { url: existingUrl };
-            } else {
-              // Upload with overwrite
-              console.log(`🔄 [BLOB] Overwriting file: ${uploadedDeck.name}`);
-              blob = await upload(uploadedDeck.name, uploadedDeck, {
-                access: 'public',
-                handleUploadUrl: '/api/upload-deck',
-                clientPayload: JSON.stringify({ allowOverwrite: true }),
-              });
-              
-              console.log(`✅ [BLOB] Overwrite complete:`, blob.url);
-            }
-          } else {
-            // Fallback: ask user and add random suffix if they don't want to overwrite
-            const userChoice = confirm(
-              `The file "${uploadedDeck.name}" already exists. Would you like to upload it with a unique name?`
-            );
-            
-            if (userChoice) {
-              blob = await upload(uploadedDeck.name, uploadedDeck, {
-                access: 'public',
-                handleUploadUrl: '/api/upload-deck',
-                clientPayload: JSON.stringify({ allowOverwrite: false, addRandomSuffix: true }),
-              });
-              
-              console.log(`✅ [BLOB] Upload with unique name:`, blob.url);
-            } else {
-              throw new Error(`Upload cancelled for file: ${uploadedDeck.name}`);
-            }
-          }
-        } else {
-          throw error; // Re-throw other errors
-        }
+        
+        blobUrl = blob.url;
+        console.log('🔄 Direct upload completed:', blobUrl);
       }
-
-      console.log('🔄 Direct upload completed:', blob.url);
       
       // Step 2: Analyze the uploaded file
       console.log('🔄 Step 2: Analyzing deck...');
@@ -235,8 +194,8 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          blobUrl: blob.url,
-          filename: uploadedDeck.name
+          blobUrl: blobUrl,
+          filename: finalFileName
         })
       });
 
@@ -253,6 +212,90 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
       console.log('🔄 About to call onDeckProcessed');
       onDeckProcessed(data);
       console.log('🔄 onDeckProcessed called successfully');
+      onProgressUpdate({
+        phase: 'deck',
+        step: 'deck-results',
+        currentBatch: 0,
+        totalBatches: 0,
+        percentage: 100,
+        status: 'completed'
+      });
+    } catch (err) {
+      processingProgress.setError(err instanceof Error ? err.message : 'Failed to process deck');
+      onError(err instanceof Error ? err.message : 'Failed to process deck');
+      onProgressUpdate({
+        phase: 'deck',
+        step: 'deck-upload',
+        currentBatch: 0,
+        totalBatches: 0,
+        percentage: 0,
+        status: 'error',
+        error: err instanceof Error ? err.message : 'Failed to process deck'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle conflict resolution from dialog
+  const handleConflictResolution = async (resolution: { action: 'use-existing' | 'overwrite' | 'rename' }) => {
+    if (!uploadedDeck || !fileConflictHandler.currentConflict) return;
+
+    const conflictResolution = fileConflictHandler.resolveConflict(resolution);
+    if (!conflictResolution) return;
+
+    setIsProcessing(true);
+    
+    try {
+      let blobUrl: string;
+      let finalFileName = conflictResolution.fileName;
+
+      if (conflictResolution.action === 'use-existing' && conflictResolution.url) {
+        // Use existing file
+        blobUrl = conflictResolution.url;
+        console.log('🔄 Using existing file:', blobUrl);
+      } else {
+        // Upload new file (overwrite or rename)
+        console.log(`🔄 Uploading file with action: ${conflictResolution.action}`);
+        
+        // Start processing visualization
+        const estimatedSlides = estimateSlideCount(uploadedDeck);
+        processingProgress.startDeckProcessing(estimatedSlides);
+        
+        const blob = await upload(finalFileName, uploadedDeck, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-deck',
+          clientPayload: JSON.stringify({ 
+            allowOverwrite: conflictResolution.action === 'overwrite' 
+          }),
+        });
+        
+        blobUrl = blob.url;
+        console.log('🔄 File uploaded:', blobUrl);
+      }
+
+      // Continue with analysis
+      console.log('🔄 Step 2: Analyzing deck...');
+      const analysisResponse = await fetch('/api/analyze-deck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrl: blobUrl,
+          filename: finalFileName
+        })
+      });
+
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text();
+        throw new Error(`Failed to analyze deck: ${analysisResponse.status} ${errorText}`);
+      }
+
+      const data = await analysisResponse.json();
+      console.log('🔄 Analysis data parsed:', data);
+
+      onDeckProcessed(data);
       onProgressUpdate({
         phase: 'deck',
         step: 'deck-results',
@@ -553,6 +596,15 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
           </div>
         </div>
       </div>
+      
+      {/* File Conflict Dialog */}
+      <FileConflictDialog
+        isOpen={fileConflictHandler.isDialogOpen}
+        fileName={fileConflictHandler.currentConflict?.fileName || ''}
+        existingFileInfo={fileConflictHandler.currentConflict?.existingFileInfo}
+        onResolve={(action) => handleConflictResolution({ action })}
+        onCancel={fileConflictHandler.cancelConflict}
+      />
     </div>
   );
 } 
