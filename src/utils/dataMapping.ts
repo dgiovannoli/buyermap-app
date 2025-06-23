@@ -191,6 +191,27 @@ export function calculateTotalInterviews(quotes: Quote[]): number {
  * Helper function to transform BuyerMapData to include new validation properties
  */
 export function transformBuyerMapData(data: BuyerMapData): BuyerMapData {
+  // Map validation status to the expected type for AssumptionData
+  const mapValidationStatus = (status: typeof data.validationStatus): 'pending' | 'partial' | 'validated' | undefined => {
+    if (!status) return undefined;
+    
+    switch (status) {
+      case 'validated':
+      case 'VALIDATED':
+        return 'validated';
+      case 'partial':
+        return 'partial';
+      case 'contradicted':
+      case 'CONTRADICTED':
+      case 'GAP_IDENTIFIED':
+      case 'INSUFFICIENT_DATA':
+        return 'partial'; // Map these to partial since they're not fully validated
+      case 'pending':
+      default:
+        return 'pending';
+    }
+  };
+
   const assumptionData: AssumptionData = {
     icpAttribute: data.icpAttribute,
     icpTheme: data.icpTheme,
@@ -202,7 +223,7 @@ export function transformBuyerMapData(data: BuyerMapData): BuyerMapData {
     confidenceScore: data.confidenceScore,
     confidenceExplanation: data.confidenceExplanation,
     quotes: data.quotes,
-    validationStatus: data.validationStatus
+    validationStatus: mapValidationStatus(data.validationStatus)
   };
 
   return {

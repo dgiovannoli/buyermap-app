@@ -125,11 +125,16 @@ export default function ModernBuyerMapLanding() {
         <div className="mt-8">
           {/* show the grid read-only */}
           <DeckResultsStage 
-            buyerMapData={buyerMapData} 
+            buyerMapData={{
+              assumptions: buyerMapData,
+              overallAlignmentScore: 0,
+              validatedCount: 0,
+              partiallyValidatedCount: 0,
+              pendingCount: buyerMapData.length
+            }} 
             onError={onError}
             onProgressUpdate={onProgressUpdate}
             onValidationUpdate={onValidationUpdate}
-            readOnly={true}
           />
         </div>
 
@@ -162,10 +167,6 @@ export default function ModernBuyerMapLanding() {
         onDeckProcessed={onDeckProcessed}
         onError={onError}
         onProgressUpdate={onProgressUpdate}
-        onStartProcessing={() => {
-          console.log('Starting deck processing...')
-          // Skip the processing phase, go directly to results
-        }}
       />
     )
   }

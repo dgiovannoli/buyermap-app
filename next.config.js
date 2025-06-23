@@ -1,5 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ESLint configuration for build
+  eslint: {
+    // Only run ESLint on specific directories during build
+    dirs: ['src'],
+    // Allow production builds to complete even with ESLint errors
+    ignoreDuringBuilds: false,
+  },
+  // TypeScript configuration
+  typescript: {
+    // Allow production builds to complete even with TypeScript errors (not recommended for production)
+    ignoreBuildErrors: false,
+  },
   webpack: (config, { isServer }) => {
     // Force unique build ID to avoid chunk caching issues
     config.output.uniqueName = Date.now().toString();

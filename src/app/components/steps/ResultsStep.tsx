@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { BarChart, Users, TrendingUp, ArrowRight, Brain, Target, Zap } from 'lucide-react';
-import { BuyerMapData, Quote, InterviewBatch } from '../../types/buyermap';
+import { BuyerMapData, Quote, InterviewBatch } from '../../../types/buyermap';
 
 interface ResultsStepProps {
   results: BuyerMapData[];
@@ -20,20 +20,22 @@ export default function ResultsStep({
   processedBatches
 }: ResultsStepProps) {
   const totalRecords = results?.length || 0;
-  const alignedAssumptions = results?.filter(r => r.comparisonOutcome === 'aligned').length || 0;
-  const misalignedAssumptions = results?.filter(r => r.comparisonOutcome === 'misaligned').length || 0;
-  const newInsights = results?.filter(r => r.comparisonOutcome === 'new_insight').length || 0;
+  const alignedAssumptions = results?.filter(r => r.comparisonOutcome === 'Aligned').length || 0;
+  const misalignedAssumptions = results?.filter(r => r.comparisonOutcome === 'Misaligned').length || 0;
+  const newInsights = results?.filter(r => r.comparisonOutcome === 'New Data Added').length || 0;
   const averageConfidence = totalRecords > 0 
     ? (results || []).reduce((acc, r) => acc + (r.effectiveConfidence || r.confidenceScore || 0), 0) / totalRecords
     : 0;
 
   const getScoreColor = (outcome: string) => {
     switch (outcome) {
-      case 'aligned':
+      case 'Aligned':
         return 'text-green-600';
-      case 'misaligned':
+      case 'Misaligned':
+      case 'Contradicted':
         return 'text-red-600';
-      case 'new_insight':
+      case 'New Data Added':
+      case 'Refined':
         return 'text-blue-600';
       default:
         return 'text-gray-600';
@@ -42,11 +44,15 @@ export default function ResultsStep({
 
   const getOutcomeColor = (outcome: string) => {
     switch (outcome) {
-      case 'aligned':
+      case 'Aligned':
+      case 'Validated':
         return 'bg-green-100 text-green-800';
-      case 'misaligned':
+      case 'Misaligned':
+      case 'Contradicted':
         return 'bg-red-100 text-red-800';
-      case 'new_insight':
+      case 'New Data Added':
+      case 'Refined':
+      case 'Challenged':
         return 'bg-blue-100 text-blue-800';
       default:
         return 'bg-gray-100 text-gray-800';

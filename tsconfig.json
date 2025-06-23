@@ -7,7 +7,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "jsx": "preserve",
     "lib": [
       "dom",
