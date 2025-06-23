@@ -49,12 +49,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(mock.default);
     }
     
-    const formData = await req.formData();
-    const deckFile = formData.get('deck') as File;
-
-    if (!deckFile) {
-      console.error('No file provided in request');
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    const contentType = req.headers.get('content-type') || '';
+    let deckFile: File;
+    
+    // Handle both regular FormData uploads and chunked base64 uploads
+    if (contentType.includes('application/json')) {
+      // Handle chunked upload (base64 encoded)
+      const body = await req.json();
+      const { fileName, fileData, mimeType } = body;
+      
+      if (!fileName || !fileData) {
+        console.error('Missing fileName or fileData in chunked upload');
+        return NextResponse.json({ error: 'Missing file data' }, { status: 400 });
+      }
+      
+      try {
+        // Decode base64 data
+        const binaryData = Buffer.from(fileData, 'base64');
+        deckFile = new File([binaryData], fileName, { type: mimeType || 'application/pdf' });
+        console.log('Chunked upload received:', fileName, 'Size:', binaryData.length, 'bytes');
+      } catch (err) {
+        console.error('Failed to decode base64 file data:', err);
+        return NextResponse.json({ error: 'Invalid file data encoding' }, { status: 400 });
+      }
+    } else {
+      // Handle regular FormData upload
+      const formData = await req.formData();
+      const uploadedFile = formData.get('deck') as File;
+      
+      if (!uploadedFile) {
+        console.error('No file provided in request');
+        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      }
+      
+      deckFile = uploadedFile;
     }
 
     // Check file size (50MB limit)

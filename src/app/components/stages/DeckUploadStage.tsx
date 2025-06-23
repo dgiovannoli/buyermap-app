@@ -152,21 +152,46 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     processingProgress.startDeckProcessing(estimatedSlides);
 
     try {
-      const formData = new FormData();
-      formData.append('deck', uploadedDeck);
-
       console.log('🔄 Starting API call');
       
-      // Just make the API call - the visualization will run independently
-      const apiResponse = await fetch('/api/analyze-deck', {
-        method: 'POST',
-        body: formData
-      });
+      // Check if we need to use chunked upload (for files > 4MB to handle Vercel limits)
+      const CHUNK_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB
+      let apiResponse: Response;
+      
+      if (uploadedDeck.size > CHUNK_SIZE_LIMIT) {
+        console.log('🔄 Using chunked upload for large file:', uploadedDeck.size, 'bytes');
+        
+        // Convert file to base64 for chunked upload
+        const fileBuffer = await uploadedDeck.arrayBuffer();
+        const base64Data = Buffer.from(fileBuffer).toString('base64');
+        
+        apiResponse = await fetch('/api/analyze-deck', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileName: uploadedDeck.name,
+            fileData: base64Data,
+            mimeType: uploadedDeck.type
+          })
+        });
+      } else {
+        console.log('🔄 Using regular FormData upload');
+        const formData = new FormData();
+        formData.append('deck', uploadedDeck);
+        
+        apiResponse = await fetch('/api/analyze-deck', {
+          method: 'POST',
+          body: formData
+        });
+      }
 
       console.log('🔄 API call completed, status:', apiResponse.status);
 
       if (!apiResponse.ok) {
-        throw new Error('Failed to process deck');
+        const errorText = await apiResponse.text();
+        throw new Error(`Failed to process deck: ${apiResponse.status} ${errorText}`);
       }
 
       const data = await apiResponse.json();

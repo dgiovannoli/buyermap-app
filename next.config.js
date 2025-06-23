@@ -1,11 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // API route configuration
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb', // Increase from default 1mb to 50mb
-    },
-  },
   // ESLint configuration for build
   eslint: {
     // Only run ESLint on specific directories during build
