@@ -158,14 +158,22 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
       // Step 1: Check for conflicts first
       console.log('🔄 Step 1: Checking for file conflicts...');
       
-      const conflict = await fileConflictHandler.checkFileExists(uploadedDeck.name);
+      // Use sanitized filename for conflict check
+      const sanitizedName = uploadedDeck.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      console.log('🔄 Checking conflicts for sanitized name:', uploadedDeck.name, '->', sanitizedName);
+      
+      const conflict = await fileConflictHandler.checkFileExists(sanitizedName);
       
       let blobUrl: string;
       let finalFileName = uploadedDeck.name;
       
       if (conflict) {
-        // Set conflicts and wait for user resolution
-        fileConflictHandler.setConflictsAndShow([conflict]);
+        // Update conflict with original filename for display but sanitized for processing
+        const displayConflict = { 
+          ...conflict, 
+          fileName: uploadedDeck.name // Show original name in dialog
+        };
+        fileConflictHandler.setConflictsAndShow([displayConflict]);
         // The dialog will handle the resolution
         // For now, we'll exit and let the dialog handle the upload
         setIsProcessing(false);
@@ -177,7 +185,11 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         // Start processing visualization
         processingProgress.startDeckProcessing(estimatedSlides);
         
-        const blob = await upload(uploadedDeck.name, uploadedDeck, {
+        // Sanitize filename to avoid URL encoding issues
+        const sanitizedFileName = uploadedDeck.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        console.log('🔄 Sanitized filename:', uploadedDeck.name, '->', sanitizedFileName);
+        
+        const blob = await upload(sanitizedFileName, uploadedDeck, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
         });
@@ -262,7 +274,11 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
         const estimatedSlides = estimateSlideCount(uploadedDeck);
         processingProgress.startDeckProcessing(estimatedSlides);
         
-        const blob = await upload(finalFileName, uploadedDeck, {
+        // Sanitize filename to avoid URL encoding issues
+        const sanitizedFinalFileName = finalFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        console.log('🔄 Sanitized conflict filename:', finalFileName, '->', sanitizedFinalFileName);
+        
+        const blob = await upload(sanitizedFinalFileName, uploadedDeck, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
           clientPayload: JSON.stringify({ 
