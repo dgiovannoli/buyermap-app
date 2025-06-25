@@ -15,6 +15,7 @@ interface Quote {
   speaker?: string;
   role?: string;
   source: string;
+  relevanceScore?: number;
 }
 
 // Support wrapped quotes like { quote: { text, speaker, ... } }
@@ -166,46 +167,49 @@ export default async function handler(
     
     // Debug: Log what quotes we received for synthesis
     console.log(`📋 Synthesizing for assumption: "${assumption}"`);
-    console.log(`📋 Received ${flattenedQuotes.length} quotes for synthesis:`);
+    console.log(`📋 Received ${flattenedQuotes.length} quotes for synthesis (relevance-filtered):`);
     console.log(`📊 Conversation Stats: ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers`);
     flattenedQuotes.forEach((quote, idx) => {
-      console.log(`  Quote ${idx + 1}: "${quote.text.slice(0, 100)}..." (speaker: ${quote.speaker || 'Unknown'})`);
+      const relevanceInfo = quote.relevanceScore ? ` (relevance: ${quote.relevanceScore.toFixed(1)}/3.0)` : '';
+      console.log(`  Quote ${idx + 1}: "${quote.text.slice(0, 100)}..." (speaker: ${quote.speaker || 'Unknown'})${relevanceInfo}`);
     });
 
-    // Enhanced synthesis prompt that considers conversation coverage
-    const synthesisPrompt = `You are an expert business analyst synthesizing customer interview insights. Your task is to analyze quotes from customer interviews and create a single, coherent summary of what the interviews reveal about a specific business assumption.
+    // Concise synthesis prompt optimized for efficiency while maintaining accuracy
+    const synthesisPrompt = `Analyze customer interview insights for this assumption:
 
-ASSUMPTION TO ANALYZE:
-"${assumption}"
+ASSUMPTION: "${assumption}"
 
-STATISTICAL CONTEXT:
-- Total quotes: ${conversationStats.totalQuotes}
-- Unique conversations: ${conversationStats.uniqueConversations}
-- Unique speakers: ${conversationStats.uniqueSpeakers}
-- Coverage: ${conversationStats.conversationCoverage}
+CONTEXT: ${conversationStats.totalQuotes} quotes from ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers (quotes have been filtered for relevance to this assumption)
 
-INTERVIEW QUOTES:
-${flattenedQuotes.map((quote, index) => `
-${index + 1}. "${quote.text}"
-   Speaker: ${quote.speaker || 'Unknown'}
-   Role: ${quote.role || 'Unknown'}
-   Source: ${quote.source || 'Unknown'}
-`).join('\n')}
+ACTUAL INTERVIEW QUOTES PROVIDED:
+${flattenedQuotes.map((quote, index) => `${index + 1}. "${quote.text}" - ${quote.speaker || 'Unknown'} (${quote.role || 'Unknown role'})${quote.relevanceScore ? ` [relevance: ${quote.relevanceScore.toFixed(1)}/3.0]` : ''}`).join('\n')}
 
-INSTRUCTIONS:
-1. Synthesize ALL the quotes into ONE coherent paragraph that captures what the interviews collectively reveal about this assumption
-2. Focus on PATTERNS and THEMES across multiple quotes, not individual responses
-3. When you see similar themes from multiple conversations/speakers, emphasize that as stronger evidence
-4. Include specific details and examples from the quotes when relevant
-5. Consider the statistical context - ${conversationStats.uniqueConversations} conversations mentioning this topic ${conversationStats.uniqueConversations > 2 ? 'suggests strong market validation' : conversationStats.uniqueConversations === 2 ? 'provides initial validation' : 'represents single-source insight'}
-6. Write in a professional, analytical tone
-7. Do NOT include confidence scores, validation outcomes, or recommendations
-8. Do NOT mention individual speakers by name
-9. Keep the synthesis focused on factual observations from the interviews
+CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+- ONLY use information EXPLICITLY stated in the PROVIDED QUOTES above
+- Do NOT generate any new quotes, examples, or hypothetical scenarios
+- Do NOT mention ANY buyer categories (like "forensic psychologists", "criminal defense attorneys", etc.) unless those exact terms appear in the quotes
+- Do NOT infer speaker roles beyond what they explicitly state about themselves
+- Do NOT make assumptions about what types of professionals the speakers represent
+- If a speaker doesn't explicitly state their role, refer to them by name only
+- Synthesize ONLY from the actual interview content provided
+- If quotes don't directly address the assumption, acknowledge this limitation
 
-Write a single paragraph (3-5 sentences) that synthesizes what the interview data reveals about this assumption. Start directly with the insights - no preamble like "The interviews show..." or "Based on the data...".
+TASK: Write ONE concise paragraph (2-3 sentences) that states HOW the interview evidence relates to the assumption.
 
-Return only the synthesis paragraph as plain text.`;
+Your response should DIRECTLY indicate whether the quotes:
+- VALIDATE the assumption (confirm what the deck claims)
+- CONTRADICT the assumption (challenge what the deck claims) 
+- IDENTIFY A GAP (reveal information missing from the deck)
+
+REQUIREMENTS:
+- Reference ONLY the speakers and content from provided quotes
+- Be concise - NO explanatory examples or "for instance" text
+- Professional, analytical tone
+- ${conversationStats.uniqueConversations > 2 ? 'Multiple conversations = strong validation' : conversationStats.uniqueConversations === 2 ? 'Two conversations = initial validation' : 'Single source = limited insight'}
+- NO preambles, NO confidence scores, NO recommendations
+- Focus on the relationship between quotes and assumption
+
+Return only the concise analysis paragraph based on the PROVIDED quotes.`;
 
     // Call OpenAI for synthesis
     const response = await withTimeout(
@@ -214,7 +218,7 @@ Return only the synthesis paragraph as plain text.`;
         messages: [
           {
             role: 'system',
-            content: 'You are an expert business analyst who synthesizes customer interview insights into clear, actionable summaries. Provide only the requested synthesis without additional commentary.'
+            content: 'You are an expert business analyst who synthesizes customer interview insights into clear, actionable summaries. CRITICAL: You must ONLY use information from the provided interview quotes. Do NOT create new quotes, examples, or mention content not explicitly in the provided quotes. Provide only the requested synthesis without additional commentary.'
           },
           {
             role: 'user',
@@ -222,7 +226,7 @@ Return only the synthesis paragraph as plain text.`;
           }
         ],
         temperature: 0.2,
-        max_tokens: 500
+        max_tokens: 300
       }),
       30000 // 30 second timeout
     );

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponent } from '../../lib/supabase-client'
+import { supabase } from '../../lib/supabase-client'
 
 export default function AuthDebugPage() {
   const [email, setEmail] = useState('')
@@ -9,7 +9,7 @@ export default function AuthDebugPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [debugInfo, setDebugInfo] = useState<any>({})
-  const supabase = createClientComponent()
+  // supabase client is already imported
 
   useEffect(() => {
     // Collect debug information

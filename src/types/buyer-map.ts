@@ -4,6 +4,7 @@ export type ProcessingStep =
   | 'home'
   | 'deck-upload'
   | 'deck-processing'
+  | 'deck-analysis'
   | 'deck-results'
   | 'interview-upload'
   | 'interview-processing'

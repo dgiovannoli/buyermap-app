@@ -140,8 +140,10 @@ const DeckResultsStage: React.FC<DeckResultsStageProps> = ({
 }) => {
   // Skip directly to results page - no intermediate upload step needed
 
-  console.log('buyerMapData received:', buyerMapData, typeof buyerMapData);
-  console.log('buyerMapData structure:', JSON.stringify(buyerMapData, null, 2));
+  console.log('🔍 DeckResultsStage received buyerMapData:', buyerMapData);
+  console.log('🔍 buyerMapData.assumptions length:', buyerMapData?.assumptions?.length);
+  console.log('🔍 First assumption:', buyerMapData?.assumptions?.[0]);
+  console.log('🔍 buyerMapData structure:', JSON.stringify(buyerMapData, null, 2));
 
   const handleInterviewAnalysis = async (files: FileList, currentData: ICPValidationResponse) => {
     try {

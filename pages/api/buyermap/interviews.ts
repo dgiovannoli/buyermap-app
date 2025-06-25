@@ -73,7 +73,7 @@ type BuyerMapData = {
 // Configuration
 const USE_TARGETED_EXTRACTION = true;
 const CONCURRENT_LIMIT = 5; // Process max 5 interviews simultaneously
-const ENABLE_CARD_OVERRIDES = true; // Enable card overrides to show validation-focused results
+const ENABLE_CARD_OVERRIDES = false; // Disabled to use real quote synthesis instead of hard-coded deck analysis
 
 // Card Updates Lookup Table - Maps ICP attributes to DECK VALIDATION results
 const CARD_UPDATES = {
@@ -321,42 +321,41 @@ async function indexQuoteEmbeddings(quotes: Quote[], assumptionId: number): Prom
 function getTopicFocusInstructions(assumption: string): string {
   const assumptionLower = assumption.toLowerCase();
   
-  // Buyer titles / target customers
-  if (assumptionLower.includes('buyer') || assumptionLower.includes('target') || 
-      assumptionLower.includes('attorney') || assumptionLower.includes('customer')) {
-    return `TOPIC: WHO buys, uses, or makes decisions about this service
+  // Buyer titles / who buys
+  if (assumptionLower.includes('buyer') || assumptionLower.includes('title') || 
+      assumptionLower.includes('who') || assumptionLower.includes('attorney') || 
+      assumptionLower.includes('paralegal') || assumptionLower.includes('psychologist')) {
+    return `TOPIC: WHO buys, uses, or decides about the service (BUYER TITLES)
     
-    EXTRACT quotes about:
-    - Job titles, roles, or professional backgrounds
-    - Who makes purchasing decisions
-    - Types of legal professionals or staff
-    - User personas or target customers
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about buyer titles:
+    - Exact job titles mentioned ("criminal defense attorney", "legal assistant", "paralegal", "forensic psychologist")
+    - Role descriptions with decision-making power ("I'm the one who decides", "our IT director makes those calls")
+    - Purchasing authority ("I handle all technology purchases", "partners approve software")
+    - User personas explicitly mentioned ("attorneys like me", "paralegals in our office")
     
-    EXAMPLES of relevant quotes:
-    "I'm a criminal defense attorney and..."
-    "The paralegal usually handles..."
-    "Our office manager decides on..."
-    "Attorneys like me typically..."`;
+    VALIDATION FOCUS: Do the quotes confirm the deck's buyer title assumptions?
+    CONTRADICTION FOCUS: Do speakers have different titles than assumed?
+    GAP FOCUS: Are there buyer roles mentioned that aren't in the deck?
+    
+    REJECT: General service satisfaction without role clarity`;
   }
   
-  // Company/firm size
+  // Company/firm size 
   if (assumptionLower.includes('company') || assumptionLower.includes('firm') || 
-      assumptionLower.includes('size') || assumptionLower.includes('small') || 
-      assumptionLower.includes('large')) {
-    return `TOPIC: Company or firm SIZE characteristics
+      assumptionLower.includes('size') || assumptionLower.includes('structure')) {
+    return `TOPIC: COMPANY/FIRM size and structure
     
-    EXTRACT quotes about:
-    - Firm size, employee count, or scale
-    - Resource constraints based on size
-    - Different needs by company size
-    - Size-related pricing or affordability
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about firm size:
+    - Specific size indicators ("solo practice", "200+ attorney firm", "small firm", "enterprise-level")
+    - Employee counts ("we have 12 people", "just me and the attorney")
+    - Scale descriptors with business impact ("limited staff", "large corporation")
+    - Resource constraints related to size ("small firm budget", "can't afford enterprise solutions")
     
-    EXAMPLES of relevant quotes:
-    "We're a small firm with..."
-    "Large practices like ours..."
-    "Solo attorneys don't have..."
-    "Small firms can't afford..."
-    "Enterprise pricing works for..."`;
+    VALIDATION FOCUS: Do quotes confirm the deck's target firm size?
+    CONTRADICTION FOCUS: Are speakers from different sized firms than targeted?
+    GAP FOCUS: Are there firm sizes mentioned not covered in the deck?
+    
+    REJECT: General business processes without size context`;
   }
   
   // Pain points / problems
@@ -364,17 +363,17 @@ function getTopicFocusInstructions(assumption: string): string {
       assumptionLower.includes('challenge') || assumptionLower.includes('difficult')) {
     return `TOPIC: PROBLEMS, challenges, or pain points
     
-    EXTRACT quotes about:
-    - Specific problems or frustrations
-    - Time-consuming tasks
-    - Inefficient processes
-    - Challenges they face
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about pain points:
+    - Explicit problem statements ("the biggest issue is...", "we struggle with...")
+    - Quantified frustrations ("takes 40 hours", "wastes 3 days", "costs us $X")
+    - Process breakdowns ("when this happens we can't...", "it's impossible to...")
+    - Time/efficiency problems ("too time-consuming", "manual process is killing us")
     
-    EXAMPLES of relevant quotes:
-    "The problem is we spend..."
-    "It's frustrating when..."
-    "We waste so much time..."
-    "The biggest challenge is..."`;
+    VALIDATION FOCUS: Do quotes confirm the deck's pain point assumptions?
+    CONTRADICTION FOCUS: Do speakers mention different problems than assumed?
+    GAP FOCUS: Are there pain points mentioned not addressed in the deck?
+    
+    REJECT: General satisfaction or solution descriptions`;
   }
   
   // Evidence processing / efficiency
@@ -382,81 +381,88 @@ function getTopicFocusInstructions(assumption: string): string {
       assumptionLower.includes('efficient') || assumptionLower.includes('review')) {
     return `TOPIC: EVIDENCE handling, processing, or review efficiency
     
-    EXTRACT quotes about:
-    - Evidence review processes
-    - Efficiency in handling evidence
-    - Time spent on evidence analysis
-    - Evidence management workflows
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about evidence needs:
+    - Evidence workflow descriptions ("when we review evidence...", "processing all this takes...")
+    - Efficiency pain points ("evidence analysis usually takes...", "manual review is...")
+    - Volume/scale challenges ("hundreds of files", "massive amounts of evidence")
+    - Quality/accuracy needs ("need to catch every detail", "can't miss anything important")
     
-    EXAMPLES of relevant quotes:
-    "When we review evidence..."
-    "Processing all this evidence takes..."
-    "We need to go through..."
-    "Evidence analysis usually..."`;
+    VALIDATION FOCUS: Do quotes confirm deck assumptions about evidence processing needs?
+    CONTRADICTION FOCUS: Do speakers have different evidence workflows than assumed?
+    GAP FOCUS: Are there evidence processing aspects not covered in the deck?
+    
+    REJECT: General technology preferences without evidence context`;
   }
   
   // Triggers / when they need service
   if (assumptionLower.includes('trigger') || assumptionLower.includes('when') || 
       assumptionLower.includes('need') || assumptionLower.includes('use')) {
-    return `TOPIC: WHEN or WHY they need/use the service
+    return `TOPIC: WHEN or WHY they need/use the service (TRIGGERS)
     
-    EXTRACT quotes about:
-    - Triggering events or situations
-    - When they seek solutions
-    - Decision-making moments
-    - Timing of needs
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about trigger events:
+    - Specific triggering situations ("when we get multiple big cases", "during trial prep")
+    - Timing of needs ("last-minute files", "urgent deadlines", "emergency situations")
+    - Decision-making moments ("that's when we realized we needed...", "the breaking point was...")
+    - Seasonal or cyclical patterns ("busy season", "trial prep time", "discovery phase")
     
-    EXAMPLES of relevant quotes:
-    "We started looking when..."
-    "The trigger was..."
-    "We need this most when..."
-    "It becomes urgent during..."`;
+    VALIDATION FOCUS: Do quotes confirm the deck's trigger assumptions?
+    CONTRADICTION FOCUS: Do speakers mention different triggers than assumed?
+    GAP FOCUS: Are there triggering situations not anticipated in the deck?
+    
+    REJECT: General usage patterns without specific trigger context`;
   }
   
-  // Barriers / obstacles
-  if (assumptionLower.includes('barrier') || assumptionLower.includes('obstacle') || 
-      assumptionLower.includes('concern') || assumptionLower.includes('challenge')) {
-    return `TOPIC: BARRIERS, obstacles, or concerns about adoption
+  // Barriers / concerns
+  if (assumptionLower.includes('barrier') || assumptionLower.includes('concern') || 
+      assumptionLower.includes('hesitant') || assumptionLower.includes('worry')) {
+    return `TOPIC: BARRIERS, concerns, or hesitations about adoption
     
-    EXTRACT quotes about:
-    - Reasons for hesitation
-    - Implementation concerns
-    - Budget or resource constraints
-    - Technical or operational barriers
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about barriers:
+    - Specific adoption concerns ("worried about data security", "concerned about cost")
+    - Implementation barriers ("don't have time to learn", "too complicated to set up")
+    - Budget/cost objections ("can't afford the pricing", "budget is tight")
+    - Trust/reliability concerns ("need to be sure it works", "what if it fails during trial")
     
-    EXAMPLES of relevant quotes:
-    "Our concern is..."
-    "The barrier for us is..."
-    "We worry about..."
-    "The obstacle would be..."`;
+    VALIDATION FOCUS: Do quotes confirm the deck's barrier assumptions?
+    CONTRADICTION FOCUS: Do speakers mention different barriers than assumed?
+    GAP FOCUS: Are there barriers not addressed in the deck?
+    
+    REJECT: General preferences without barrier-specific context`;
   }
   
-  // Messaging / value proposition
-  if (assumptionLower.includes('message') || assumptionLower.includes('value') || 
-      assumptionLower.includes('benefit') || assumptionLower.includes('emphasis')) {
-    return `TOPIC: What VALUE or BENEFITS resonate most
+  // Messaging / value propositions
+  if (assumptionLower.includes('messag') || assumptionLower.includes('value') || 
+      assumptionLower.includes('resonat') || assumptionLower.includes('benefit')) {
+    return `TOPIC: MESSAGING, value propositions, or what resonates
     
-    EXTRACT quotes about:
-    - What they find most valuable
-    - Key benefits they mention
-    - What messaging resonates
-    - Value propositions they care about
+    EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about messaging preferences:
+    - Value priorities explicitly stated ("most important feature is...", "what matters most is...")
+    - Persuasion factors ("what convinced me was...", "the key selling point...")
+    - Communication preferences ("just tell me...", "I want to hear about...", "focus on...")
+    - Feature priorities ("love the...", "really need the...", "don't care about...")
     
-    EXAMPLES of relevant quotes:
-    "What we really value is..."
-    "The biggest benefit is..."
-    "What matters most to us..."
-    "The key advantage is..."`;
+    VALIDATION FOCUS: Do quotes confirm the deck's messaging assumptions?
+    CONTRADICTION FOCUS: Do speakers respond to different messaging than assumed?
+    GAP FOCUS: Are there messaging angles not covered in the deck?
+    
+    REJECT: General feature descriptions without preference indication`;
   }
   
-  // Default case
-  return `TOPIC: General insights about this assumption
+  // Default for any other assumption
+  return `TOPIC: The specific subject matter of this assumption
   
-  EXTRACT quotes that provide specific insights about:
-  - Concrete behaviors or preferences
-  - Specific metrics or quantifiable statements
-  - Detailed processes or workflows
-  - Clear opinions or decisions`;
+  EXTRACT quotes that VALIDATE, CONTRADICT, or IDENTIFY GAPS about this assumption:
+  - Direct statements that confirm or challenge the assumption
+  - Specific examples that support or contradict the deck's claims
+  - New information that reveals gaps in the deck's understanding
+  
+  VALIDATION FOCUS: Do quotes confirm what the deck assumes?
+  CONTRADICTION FOCUS: Do quotes challenge the deck's assumptions?
+  GAP FOCUS: Do quotes reveal missing information in the deck?
+  
+  Focus on quotes that contain specific, concrete information relevant to validating, contradicting, or identifying gaps in this assumption.
+  
+  Avoid generic business talk, satisfaction statements, or unrelated topics.`;
 }
 
 // Extract targeted quotes for a specific assumption with company snapshot context
@@ -488,7 +494,7 @@ async function extractTargetedQuotes(interviewText: string, fileName: string, as
     const chunk = chunks[i];
     console.log(`🔍 Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars) - Current quotes: ${allQuotes.length}`);
     
-    const prompt = `You are extracting quotes that are directly ABOUT this business assumption. Stay focused on the topic.
+    const prompt = `You are extracting quotes that directly VALIDATE, CONTRADICT, or IDENTIFY GAPS with this deck assumption. Focus on alignment assessment.
 
 ASSUMPTION: "${assumption}"
 
@@ -498,37 +504,41 @@ ${companySnapshot}
 ` : ''}INTERVIEW CONTENT CHUNK: ${chunk}
 SOURCE: ${fileName}
 
-TOPIC FOCUS RULES:
-Extract quotes that are directly ABOUT the assumption's topic:
-
+EXTRACTION FOCUS:
 ${getTopicFocusInstructions(assumption)}
 
-CRITICAL: ONLY extract quotes that actually discuss the assumption's topic.
+ALIGNMENT ASSESSMENT PRIORITY:
+1. VALIDATION quotes: Confirm what the deck assumption claims
+2. CONTRADICTION quotes: Challenge what the deck assumption claims  
+3. GAP IDENTIFICATION quotes: Reveal missing information in the deck assumption
+
+CRITICAL: ONLY extract quotes that help assess whether the deck assumption is accurate.
 
 REJECT quotes about:
 - General satisfaction ("we're happy", "it's helpful", "we like it")
-- Pricing or costs ("price is always...", "expensive", "budget")
-- Features or functionality (unless directly related to assumption topic)
-- Process descriptions (unless directly related to assumption topic)
+- Pricing or costs (unless specifically about barriers or triggers)
+- Features or functionality (unless directly relevant to assumption topic)
+- Process descriptions (unless they validate/contradict the assumption)
 - Unrelated business topics
 
 QUALITY REQUIREMENTS:
-- Quote must contain specific, concrete information about the topic
+- Quote must contain specific, concrete information that relates to the assumption
+- Must help determine if deck assumption is accurate, inaccurate, or incomplete
 - Avoid vague or generic statements
 - Must be substantial (not conversation fragments)
 - Speaker attribution helpful when available
 
-Extract up to 2 quotes that are most directly ABOUT this assumption's topic from this chunk.
+Extract up to 2 quotes that BEST help validate, contradict, or identify gaps with this deck assumption.
 
 Return in this exact JSON format:
 {
   "quotes": [
     {
-      "text": "quote that discusses the assumption topic with specific details",
+      "text": "quote that helps assess the deck assumption's accuracy",
       "speaker": "speaker name if identifiable",
       "role": "speaker role if mentioned", 
       "source": "${fileName}",
-      "topic_relevance": "brief explanation of why this relates to the assumption topic",
+      "topic_relevance": "brief explanation of how this validates/contradicts/identifies gaps in the assumption",
       "specificity_score": 8
     }
   ]
@@ -828,6 +838,14 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<BuyerMapData | { error: string }>
 ) {
+  // 🚫 DEPRECATED ENDPOINT - Redirect to new analyze-interviews API
+  console.log('⚠️ DEPRECATED: /api/buyermap/interviews endpoint called. Use /api/analyze-interviews instead.');
+  
+  return res.status(410).json({ 
+    error: 'This endpoint is deprecated. Please use /api/analyze-interviews instead.' 
+  });
+
+  // Rest of the function is now disabled...
   const processingStartTime = Date.now();
   
   console.log('▶️ [Interview API] route start')
@@ -1041,9 +1059,9 @@ export default async function handler(
       // Continue without synthesis rather than failing the entire request
     }
     
-    // Apply interview-based card overrides (if enabled)
+    // Apply overrides based on flag
     let finalResults = aggregatedResults;
-    if (ENABLE_CARD_OVERRIDES) {
+    if (ENABLE_CARD_OVERRIDES && Object.keys(CARD_UPDATES).length > 0) {
       console.log('🎯 Applying interview-based card overrides for enhanced UI display...');
       finalResults = applyCardOverrides(aggregatedResults);
       
@@ -1084,6 +1102,8 @@ export default async function handler(
           console.log(`        Speaker: ${quote.speaker || 'Unknown'}, Company: ${quote.companySnapshot?.slice(0, 50) || 'No snapshot'}`);
         });
       });
+      
+      finalResults = aggregatedResults;
     }
     
     const validatedCount = finalResults.filter(a => a.validationStatus === 'VALIDATED').length;

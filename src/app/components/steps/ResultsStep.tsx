@@ -20,23 +20,24 @@ export default function ResultsStep({
   processedBatches
 }: ResultsStepProps) {
   const totalRecords = results?.length || 0;
-  const alignedAssumptions = results?.filter(r => r.comparisonOutcome === 'Aligned').length || 0;
-  const misalignedAssumptions = results?.filter(r => r.comparisonOutcome === 'Misaligned').length || 0;
-  const newInsights = results?.filter(r => r.comparisonOutcome === 'New Data Added').length || 0;
+  const validatedAssumptions = results?.filter(r => r.comparisonOutcome === 'Validated').length || 0;
+  const contradictedAssumptions = results?.filter(r => r.comparisonOutcome === 'Contradicted').length || 0;
+  const gapIdentifiedAssumptions = results?.filter(r => r.comparisonOutcome === 'Gap Identified').length || 0;
+  const insufficientDataAssumptions = results?.filter(r => r.comparisonOutcome === 'Insufficient Data').length || 0;
   const averageConfidence = totalRecords > 0 
     ? (results || []).reduce((acc, r) => acc + (r.effectiveConfidence || r.confidenceScore || 0), 0) / totalRecords
     : 0;
 
   const getScoreColor = (outcome: string) => {
     switch (outcome) {
-      case 'Aligned':
+      case 'Validated':
         return 'text-green-600';
-      case 'Misaligned':
       case 'Contradicted':
         return 'text-red-600';
-      case 'New Data Added':
-      case 'Refined':
-        return 'text-blue-600';
+      case 'Gap Identified':
+        return 'text-yellow-600';
+      case 'Insufficient Data':
+        return 'text-gray-600';
       default:
         return 'text-gray-600';
     }
@@ -44,16 +45,14 @@ export default function ResultsStep({
 
   const getOutcomeColor = (outcome: string) => {
     switch (outcome) {
-      case 'Aligned':
       case 'Validated':
         return 'bg-green-100 text-green-800';
-      case 'Misaligned':
       case 'Contradicted':
         return 'bg-red-100 text-red-800';
-      case 'New Data Added':
-      case 'Refined':
-      case 'Challenged':
-        return 'bg-blue-100 text-blue-800';
+      case 'Gap Identified':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Insufficient Data':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -80,16 +79,20 @@ export default function ResultsStep({
               <p className="text-2xl font-semibold text-gray-900">{totalRecords}</p>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-green-600">Aligned</h3>
-              <p className="text-2xl font-semibold text-green-700">{alignedAssumptions}</p>
+              <h3 className="text-sm font-medium text-green-600">Validated</h3>
+              <p className="text-2xl font-semibold text-green-700">{validatedAssumptions}</p>
             </div>
             <div className="bg-red-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-red-600">Misaligned</h3>
-              <p className="text-2xl font-semibold text-red-700">{misalignedAssumptions}</p>
+              <h3 className="text-sm font-medium text-red-600">Contradicted</h3>
+              <p className="text-2xl font-semibold text-red-700">{contradictedAssumptions}</p>
             </div>
-            <div className="bg-blue-50 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-blue-600">New Insights</h3>
-              <p className="text-2xl font-semibold text-blue-700">{newInsights}</p>
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-yellow-600">Gap Identified</h3>
+              <p className="text-2xl font-semibold text-yellow-700">{gapIdentifiedAssumptions}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-500">Insufficient Data</h3>
+              <p className="text-2xl font-semibold text-gray-700">{insufficientDataAssumptions}</p>
             </div>
           </div>
 

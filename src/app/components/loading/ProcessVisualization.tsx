@@ -224,20 +224,31 @@ export default function ProcessVisualization({
     stats.statisticalValidity
   ]);
 
-  // Update step status based on progress
+  // Update step progression based on progress - FIXED to prevent glitching
   useEffect(() => {
     const progressPerStep = 100 / steps.length;
     const currentIndex = Math.floor(progress / progressPerStep);
-    setCurrentStepIndex(Math.min(currentIndex, steps.length - 1));
+    
+    // Only update if the index actually changed to prevent unnecessary re-renders
+    setCurrentStepIndex(prevIndex => {
+      const newIndex = Math.min(currentIndex, steps.length - 1);
+      return newIndex !== prevIndex ? newIndex : prevIndex;
+    });
 
-    // Mark completed steps
-    const completed = steps.slice(0, currentIndex).map(step => step.id);
-    setCompletedSteps(completed);
+    // Mark completed steps - only update if there are actual changes
+    const newCompleted = steps.slice(0, currentIndex).map(step => step.id);
+    setCompletedSteps(prevCompleted => {
+      // Only update if the completed steps actually changed
+      if (JSON.stringify(prevCompleted) !== JSON.stringify(newCompleted)) {
+        return newCompleted;
+      }
+      return prevCompleted;
+    });
 
     if (progress >= 100 && onComplete) {
       setTimeout(onComplete, 500);
     }
-  }, [progress, steps.length, onComplete]);
+  }, [progress, steps.length, onComplete, steps]);
 
   // Get status for each step
   const getStepStatus = (stepIndex: number): ProcessStep['status'] => {

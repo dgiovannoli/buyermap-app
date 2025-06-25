@@ -13,9 +13,6 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   webpack: (config, { isServer }) => {
-    // Force unique build ID to avoid chunk caching issues
-    config.output.uniqueName = Date.now().toString();
-
     // Handle node modules that need to be processed by webpack
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -31,10 +28,6 @@ const nextConfig = {
     });
 
     return config;
-  },
-  // Force a new build ID each time
-  generateBuildId: async () => {
-    return Date.now().toString();
   },
   // External packages that should be processed on the server
   serverExternalPackages: [

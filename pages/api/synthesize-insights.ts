@@ -97,11 +97,68 @@ export default async function handler(
         // Use RAG to get the most relevant quotes for this assumption
         console.log(`🔍 Fetching top quotes via RAG for assumption ${assumption.id}: "${assumption.v1Assumption}"`);
         
+        // Extract attribute type from assumption data
+        const getAttributeType = (assumptionText: string, icpAttribute: string): string => {
+          const text = assumptionText.toLowerCase();
+          const attribute = icpAttribute.toLowerCase();
+          
+          // First try to map from icpAttribute
+          if (attribute.includes('buyer') || attribute.includes('title') || attribute.includes('role')) {
+            return 'buyer-titles';
+          }
+          if (attribute.includes('size') || attribute.includes('company') || attribute.includes('firm')) {
+            return 'company-size';
+          }
+          if (attribute.includes('pain') || attribute.includes('problem') || attribute.includes('challenge')) {
+            return 'pain-points';
+          }
+          if (attribute.includes('outcome') || attribute.includes('goal') || attribute.includes('desired')) {
+            return 'desired-outcomes';
+          }
+          if (attribute.includes('trigger') || attribute.includes('timing') || attribute.includes('when')) {
+            return 'triggers';
+          }
+          if (attribute.includes('barrier') || attribute.includes('objection') || attribute.includes('concern')) {
+            return 'barriers';
+          }
+          if (attribute.includes('message') || attribute.includes('value') || attribute.includes('emphasis')) {
+            return 'messaging-emphasis';
+          }
+          
+          // Fallback to text-based mapping
+          if (text.includes('buyer') || text.includes('title') || text.includes('role') || text.includes('decision') || text.includes('executive')) {
+            return 'buyer-titles';
+          }
+          if (text.includes('size') || text.includes('employee') || text.includes('company') || text.includes('firm') || text.includes('team')) {
+            return 'company-size';
+          }
+          if (text.includes('pain') || text.includes('problem') || text.includes('challenge') || text.includes('struggle') || text.includes('difficult')) {
+            return 'pain-points';
+          }
+          if (text.includes('outcome') || text.includes('goal') || text.includes('improve') || text.includes('achieve') || text.includes('success')) {
+            return 'desired-outcomes';
+          }
+          if (text.includes('trigger') || text.includes('when') || text.includes('timing') || text.includes('urgent') || text.includes('deadline')) {
+            return 'triggers';
+          }
+          if (text.includes('barrier') || text.includes('objection') || text.includes('concern') || text.includes('resistance') || text.includes('obstacle')) {
+            return 'barriers';
+          }
+          if (text.includes('message') || text.includes('value') || text.includes('priority') || text.includes('important') || text.includes('focus')) {
+            return 'messaging-emphasis';
+          }
+          
+          return 'buyer-titles'; // Default
+        };
+
+        const attributeType = getAttributeType(assumption.v1Assumption, assumption.icpAttribute);
+        console.log(`🎯 Using attribute type: ${attributeType} for assumption ${assumption.id} (${assumption.icpAttribute})`);
+        
         let ragQuotes: any[] = [];
         try {
-          ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5);
+          ragQuotes = await getTopQuotesForSynthesis(assumption.v1Assumption, assumption.id, 5, attributeType);
         } catch (ragError) {
-          console.warn(`⚠️ RAG system error for assumption ${assumption.id}:`, ragError);
+          console.warn(`⚠️ RAG system error for ${attributeType} assumption ${assumption.id}:`, ragError);
           ragQuotes = [];
         }
         

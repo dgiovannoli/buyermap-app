@@ -14,7 +14,7 @@ describe('DeckResultsStage', () => {
       whyAssumption: 'Based on sales deck analysis',
       evidenceFromDeck: 'Rev deck, Slide: Who is Rev?',
       realityFromInterviews: 'Many attorneys delegate to paralegals',
-      comparisonOutcome: 'Misaligned',
+      comparisonOutcome: 'Contradicted',
       confidenceScore: 85,
       confidenceExplanation: 'Clear trend across interviews',
       quotes: [
@@ -36,7 +36,7 @@ describe('DeckResultsStage', () => {
       whyAssumption: 'Based on market research',
       evidenceFromDeck: 'Rev deck, Slide: Target Market',
       realityFromInterviews: 'Confirmed across firm sizes',
-      comparisonOutcome: 'Aligned',
+      comparisonOutcome: 'Contradicted',
       confidenceScore: 90,
       confidenceExplanation: 'Strong validation from multiple sources',
       quotes: [
@@ -66,7 +66,6 @@ describe('DeckResultsStage', () => {
         {
           assumption: 'Attorneys are the primary users',
           reality: 'Many attorneys delegate to paralegals',
-          outcome: 'Misaligned',
           confidence: 85,
           confidence_explanation: 'Clear trend across interviews',
           quotes: [

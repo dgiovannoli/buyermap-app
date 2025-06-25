@@ -80,8 +80,13 @@ export function useProcessingProgress() {
       const elapsed = Date.now() - startTime;
       const progressFromTime = (elapsed / estimatedDuration) * 100;
       
-      // Use time-based progress but add some randomness for realism
-      progress = Math.min(progressFromTime + (Math.random() * 5 - 2.5), 100);
+      // Use time-based progress ensuring it only increases (monotonic) and is stable
+      const newProgress = Math.max(progress, Math.min(progressFromTime, 100));
+      
+      // Only update if progress actually increased significantly (prevents micro-fluctuations)
+      if (newProgress - progress >= 0.5 || newProgress >= 100) {
+        progress = newProgress;
+      }
       
       // Update stats based on progress with more realistic phases
       if (progress < 25) {
@@ -99,8 +104,8 @@ export function useProcessingProgress() {
         slidesProcessed = totalSlides;
         assumptionsFound = Math.min(5 + Math.floor(((progress - 75) / 15) * 3), 7);
       } else {
-        // Final validation and structuring
-        assumptionsFound = Math.min(assumptionsFound + Math.floor(Math.random() * 2), 8);
+        // Final validation and structuring - stable progression
+        assumptionsFound = Math.min(7 + Math.floor(((progress - 90) / 10) * 1), 8);
       }
 
       const timeRemaining = Math.max(0, estimatedDuration - elapsed);
@@ -170,8 +175,13 @@ export function useProcessingProgress() {
       const elapsed = Date.now() - startTime;
       const progressFromTime = (elapsed / estimatedDuration) * 100;
       
-      // Use time-based progress for more accurate estimates
-      progress = Math.min(progressFromTime + (Math.random() * 3 - 1.5), 100);
+      // Use time-based progress ensuring it only increases (monotonic) and is stable
+      const newProgress = Math.max(progress, Math.min(progressFromTime, 100));
+      
+      // Only update if progress actually increased significantly (prevents micro-fluctuations)
+      if (newProgress - progress >= 0.5 || newProgress >= 100) {
+        progress = newProgress;
+      }
       
       // Update queue status based on progress
       const currentProcessingFiles = Math.min(
@@ -199,13 +209,13 @@ export function useProcessingProgress() {
           currentAssumptionIndex = Math.floor(((progress - 15) / 55) * assumptions.length);
         }
       } else if (progress < 85) {
-        // Extracting quotes phase
-        quotesFound = Math.min(quotesFound + Math.floor(Math.random() * 4 + 1), 50);
+        // Extracting quotes phase - stable progression
+        quotesFound = Math.min(Math.floor(((progress - 70) / 15) * 45), 45);
         uniqueSpeakers = Math.min(conversationsProcessed, totalConversations);
         conversationsProcessed = totalConversations;
       } else if (progress < 95) {
-        // Validation phase
-        quotesFound = Math.min(quotesFound + Math.floor(Math.random() * 3), 55);
+        // Validation phase - stable progression
+        quotesFound = Math.min(45 + Math.floor(((progress - 85) / 10) * 10), 55);
         
         // Determine statistical validity
         const validity = uniqueSpeakers >= 4 ? 'strong' : 

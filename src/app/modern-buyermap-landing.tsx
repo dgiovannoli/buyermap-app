@@ -16,13 +16,22 @@ type Phase =
   | 'complete'
 
 export default function ModernBuyerMapLanding() {
+  // Mock mode control
+  const useMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+  
   const [phase, setPhase] = useState<Phase>('home')
   const [buyerMapData, setBuyerMapData] = useState<BuyerMapData[]>([])
 
-  // Debug phase changes
+  // Debug phase changes and mock mode
   useEffect(() => {
     console.log('🔄 Phase changed to:', phase);
-  }, [phase]);
+    
+    if (useMock) {
+      console.log("⚠️ Running in mock mode. Switch to live data by setting NEXT_PUBLIC_USE_MOCK=false");
+    } else {
+      console.log("✅ Running with live API + DB + vector storage");
+    }
+  }, [phase, useMock]);
 
   // Function declarations (must be before early return)
   const handleStart = () => setPhase('deck-upload')
@@ -56,6 +65,13 @@ export default function ModernBuyerMapLanding() {
     onSuccess: (data: any) => void
   ) => {
     try {
+      if (useMock) {
+        console.log("⚠️ Interview upload using mock mode (NEXT_PUBLIC_USE_MOCK=true)");
+        console.log("📁 Files to upload:", files.map(f => f.name));
+      } else {
+        console.log("✅ Interview upload using live API integration");
+      }
+      
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
       formData.append('assumptions', JSON.stringify(assumptions));

@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Brain, Menu, X, Home, Library, Play, LogOut } from 'lucide-react';
 import FeedbackButton from './FeedbackButton';
-import { User } from '@supabase/auth-helpers-nextjs';
-import { createClientComponent } from '../../lib/supabase-client';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase-client';
 
 export default function TopNavigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const pathname = usePathname();
-  const supabase = createClientComponent();
+  // supabase client is already imported and ready to use
 
   useEffect(() => {
     const getUser = async () => {

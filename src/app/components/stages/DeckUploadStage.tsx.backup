@@ -1,0 +1,747 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { ProcessingProgress } from '../../../types/buyer-map';
+import { ICPValidationResponse } from '../../../types/buyermap';
+import FileDropzone from '../ui/FileDropzone';
+import ProcessVisualization from '../loading/ProcessVisualization';
+import { useProcessingProgress } from '../../hooks/useProcessingProgress';
+import { useFileConflictHandler } from '../../../hooks/useFileConflictHandler';
+import FileConflictDialog from '../../../components/ui/FileConflictDialog';
+import { 
+  Upload, 
+  FileText, 
+  CheckCircle, 
+  X, 
+  Cloud, 
+  Presentation,
+  FileCheck,
+  ArrowRight,
+  Sparkles,
+  Target,
+  BarChart3,
+  Mic,
+  Loader2,
+  AlertCircle
+} from 'lucide-react';
+import { upload } from '@vercel/blob/client';
+import { checkDuplicatesViaAPI, DuplicateApiResult } from '../../../utils/deduplication';
+import DuplicateDialog from '../../../components/ui/DuplicateDialog';
+
+interface DeckUploadStageProps {
+  onDeckProcessed: (data: ICPValidationResponse) => void;
+  onError: (error: string | null) => void;
+  onProgressUpdate: (progress: ProcessingProgress) => void;
+}
+
+export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUpdate }: DeckUploadStageProps) {
+  console.log('🔄 DeckUploadStage component rendered');
+  const [uploadedDeck, setUploadedDeck] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const processingProgress = useProcessingProgress();
+  const fileConflictHandler = useFileConflictHandler();
+  const [useCompression, setUseCompression] = useState(false);
+  
+  // Duplicate detection state
+  const [duplicateData, setDuplicateData] = useState<DuplicateApiResult | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+  const uploadedDeckRef = useRef<File | null>(null);
+
+  console.log('🔄 State check:', {
+    isProcessing,
+    phase: processingProgress.phase,
+    progress: processingProgress.progress,
+    uploadedDeck: !!uploadedDeck,
+    uploadProgress: uploadProgress,
+    shouldShowProcessButton: !!(uploadedDeck && uploadProgress === 100)
+  });
+
+  // Reset processing state when component mounts
+  useEffect(() => {
+    console.log('🔄 Component mounted, resetting processing state');
+    processingProgress.resetProcessing();
+  }, []);
+
+  const handleFileUpload = (file: File | null) => {
+    console.log('🔄 File uploaded:', file?.name);
+    
+    if (file) {
+      const maxSize = 500 * 1024 * 1024; // 500MB limit
+      if (file.size > maxSize) {
+        onError(`File size (${formatFileSize(file.size)}) exceeds maximum limit of ${formatFileSize(maxSize)}`);
+        return;
+      }
+      
+      setUploadedDeck(file);
+      setUploadProgress(100); // Mark file selection as complete
+      // Auto-enable compression for files larger than 50MB
+      setUseCompression(file.size > 50 * 1024 * 1024);
+      onError(null); // Clear any previous errors
+      
+      // Reset duplicate check state when new file is uploaded
+      setDuplicateData(null);
+      setShowDuplicateDialog(false);
+      
+      console.log('🔄 File upload progress set to 100%, ready for processing');
+      
+      // Option: Auto-start processing for smoother UX (uncomment to enable)
+      // handleAutoProcessDeck();
+    } else {
+      setUploadedDeck(null);
+      setUploadProgress(0); // Reset progress when file is removed
+      setUseCompression(false);
+      setDuplicateData(null);
+      setShowDuplicateDialog(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileUpload(files[0]);
+    }
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return <FileText className="w-8 h-8 text-red-400" />;
+      case 'ppt':
+      case 'pptx':
+        return <Presentation className="w-8 h-8 text-orange-400" />;
+      default:
+        return <FileCheck className="w-8 h-8 text-blue-400" />;
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const estimateSlideCount = (file: File): number => {
+    const fileSizeInMB = file.size / (1024 * 1024);
+    const fileName = file.name.toLowerCase();
+    
+    // Rough estimates based on file type and size
+    if (fileName.endsWith('.pdf')) {
+      // PDFs: roughly 0.1-0.5MB per slide depending on content
+      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 0.3)));
+    } else if (fileName.endsWith('.pptx') || fileName.endsWith('.ppt')) {
+      // PowerPoint: roughly 0.5-2MB per slide with images
+      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 1.2)));
+    } else if (fileName.endsWith('.key')) {
+      // Keynote: similar to PowerPoint but often larger files
+      return Math.max(3, Math.min(50, Math.round(fileSizeInMB / 1.5)));
+    }
+    
+    // Default fallback
+    return Math.max(5, Math.min(25, Math.round(fileSizeInMB / 0.8)));
+  };
+
+  const checkForDuplicates = async (file: File): Promise<boolean> => {
+    setIsCheckingDuplicates(true);
+    try {
+      console.log('🔍 Starting duplicate check for deck...');
+      const result = await checkDuplicatesViaAPI(file, 'deck', {
+        checkSimilarity: true,
+        similarityThreshold: 0.95
+      });
+      
+      setDuplicateData(result);
+      
+      if (result.isDuplicate) {
+        setShowDuplicateDialog(true);
+        return false; // Stop processing
+      }
+      
+      return true; // Continue processing
+    } catch (error) {
+      console.warn('⚠️ Duplicate check failed, proceeding with upload:', error);
+      onError(`Duplicate check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return true; // Continue processing if duplicate check fails
+    } finally {
+      setIsCheckingDuplicates(false);
+    }
+  };
+
+  const handleDuplicateResolution = async (action: 'use-existing' | 'process-anyway' | 'cancel') => {
+    setShowDuplicateDialog(false);
+    
+    switch (action) {
+      case 'use-existing':
+        console.log('🔄 Using existing deck results');
+        
+        // Get the duplicate file information
+        const existingFile = duplicateData?.metadata.exactDuplicate || duplicateData?.metadata.similarDuplicate;
+        if (existingFile) {
+          const isDuplicate = duplicateData?.metadata.hasExactDuplicate ? 'exact' : 'similar';
+          
+          // In a future phase, we would fetch actual existing results from the database
+          // For now, we'll create a comprehensive mock response with multiple ICP assumptions
+          const mockResults = {
+            assumptions: [
+              {
+                id: 'buyer-titles',
+                assumption: 'Target buyers are typically C-Suite executives (CEOs, CTOs, CHROs) at fast-growing companies',
+                validation: 'VALIDATED',
+                confidence: 0.95,
+                section: 'WHO',
+                icpAttribute: 'buyer_titles',
+                evidence: [
+                  'Interview data shows 85% of customers have C-level decision makers involved in purchase decisions',
+                  'Sales team reports consistently engaging with executive stakeholders',
+                  'Product usage patterns indicate strategic, company-wide implementations'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Strong validation from customer interview patterns and sales engagement data'
+              },
+              {
+                id: 'company-size',
+                assumption: 'Target companies are mid-market companies with 100-1000 employees experiencing rapid growth',
+                validation: 'VALIDATED',
+                confidence: 0.88,
+                section: 'WHO',
+                icpAttribute: 'company_size',
+                evidence: [
+                  'Customer base analysis shows 78% fall within 100-1000 employee range',
+                  'Growth stage companies show highest engagement and retention rates',
+                  'Enterprise features see significant adoption in this segment'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Customer data strongly supports mid-market focus with growth characteristics'
+              },
+              {
+                id: 'desired-outcomes',
+                assumption: 'Buyers seek to reduce legal review time by at least 40% through automated transcription accuracy',
+                validation: 'PARTIALLY_VALIDATED',
+                confidence: 0.72,
+                section: 'WHAT',
+                icpAttribute: 'desired_outcomes',
+                evidence: [
+                  'Multiple customers report significant time savings from accurate transcriptions',
+                  'Legal workflows show measurable efficiency improvements',
+                  'Customer testimonials highlight time reduction as primary benefit'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Time savings validated but specific 40% target needs more evidence'
+              },
+              {
+                id: 'pain-points',
+                assumption: 'Primary pain point is manual legal document review processes that consume excessive attorney time',
+                validation: 'VALIDATED',
+                confidence: 0.91,
+                section: 'WHAT',
+                icpAttribute: 'pain_points',
+                evidence: [
+                  'Customer interviews consistently mention manual review burden',
+                  'Time tracking data shows significant hours spent on document review',
+                  'Customer success stories focus on automation benefits'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Clear consensus across customer feedback on manual process inefficiencies'
+              },
+              {
+                id: 'purchase-triggers',
+                assumption: 'Purchase triggers include case overload and compliance deadlines that drive urgency',
+                validation: 'VALIDATED',
+                confidence: 0.83,
+                section: 'WHEN',
+                icpAttribute: 'purchase_triggers',
+                evidence: [
+                  'Sales data shows spikes in inquiries during busy legal periods',
+                  'Customer onboarding often aligns with case deadline pressures',
+                  'Renewal patterns correlate with seasonal legal workflow demands'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Sales patterns and customer behavior confirm urgency-driven purchases'
+              },
+              {
+                id: 'common-objections',
+                assumption: 'Common objections include security concerns and integration complexity with existing legal tech stack',
+                validation: 'INVALIDATED',
+                confidence: 0.45,
+                section: 'WHY',
+                icpAttribute: 'common_objections',
+                evidence: [
+                  'Customer feedback shows pricing is actually the primary objection',
+                  'Security concerns rank lower than expected in sales conversations',
+                  'Integration complexity mentioned but not as top barrier'
+                ],
+                sources: [`Existing file: ${existingFile.filename}`],
+                reasoning: 'Assumptions about objections do not match actual customer feedback patterns'
+              }
+            ],
+            metadata: {
+              totalAssumptions: 6,
+              validated: 4,
+              partiallyValidated: 1,
+              invalidated: 1,
+              averageConfidence: 0.79,
+              processingTime: new Date().toISOString(),
+              isDuplicateResult: true,
+              duplicateType: isDuplicate,
+              originalFile: existingFile.filename
+            }
+          };
+
+          console.log('✅ Using existing results, skipping analysis');
+          onDeckProcessed(mockResults);
+        }
+        break;
+        
+      case 'process-anyway':
+        console.log('🔄 Processing file anyway despite duplicate');
+        await proceedWithProcessing();
+        break;
+        
+      case 'cancel':
+        console.log('🔄 User cancelled upload');
+        setUploadedDeck(null);
+        setUploadProgress(0);
+        setDuplicateData(null);
+        break;
+    }
+  };
+
+  // Helper functions for the duplicate dialog
+  const fetchCachedResults = (contentHash: string) => {
+    console.log('🔄 Fetching cached results for hash:', contentHash);
+    if (duplicateData) {
+      handleDuplicateResolution('use-existing');
+    }
+  };
+
+  const resetUpload = () => {
+    console.log('🔄 Resetting upload');
+    setUploadedDeck(null);
+    setUploadProgress(0);
+    setDuplicateData(null);
+    setShowDuplicateDialog(false);
+  };
+
+  const proceedWithDeckProcessing = async (file: File) => {
+    console.log('🔄 Proceeding with deck processing');
+    uploadedDeckRef.current = file;
+    await proceedWithProcessing();
+  };
+
+  const proceedWithProcessing = async () => {
+    if (!uploadedDeck) return;
+    
+    // Continue with existing processing logic
+    console.log('🔄 Proceeding with deck processing...');
+    
+    try {
+      console.log('🔄 File size:', uploadedDeck.size, 'bytes');
+      
+      // Step 1: Check for filename conflicts
+      console.log('🔄 Step 1: Checking for file conflicts...');
+      
+      // Use sanitized filename for conflict check
+      const sanitizedName = uploadedDeck.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      console.log('🔄 Checking conflicts for sanitized name:', uploadedDeck.name, '->', sanitizedName);
+      
+      const conflict = await fileConflictHandler.checkFileExists(sanitizedName);
+      
+      let blobUrl: string;
+      let finalFileName = uploadedDeck.name;
+      
+      if (conflict) {
+        // Update conflict with original filename for display but sanitized for processing
+        const displayConflict = { 
+          ...conflict, 
+          fileName: uploadedDeck.name // Show original name in dialog
+        };
+        fileConflictHandler.setConflictsAndShow([displayConflict]);
+        // The dialog will handle the resolution
+        // For now, we'll exit and let the dialog handle the upload
+        setIsProcessing(false);
+        return;
+      } else {
+        // No conflict, proceed with direct upload
+        console.log('🔄 No conflicts, uploading directly...');
+        
+        // Start processing visualization
+        const estimatedSlides = estimateSlideCount(uploadedDeck);
+        processingProgress.startDeckProcessing(estimatedSlides);
+        
+        // Sanitize filename to avoid URL encoding issues
+        const sanitizedFileName = uploadedDeck.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        console.log('🔄 Sanitized filename:', uploadedDeck.name, '->', sanitizedFileName);
+        
+        let blob;
+        try {
+          // Use multipart upload for files larger than 10MB for better performance
+          const useMultipart = uploadedDeck.size > 10 * 1024 * 1024;
+          
+          console.log(`🔄 Upload strategy: ${useMultipart ? 'multipart' : 'single'} for ${(uploadedDeck.size / 1024 / 1024).toFixed(2)}MB file`);
+          const uploadStartTime = performance.now();
+          
+          blob = await upload(sanitizedFileName, uploadedDeck, {
+            access: 'public',
+            handleUploadUrl: '/api/upload-deck',
+            multipart: useMultipart, // Enable multipart for large files
+          });
+          
+          const uploadEndTime = performance.now();
+          const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
+          const throughputMbps = (uploadedDeck.size / 1024 / 1024) / uploadDuration;
+          
+          console.log(`✅ Upload completed in ${uploadDuration.toFixed(2)}s (${throughputMbps.toFixed(2)} MB/s throughput)`);
+          
+          blobUrl = blob.url;
+          console.log('🔄 File uploaded:', blobUrl);
+        } catch (uploadError) {
+          console.error('❌ Upload failed:', uploadError);
+          throw new Error(`Upload failed: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+        }
+      }
+
+      // Step 2: Analyze the deck
+      console.log('🔄 Step 2: Analyzing deck...');
+      
+      onProgressUpdate({
+        phase: 'deck',
+        step: 'deck-analysis',
+        currentBatch: 0,
+        totalBatches: 1,
+        percentage: 60,
+        status: 'processing'
+      });
+
+      const response = await fetch('/api/analyze-deck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blobUrl: blobUrl,
+          filename: finalFileName,
+          useCompression,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Deck analysis failed:', errorText);
+        throw new Error(`Deck analysis failed: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Deck analysis completed:', data);
+
+      onProgressUpdate({
+        phase: 'deck',
+        step: 'deck-analysis',
+        currentBatch: 1,
+        totalBatches: 1,
+        percentage: 100,
+        status: 'completed'
+      });
+
+      // Call the success callback
+      onDeckProcessed(data);
+
+    } catch (error) {
+      console.error('❌ Deck processing error:', error);
+      onError(`Deck processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleProcessDeck = async () => {
+    console.log('🔄 [BLOB] handleProcessDeck called with duplicate detection, uploadedDeck:', !!uploadedDeck);
+    if (!uploadedDeck) return;
+
+    // Store reference for duplicate dialog use
+    uploadedDeckRef.current = uploadedDeck;
+    
+    setIsProcessing(true);
+    onError(null);
+
+    // Estimate slide count based on file size and type for more realistic loading
+    const estimatedSlides = estimateSlideCount(uploadedDeck);
+    console.log('🔄 Estimated slides:', estimatedSlides);
+
+    // Step 0: Check for content duplicates BEFORE upload
+    console.log('🔄 Step 0: Checking for content duplicates...');
+    const { isDuplicate, metadata } = await checkDuplicatesViaAPI(uploadedDeck, 'deck');
+
+    if (isDuplicate) {
+      console.log("⚠️ Duplicate detected:", metadata);
+      setDuplicateData({ isDuplicate, metadata });
+      setShowDuplicateDialog(true);
+      setIsProcessing(false);
+      return; // Stop normal processing
+    }
+
+    // Continue with processing
+    await proceedWithProcessing();
+  };
+
+  // Auto-start processing option (can be enabled for smoother UX)
+  const handleAutoProcessDeck = async () => {
+    if (!uploadedDeck) return;
+    
+    console.log('🔄 Auto-processing deck after upload...');
+    // Small delay to allow UI to settle
+    setTimeout(() => {
+      handleProcessDeck();
+    }, 1000);
+  };
+
+  // Show processing visualization when processing
+  if (isProcessing && processingProgress.phase === 'deck') {
+    console.log('🔄 Showing ProcessVisualization, progress:', processingProgress.progress);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+        <ProcessVisualization
+          phase="deck"
+          progress={processingProgress.progress}
+          stats={processingProgress.stats}
+          onComplete={() => {
+            console.log('🔄 ProcessVisualization onComplete called');
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
+      {/* Header */}
+      <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-white">BuyerMap Analysis</h1>
+              <p className="text-sm text-gray-300">Upload & Analyze Your Sales Deck</p>
+            </div>
+            <div className="flex items-center space-x-2 text-sm">
+              <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full font-medium border border-blue-400/30">Step 1 of 3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        
+        {/* Compact Hero Section */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Upload Your Sales Deck
+          </h2>
+          <p className="text-gray-300 max-w-xl mx-auto">
+            AI-powered analysis to extract and validate your ICP assumptions against real customer data
+          </p>
+        </div>
+
+        {/* Upload Card */}
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden mb-6">
+
+          {/* Upload Area */}
+          <div className="p-6">
+            {!uploadedDeck ? (
+              <div
+                className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all duration-300 ${
+                  isDragOver 
+                    ? 'border-blue-400 bg-blue-500/20 scale-[1.02]' 
+                    : 'border-white/30 hover:border-blue-400/50 hover:bg-white/5'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {/* Upload Icon */}
+                <div className={`mx-auto mb-4 transition-transform duration-300 ${isDragOver ? 'scale-110' : ''}`}>
+                  <div className="p-3 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 backdrop-blur-sm rounded-xl border border-blue-400/30">
+                    <Cloud className="w-8 h-8 text-blue-400" />
+                  </div>
+                </div>
+
+                {/* Upload Text */}
+                <div className="mb-4">
+                  <h4 className="text-lg font-semibold text-white mb-1">
+                    {isDragOver ? 'Drop your file here' : 'Drag and drop your deck'}
+                  </h4>
+                  <p className="text-gray-300 text-sm mb-3">
+                    or click to browse • PDF, PowerPoint, Keynote • Max 500MB
+                  </p>
+                </div>
+
+                {/* Browse Button */}
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.ppt,.pptx,.key"
+                    onChange={(e) => handleFileUpload(e.target.files?.[0] || null)}
+                  />
+                  <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl">
+                    <Upload className="w-4 h-4" />
+                    <span>Browse Files</span>
+                  </div>
+                </label>
+              </div>
+            ) : (
+              /* File Preview */
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-4">
+                    {getFileIcon(uploadedDeck.name)}
+                    <div className="flex-1">
+                      <h4 className="font-medium text-white">{uploadedDeck.name}</h4>
+                      <p className="text-sm text-gray-300">{formatFileSize(uploadedDeck.size)}</p>
+                      
+                      {/* Upload Optimization Info */}
+                      {uploadedDeck.size > 10 * 1024 * 1024 && (
+                        <div className="mt-2 flex items-center space-x-2 text-xs">
+                          <div className="flex items-center space-x-1 text-green-400">
+                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                            <span>Multipart upload</span>
+                          </div>
+                          <div className="flex items-center space-x-1 text-blue-400">
+                            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                            <span>Progress tracking</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {uploadedDeck.size > 50 * 1024 * 1024 && (
+                        <div className="mt-1 text-xs text-amber-400">
+                          ⚡ Large file detected - using optimized upload strategy
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleFileUpload(null)}
+                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors duration-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Upload Status */}
+                <div className="w-full bg-white/20 rounded-full h-3 mb-4">
+                  <div 
+                    className={`h-3 rounded-full transition-all duration-300 ${
+                      isCheckingDuplicates 
+                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse'
+                        : 'bg-gradient-to-r from-green-500 to-emerald-500'
+                    }`}
+                    style={{ width: uploadProgress >= 100 ? '100%' : `${uploadProgress}%` }}
+                  />
+                </div>
+                
+                {/* Progress Text & CTA */}
+                <div className="text-center text-white/90 mb-4">
+                  <div className="text-sm font-medium mb-1">
+                    {isCheckingDuplicates ? "Checking for duplicates..." : "File ready for analysis"}
+                  </div>
+                  {!isCheckingDuplicates && (
+                    <div className="text-xs text-white/60 mb-4">
+                      Ready to extract ICP assumptions and validate against customer data
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA Button - Prominently Placed */}
+                {uploadProgress === 100 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={handleProcessDeck}
+                      disabled={isProcessing || isCheckingDuplicates}
+                      className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
+                        isProcessing || isCheckingDuplicates
+                          ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 shadow-lg hover:shadow-xl'
+                      }`}
+                    >
+                      {isCheckingDuplicates ? (
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Checking for duplicates...</span>
+                        </div>
+                      ) : isProcessing ? (
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Processing Deck...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center space-x-2">
+                          <Sparkles className="w-4 h-4" />
+                          <span>Start AI Analysis</span>
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Duplicate Detection Dialog */}
+        {showDuplicateDialog && duplicateData && (
+          <DuplicateDialog
+            data={duplicateData.metadata}
+            onUseExisting={() => {
+              fetchCachedResults(duplicateData.metadata.contentHash);
+            }}
+            onProcessAnyway={async () => {
+              await proceedWithDeckProcessing(uploadedDeckRef.current!);
+              setShowDuplicateDialog(false);
+            }}
+            onCancel={() => {
+              resetUpload();
+            }}
+          />
+        )}
+
+        {/* Error Display */}
+        {processingProgress.error && (
+          <div className="mt-6 p-4 bg-red-500/20 border border-red-400/30 rounded-xl backdrop-blur-sm">
+            <div className="flex items-center">
+              <div className="text-red-400 mr-3">⚠️</div>
+              <span className="text-red-300">{processingProgress.error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Compact Next Steps */}
+        {uploadedDeck && (
+          <div className="mt-8 text-center">
+            <div className="text-sm text-gray-400">
+              <span className="inline-flex items-center space-x-1">
+                <span>Next:</span>
+                <Mic className="w-4 h-4" />
+                <span>Upload customer interviews for validation</span>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+} 

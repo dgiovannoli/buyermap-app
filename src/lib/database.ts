@@ -1,4 +1,4 @@
-import { createClientComponent } from './supabase-client'
+import { supabase } from './supabase-client'
 
 export interface DatabaseInterview {
   id: string
@@ -18,6 +18,10 @@ export interface DatabaseInterview {
   unique_speakers: string[]
   pinecone_namespace?: string
   vectors_stored: number
+  // Content tracking fields for duplicate detection
+  content_hash?: string
+  file_size?: number
+  blob_url?: string
   created_at: string
   updated_at: string
 }
@@ -59,7 +63,7 @@ export interface DatabaseAssumption {
 
 // Client-side functions (for components)
 export async function getUserInterviewsClient(): Promise<DatabaseInterview[]> {
-  const supabase = createClientComponent()
+  // supabase client is already imported
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) throw new Error('Not authenticated')
@@ -75,7 +79,7 @@ export async function getUserInterviewsClient(): Promise<DatabaseInterview[]> {
 }
 
 export async function getUserQuotesClient(interviewId?: string): Promise<DatabaseQuote[]> {
-  const supabase = createClientComponent()
+  // supabase client is already imported
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) throw new Error('Not authenticated')
@@ -96,7 +100,7 @@ export async function getUserQuotesClient(interviewId?: string): Promise<Databas
 }
 
 export async function getUserAssumptionsClient(): Promise<DatabaseAssumption[]> {
-  const supabase = createClientComponent()
+  // supabase client is already imported
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) throw new Error('Not authenticated')
@@ -113,7 +117,7 @@ export async function getUserAssumptionsClient(): Promise<DatabaseAssumption[]> 
 
 // Utility functions
 export async function getCurrentUser() {
-  const supabase = createClientComponent()
+  // supabase client is already imported
   const { data: { user }, error } = await supabase.auth.getUser()
   
   if (error) throw error

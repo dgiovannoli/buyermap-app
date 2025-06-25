@@ -48,6 +48,10 @@ export interface Database {
           unique_speakers: string[]
           pinecone_namespace?: string
           vectors_stored: number
+          // Content tracking fields for duplicate detection
+          content_hash?: string
+          file_size?: number
+          blob_url?: string
           created_at: string
           updated_at: string
         }
@@ -69,6 +73,10 @@ export interface Database {
           unique_speakers: string[]
           pinecone_namespace?: string
           vectors_stored: number
+          // Content tracking fields for duplicate detection
+          content_hash?: string
+          file_size?: number
+          blob_url?: string
           created_at?: string
           updated_at?: string
         }
@@ -90,6 +98,10 @@ export interface Database {
           unique_speakers?: string[]
           pinecone_namespace?: string
           vectors_stored?: number
+          // Content tracking fields for duplicate detection
+          content_hash?: string
+          file_size?: number
+          blob_url?: string
           created_at?: string
           updated_at?: string
         }

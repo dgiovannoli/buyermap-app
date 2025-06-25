@@ -66,27 +66,37 @@ export function mapAssumptionToValidation(assumptionData: AssumptionData): Valid
     outcome: mapComparisonOutcome(assumptionData.comparisonOutcome || 'pending'),
     confidence: assumptionData.confidenceScore || 0,
     confidence_explanation: assumptionData.confidenceExplanation || '',
-    quotes: assumptionData.quotes || []
+    quotes: assumptionData.quotes || [],
+    evidenceFromDeck: assumptionData.evidenceFromDeck || ''
   };
 }
 
 /**
- * Maps existing outcome types to new outcome types
+ * Maps existing outcome types to simplified validation outcomes
+ * Focused on product marketing decisions: will the deck work?
  */
-export function mapComparisonOutcome(outcome: string): 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' {
+export function mapComparisonOutcome(outcome: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' {
   const lowerOutcome = outcome.toLowerCase();
-  switch (lowerOutcome) {
-    case 'aligned':
-      return 'Aligned';
-    case 'misaligned':
-      return 'Misaligned';
-    case 'pending':
-      return 'Challenged';
-    case 'new_insight':
-      return 'New Data Added';
-    default:
-      return 'Refined';
+  
+  // Map to simplified outcomes based on content analysis
+  if (lowerOutcome.includes('validat') || lowerOutcome.includes('align') || lowerOutcome.includes('confirm')) {
+    return 'Validated';
   }
+  
+  if (lowerOutcome.includes('contradict') || lowerOutcome.includes('misalign') || lowerOutcome.includes('challenge') || lowerOutcome.includes('conflict')) {
+    return 'Contradicted';
+  }
+  
+  if (lowerOutcome.includes('gap') || lowerOutcome.includes('missing') || lowerOutcome.includes('new data') || lowerOutcome.includes('insight')) {
+    return 'Gap Identified';
+  }
+  
+  if (lowerOutcome.includes('insufficient') || lowerOutcome.includes('pending') || lowerOutcome.includes('no data')) {
+    return 'Insufficient Data';
+  }
+  
+  // Default to insufficient data if unclear
+  return 'Insufficient Data';
 }
 
 /**
@@ -139,7 +149,8 @@ export function createValidationData(assumptions: BuyerMapData[]): Record<string
         outcome: mapComparisonOutcome(assumption.comparisonOutcome || 'pending'),
         confidence: assumption.confidenceScore || 0,
         confidence_explanation: assumption.confidenceExplanation || '',
-        quotes: assumption.quotes || []
+        quotes: assumption.quotes || [],
+        evidenceFromDeck: assumption.evidenceFromDeck || ''
       };
 
       console.log(`Created validation data for ${standardKey}:`, validationData[standardKey]);
@@ -153,10 +164,11 @@ export function createValidationData(assumptions: BuyerMapData[]): Record<string
       validationData[attribute] = {
         assumption: 'No assumption identified from deck',
         reality: 'Pending validation...',
-        outcome: 'Challenged',
+        outcome: 'Insufficient Data',
         confidence: 0,
         confidence_explanation: 'No data available',
-        quotes: []
+        quotes: [],
+        evidenceFromDeck: ''
       };
     }
   });

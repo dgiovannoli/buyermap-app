@@ -14,7 +14,7 @@ const fakeResponse = {
       whyAssumption: 'Extracted from deck analysis',
       evidenceFromDeck: 'Slide 3 shows our target as executives with budget authority',
       realityFromInterviews: 'Most buyers are actually Engineering Directors and Senior Managers',
-      comparisonOutcome: 'Misaligned',
+      comparisonOutcome: 'Contradicted',
       waysToAdjustMessaging: 'Focus on mid-level decision makers rather than executives',
       confidenceScore: 85,
       confidenceExplanation: 'Strong evidence from customer interviews',

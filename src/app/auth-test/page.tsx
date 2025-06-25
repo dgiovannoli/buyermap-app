@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { createClientComponent } from '../../lib/supabase-client'
-import { User } from '@supabase/auth-helpers-nextjs'
+import { supabase } from '../../lib/supabase-client'
+import type { User } from '@supabase/supabase-js'
 
 export default function AuthTestPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [betaStatus, setBetaStatus] = useState<string>('')
-  const supabase = createClientComponent()
+  // supabase client is already imported
 
   useEffect(() => {
     const getUser = async () => {

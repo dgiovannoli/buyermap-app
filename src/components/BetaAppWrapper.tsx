@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClientComponent } from '../lib/supabase-client'
-import { User } from '@supabase/auth-helpers-nextjs'
+import { useEffect, useState, ReactNode } from 'react'
+import type { User } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase-client'
 import BetaAuth from './BetaAuth'
 import AuthModal from '../app/components/AuthModal'
 
@@ -15,7 +15,7 @@ export default function BetaAppWrapper({ children }: BetaAppWrapperProps) {
   const [loading, setLoading] = useState(true)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [betaAuthorized, setBetaAuthorized] = useState(false)
-  const supabase = createClientComponent()
+  // supabase client is already instantiated, no need to call createClientComponent()
 
   useEffect(() => {
     // Get initial session

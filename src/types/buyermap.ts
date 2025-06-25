@@ -7,11 +7,13 @@ export interface ExampleQuote {
 export interface ValidationAttribute {
   assumption: string;
   reality: string;
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+  outcome: 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
   confidenceBreakdown?: ConfidenceBreakdown;
   quotes: Quote[];
+  evidenceFromDeck?: string;
+  relevanceScore?: number;
 }
 
 export interface ICPValidationData {
@@ -30,7 +32,8 @@ export interface BuyerMapData {
   whyAssumption: string;
   evidenceFromDeck: string;
   realityFromInterviews?: string;
-  comparisonOutcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+  reality?: string;
+  comparisonOutcome: 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   waysToAdjustMessaging?: string;
   confidenceScore: number;
   confidenceExplanation: string;
@@ -57,13 +60,13 @@ export interface ICPValidationResponse {
 export interface Quote {
   id: string;
   text: string;
-  speaker: string;
+  speaker?: string;
   role?: string;
-  source?: string;
-  author?: string;
-  rejected?: boolean;
-  quote?: string;
+  source: string;
+  classification: 'RELEVANT' | 'IRRELEVANT' | 'ALIGNED' | 'MISALIGNED' | 'NEW_INSIGHT' | 'NEUTRAL';
   companySnapshot?: string;
+  rejected: boolean;
+  relevanceScore?: number;
 }
 
 export interface AssumptionData {
@@ -85,6 +88,7 @@ export interface AssumptionData {
 export type ProcessingStep = 
   | 'deck-upload'
   | 'deck-processing'
+  | 'deck-analysis'
   | 'deck-results'
   | 'interview-upload'
   | 'interview-processing'
@@ -123,6 +127,11 @@ export interface StoredInterview {
   // RAG storage reference
   pineconeNamespace?: string;
   vectorsStored: number;
+  
+  // Content tracking for duplicate detection
+  contentHash?: string;
+  fileSize?: number;
+  blobUrl?: string;
 }
 
 export interface InterviewFilterCriteria {
@@ -183,19 +192,23 @@ export interface ValidationDataObject {
   icpTheme: string;
   assumption: string;
   reality: string;
-  outcome: 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' | 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+  outcome: 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
   confidence: number;
   confidence_explanation: string;
   confidenceBreakdown?: ConfidenceBreakdown;
   quotes: Array<{
     text: string;
     author: string;
+    speaker?: string;
     role?: string;
+    companySnapshot?: string;
+    relevanceScore?: number;
   }>;
   comparisonOutcome: string;
   confidenceScore: number;
   confidenceExplanation: string;
   waysToAdjustMessaging: string;
+  evidenceFromDeck?: string;
 }
 
 export interface ConfidenceBreakdown {

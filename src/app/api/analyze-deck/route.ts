@@ -5,6 +5,10 @@ import { BuyerMapData } from '../../../types/buyermap';
 import { transformBuyerMapDataArray } from '../../../utils/dataMapping';
 import { isMockMode, logMockUsage } from '../../../utils/mockHelper';
 import { getPineconeIndex } from '../../../lib/pinecone';
+import { createEmbedding } from '../../../lib/openai';
+import { chunkify } from '../../../utils/transcriptParser';
+import crypto from 'crypto';
+import { saveFileRecord } from '../../../lib/simple-duplicate-store';
 
 // Configure API route for larger file uploads
 export const runtime = 'nodejs'
@@ -36,6 +40,167 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
         reject(err);
       });
   });
+}
+
+// Generate content hash for deduplication
+function generateContentHash(content: string): string {
+  return crypto.createHash('sha256').update(content).digest('hex').substring(0, 16);
+}
+
+// Enhanced RAG storage for deck content
+async function storeProcessedDeckInRAG(
+  filename: string,
+  content: string,
+  assumptions: BuyerMapData[],
+  contentHash: string
+): Promise<void> {
+  if (isMockMode()) {
+    console.log('🎭 Mock mode: Skipping RAG storage');
+    return;
+  }
+
+  try {
+    const pineconeIndex = getPineconeIndex();
+    
+    // Chunk the deck content for better retrieval
+    const chunks = chunkify(content, 1000);
+    console.log(`📦 Chunking deck into ${chunks.length} pieces for RAG storage`);
+    
+    const vectors = [];
+    
+    // Store deck chunks
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const embedding = await createEmbedding(chunk);
+      
+      vectors.push({
+        id: `deck-${contentHash}-chunk-${i}`,
+        values: embedding.data[0].embedding,
+        metadata: {
+          type: 'deck-chunk',
+          filename,
+          contentHash,
+          chunkIndex: i,
+          text: chunk,
+          processedAt: new Date().toISOString()
+        } as Record<string, any>
+      });
+    }
+    
+    // Store assumption embeddings with enhanced metadata
+    for (let i = 0; i < assumptions.length; i++) {
+      const assumption = assumptions[i];
+      const embedding = await createEmbedding(assumption.v1Assumption);
+      
+      vectors.push({
+        id: `deck-${contentHash}-assumption-${i}`,
+        values: embedding.data[0].embedding,
+        metadata: {
+          type: 'deck-assumption',
+          filename,
+          contentHash,
+          assumptionIndex: i,
+          icpAttribute: assumption.icpAttribute,
+          text: assumption.v1Assumption,
+          confidenceScore: assumption.confidenceScore,
+          processedAt: new Date().toISOString()
+        } as Record<string, any>
+      });
+    }
+    
+    // Store comprehensive deck metadata
+    const deckMetaEmbedding = await createEmbedding(`${filename} deck analysis summary`);
+    vectors.push({
+      id: `deck-${contentHash}-metadata`,
+      values: deckMetaEmbedding.data[0].embedding,
+      metadata: {
+        type: 'deck-metadata',
+        filename,
+        contentHash,
+        assumptionCount: assumptions.length,
+        contentLength: content.length,
+        chunkCount: chunks.length,
+        processedAt: new Date().toISOString(),
+        // Store complete assumptions for quick retrieval
+        assumptions: JSON.stringify(assumptions.map(a => ({
+          icpAttribute: a.icpAttribute,
+          v1Assumption: a.v1Assumption,
+          confidenceScore: a.confidenceScore
+        })))
+      } as Record<string, any>
+    });
+    
+    // Upsert all vectors in batches for efficiency
+    const batchSize = 100;
+    for (let i = 0; i < vectors.length; i += batchSize) {
+      const batch = vectors.slice(i, i + batchSize);
+      await pineconeIndex.namespace("analyze-deck").upsert(batch);
+      console.log(`📤 Stored batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(vectors.length/batchSize)} (${batch.length} vectors)`);
+    }
+    
+    console.log(`✅ Successfully stored ${vectors.length} vectors for deck ${filename}`);
+    
+  } catch (error) {
+    console.error('❌ Error storing deck in RAG:', error);
+    // Don't throw - RAG storage is supplementary
+  }
+}
+
+// Check if identical content was already processed
+async function checkForExistingProcessedDeck(contentHash: string): Promise<BuyerMapData[] | null> {
+  if (isMockMode()) {
+    return null;
+  }
+
+  try {
+    const pineconeIndex = getPineconeIndex();
+    
+    // Search for existing metadata with this content hash
+    const dummyEmbedding = await createEmbedding('deck analysis query');
+    
+    const queryResponse = await pineconeIndex.namespace("analyze-deck").query({
+      vector: dummyEmbedding.data[0].embedding,
+      topK: 1,
+      includeMetadata: true,
+      filter: {
+        type: 'deck-metadata',
+        contentHash: contentHash
+      }
+    });
+    
+    if (queryResponse.matches && queryResponse.matches.length > 0) {
+      const match = queryResponse.matches[0];
+      if (match.metadata && match.metadata.assumptions) {
+        console.log(`🔍 Found existing analysis for content hash ${contentHash}`);
+        
+        // Parse stored assumptions
+        const storedAssumptions = JSON.parse(match.metadata.assumptions as string);
+        
+        // Reconstruct BuyerMapData format
+        const existingAssumptions: BuyerMapData[] = storedAssumptions.map((assumption: any, index: number) => ({
+          id: index + 1,
+          icpAttribute: assumption.icpAttribute,
+          icpTheme: mapICPAttributeToKey(assumption.icpAttribute),
+          v1Assumption: assumption.v1Assumption,
+          whyAssumption: 'Retrieved from cache (identical content)',
+          evidenceFromDeck: assumption.v1Assumption,
+          comparisonOutcome: 'New Data Added',
+          confidenceScore: assumption.confidenceScore,
+          confidenceExplanation: `Cached analysis from ${match.metadata?.processedAt ? new Date(match.metadata.processedAt as string).toLocaleDateString() : 'unknown date'}`,
+          validationStatus: 'pending',
+          quotes: []
+        }));
+        
+        return existingAssumptions;
+      }
+    }
+    
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error checking for existing deck:', error);
+    return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -74,28 +239,77 @@ export async function POST(req: NextRequest) {
 
     console.log('Starting deck analysis for file:', filename, 'from blob:', blobUrl);
     
+    const timingLog: Record<string, number> = {};
+
+    // At the start of the handler
+    const startTime = Date.now();
+    timingLog.uploadReceived = startTime;
+    console.log('[TIMING] Upload received at', new Date(startTime).toISOString());
+
+    // Before file download
+    const downloadStart = Date.now();
+    timingLog.downloadStart = downloadStart;
+    console.log('[TIMING] File download start at', new Date(downloadStart).toISOString());
     // Download the file from Vercel Blob
     console.log('Downloading file from blob...');
     const fileResponse = await fetch(blobUrl);
     if (!fileResponse.ok) {
       throw new Error(`Failed to download file from blob: ${fileResponse.statusText}`);
     }
-    
     const fileBuffer = await fileResponse.arrayBuffer();
     const deckFile = new File([fileBuffer], filename, { 
       type: fileResponse.headers.get('content-type') || 'application/pdf' 
     });
     console.log('File downloaded successfully, size:', deckFile.size, 'bytes');
+    const downloadEnd = Date.now();
+    timingLog.downloadEnd = downloadEnd;
+    console.log('[TIMING] File download end at', new Date(downloadEnd).toISOString(), 'Duration:', downloadEnd - downloadStart, 'ms');
 
+    // Before parsing
+    const parsingStart = Date.now();
+    timingLog.parsingStart = parsingStart;
+    console.log('[TIMING] Parsing start at', new Date(parsingStart).toISOString());
     // 1. Parse the deck file
     console.log('Step 1: Parsing deck file...');
     const parsedResult = await parseFile(deckFile);
     console.log('Extracted deck text length:', parsedResult.text?.length || 0);
-
     if (!parsedResult.text) {
       console.error('No text extracted from deck');
       return NextResponse.json({ error: 'Could not extract text from deck' }, { status: 400 });
     }
+    const parsingEnd = Date.now();
+    timingLog.parsingEnd = parsingEnd;
+    console.log('[TIMING] Parsing end at', new Date(parsingEnd).toISOString(), 'Duration:', parsingEnd - parsingStart, 'ms');
+
+    // Duplicate check and content hash generation (after parsing)
+    const duplicateCheckStart = Date.now();
+    timingLog.duplicateCheckStart = duplicateCheckStart;
+    console.log('[TIMING] Duplicate check start at', new Date(duplicateCheckStart).toISOString());
+    const contentHash = generateContentHash(parsedResult.text);
+    console.log(`📋 Content hash: ${contentHash}`);
+    const existingAnalysis = await checkForExistingProcessedDeck(contentHash);
+    if (existingAnalysis) {
+      console.log(`⚡ Found cached analysis! Returning existing results for content hash ${contentHash}`);
+      // Transform the cached assumptions
+      const transformedData = transformBuyerMapDataArray(existingAnalysis);
+      const overallAlignmentScore = calculateOverallAlignmentScore(transformedData);
+      const validatedCount = countValidationStatus(transformedData, 'validated');
+      const partiallyValidatedCount = countValidationStatus(transformedData, 'partial');
+      const pendingCount = countValidationStatus(transformedData, 'pending');
+      return NextResponse.json({
+        success: true,
+        assumptions: transformedData,
+        overallAlignmentScore,
+        validatedCount,
+        partiallyValidatedCount,
+        pendingCount,
+        cached: true,
+        contentHash
+      });
+    }
+    const duplicateCheckEnd = Date.now();
+    timingLog.duplicateCheckEnd = duplicateCheckEnd;
+    console.log('[TIMING] Duplicate check end at', new Date(duplicateCheckEnd).toISOString(), 'Duration:', duplicateCheckEnd - duplicateCheckStart, 'ms');
 
     // 2. Analyze the deck content with AI
     console.log('Step 2: Analyzing deck content with AI...');
@@ -103,12 +317,14 @@ export async function POST(req: NextRequest) {
       throw new Error('OpenAI client not initialized');
     }
 
-    const systemPrompt = `You are an expert business analyst specializing in B2B buyer personas and Ideal Customer Profiles (ICPs). Your task is to analyze sales/marketing materials and extract specific, testable assumptions about the target buyer.
+    const systemPrompt = `You are an expert business analyst specializing in B2B buyer personas and Ideal Customer Profiles (ICPs). Your task is to analyze sales/marketing materials and extract specific, testable assumptions about the target buyer, WITH supporting evidence from the deck.
 
 CRITICAL INSTRUCTIONS:
-1. Extract assumptions for ALL 7 ICP attributes: Buyer Titles, Company Size, Pain Points, Desired Outcomes, Triggers, Barriers, Messaging Emphasis
-2. Make assumptions SPECIFIC and TESTABLE (avoid vague statements)
-3. Base assumptions on EXPLICIT evidence from the content
+1. For ALL 7 ICP attributes: Buyer Titles, Company Size, Pain Points, Desired Outcomes, Triggers, Barriers, Messaging Emphasis
+2. For EACH attribute, extract:
+   - The specific, testable assumption (as before)
+   - 2-3 direct quotes or slide references from the deck that support or contradict the assumption (include slide number if possible)
+3. Base assumptions and evidence on EXPLICIT content from the deck
 4. Include confidence scores (0-100) based on strength of evidence
 5. Return ONLY valid JSON in the exact format specified
 
@@ -119,7 +335,11 @@ RESPONSE FORMAT:
       "icpAttribute": "Buyer Titles|Company Size|Pain Points|Desired Outcomes|Triggers|Barriers|Messaging Emphasis",
       "v1Assumption": "Specific, testable assumption with metrics/behaviors when possible",
       "confidenceScore": 0-100,
-      "confidenceExplanation": "Brief explanation of evidence strength and source"
+      "confidenceExplanation": "Brief explanation of evidence strength and source",
+      "evidenceFromDeck": [
+        { "quote": "Direct quote from deck", "slideNumber": 5 },
+        { "quote": "Another quote or summary", "slideNumber": 7 }
+      ]
     }
   ]
 }
@@ -137,7 +357,8 @@ AVOID:
 - Generic or obvious statements
 - Assumptions without clear evidence
 - Vague language ("some", "many", "often")
-- Product features instead of buyer needs`;
+- Product features instead of buyer needs
+- Quotes without slide numbers if possible`;
 
     const analysisResponse = await withTimeout(
       openai.chat.completions.create({
@@ -149,7 +370,7 @@ AVOID:
           },
           {
             role: 'user',
-            content: `Analyze this sales deck/pitch material and extract ICP assumptions for all 7 attributes. Focus on what the content reveals about the TARGET BUYER, not the product features.\n\nDECK CONTENT:\n${parsedResult.text}`
+            content: `Analyze this sales deck/pitch material and extract ICP assumptions for all 7 attributes. For each attribute, provide 2-3 direct quotes or slide references from the deck that support or contradict the assumption (include slide number if possible). Focus on what the content reveals about the TARGET BUYER, not the product features.\n\nDECK CONTENT (slide-by-slide if possible):\n${parsedResult.text}`
           }
         ],
         temperature: 0.3,
@@ -219,6 +440,13 @@ AVOID:
         }
       });
 
+      // Evidence array validation (new)
+      parsedAssumptions.assumptions.forEach((a: any) => {
+        if (!Array.isArray(a.evidenceFromDeck)) {
+          a.evidenceFromDeck = [];
+        }
+      });
+
       // Create assumption objects with proper typing
       const assumptions: BuyerMapData[] = parsedAssumptions.assumptions.map((assumption: any, index: number) => {
         return {
@@ -227,7 +455,7 @@ AVOID:
           icpTheme: mapICPAttributeToKey(assumption.icpAttribute),
           v1Assumption: assumption.v1Assumption,
           whyAssumption: 'Extracted from deck analysis',
-          evidenceFromDeck: assumption.v1Assumption,
+          evidenceFromDeck: assumption.evidenceFromDeck,
           comparisonOutcome: 'New Data Added',
           confidenceScore: assumption.confidenceScore,
           confidenceExplanation: assumption.confidenceExplanation,
@@ -290,6 +518,18 @@ AVOID:
       if (!transformedData || transformedData.length === 0) {
         throw new Error('Transformation resulted in empty data');
       }
+
+      // 6. Store in enhanced RAG system for future retrieval
+      console.log('Step 6: Storing analysis in RAG system...');
+      await storeProcessedDeckInRAG(filename, parsedResult.text, assumptions, contentHash);
+
+      // 6.5. Save file record to in-memory store for duplicate detection
+      saveFileRecord({
+        contentHash: contentHash,
+        filename: filename,
+        fileSize: deckFile.size,
+        contentType: 'deck'
+      });
 
       // Calculate final metrics
       const overallAlignmentScore = calculateOverallAlignmentScore(transformedData);

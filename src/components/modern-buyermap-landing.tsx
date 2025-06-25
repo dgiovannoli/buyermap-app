@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare, Info, BarChart3
+  Users, Building, Target, AlertCircle, Trophy, Zap, Shield, MessageSquare, Info, BarChart3, Upload, X, AlertTriangle, CheckCircle, Clock, Brain, FileText, Download, Plus
 } from 'lucide-react';
-import { BuyerMapData } from '../types/buyermap';
+import { BuyerMapData, ExampleQuote, Quote, ConfidenceBreakdown } from '../types/buyermap';
 import DetailedValidationCard from './DetailedValidationCard';
 import { mapBuyerMapToValidationData } from '../utils/mapToValidationData';
 import UploadComponent from './UploadComponent';
@@ -10,9 +10,10 @@ import { MOCK_BUYER_MAP_DATA } from './__mocks__/buyerMapData';
 import InterviewProcessingOverlay from '../app/components/loading/InterviewProcessingOverlay';
 import { useProcessingProgress } from '../app/hooks/useProcessingProgress';
 import ProcessVisualization from '../app/components/loading/ProcessVisualization';
-import { upload } from '@vercel/blob/client';
+import { upload, put } from '@vercel/blob/client';
 import FileConflictDialog from './ui/FileConflictDialog';
 import { useFileConflictHandler, type FileConflictResolution } from '../hooks/useFileConflictHandler';
+
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
 // interface BuyerMapData, Quote, etc. should be imported from types if needed
@@ -281,6 +282,17 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   setCurrentStep,
   initialInsights 
 }) => {
+  // Debug logging moved to useEffect to prevent excessive re-renders
+  useEffect(() => {
+    console.log('🔍 ModernBuyerMapLanding received props:', {
+      buyerMapDataLength: buyerMapData?.length || 0,
+      overallScore,
+      currentStep,
+      initialInsightsLength: initialInsights?.length || 0,
+      firstBuyerMapItem: buyerMapData?.[0]
+    });
+  }, [buyerMapData, overallScore, currentStep, initialInsights]);
+  
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
   
   // Debug logging for environment variable
@@ -320,10 +332,11 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [isDemoMode, setIsDemoMode] = useState(false);
   const interviewProcessing = useProcessingProgress();
 
-  // File conflict handling
+  // Add file conflict handler
   const {
     currentConflict,
     isDialogOpen,
+    checkFileExists,
     checkFilesForConflicts,
     resolveConflict,
     cancelConflict,
@@ -332,6 +345,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
   // Store files for conflict resolution
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [resultsSummary, setResultsSummary] = useState<string>('');
 
   // Auto-setup for mock mode
   useEffect(() => {
@@ -349,29 +363,29 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
 
   // Add effect to log state changes
   useEffect(() => {
-    console.log('showUploadMore state changed:', showUploadMore);
+    // console.log('showUploadMore state changed:', showUploadMore);
   }, [showUploadMore]);
 
   // Add debug logging for currentStep changes
   useEffect(() => {
-    console.log('currentStep changed:', currentStep);
+    // console.log('currentStep changed:', currentStep);
   }, [currentStep]);
 
   // Add effect to log localBuyerMapData updates
   useEffect(() => {
-    console.log('localBuyerMapData updated:', localBuyerMapData);
+    // console.log('localBuyerMapData updated:', localBuyerMapData);
   }, [localBuyerMapData]);
 
-  // Add debug logging for render
-  console.log('Rendering component with:', {
-    currentStep,
-    showUploadMore,
-    score,
-    uploaded,
-    isDemoMode,
-    isMock,
-    localBuyerMapDataLength: localBuyerMapData?.length ?? 0
-  });
+  // Add debug logging for render - commented out for performance
+  // console.log('Rendering component with:', {
+  //   currentStep,
+  //   showUploadMore,
+  //   score,
+  //   uploaded,
+  //   isDemoMode,
+  //   isMock,
+  //   localBuyerMapDataLength: localBuyerMapData?.length ?? 0
+  // });
 
   // Helper to calculate overall score (simple average for demo)
   const calculateOverallScore = (data: BuyerMapData[]) => {
@@ -392,56 +406,81 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       setIsProcessing(true);
       setProcessError(null);
 
-      // Step 1: Upload deck to Vercel Blob
-      const { head } = await import('@vercel/blob');
       const file = files[0];
+      console.log(`📊 [BLOB] Processing deck: ${file.name}`);
       
-      console.log(`📊 [BLOB] Uploading deck: ${file.name}`);
+      // Step 1: Check for file conflicts with enhanced handling
+      const conflict = await checkFileExists(file.name);
       
-      // Check if file already exists
-      let fileExists = false;
-      let existingUrl = null;
+      let blobUrl: string | null = null;
+      let shouldUpload = true;
       
-      try {
-        const existingBlob = await head(file.name);
-        if (existingBlob) {
-          fileExists = true;
-          existingUrl = existingBlob.url;
-          console.log(`🔍 [BLOB] Deck "${file.name}" already exists at: ${existingUrl}`);
-        }
-      } catch (error) {
-        // File doesn't exist, continue with upload
-        console.log(`📁 [BLOB] Deck "${file.name}" doesn't exist, proceeding with upload`);
-      }
-      
-      let blobUrl = null;
-      
-      if (fileExists && existingUrl) {
-        // Ask user what to do with existing file
-        const userChoice = confirm(
-          `The deck "${file.name}" already exists.\n\n` +
-          `• Click "OK" to use the existing file\n` +
-          `• Click "Cancel" to upload a new version (overwrite)`
-        );
+      if (conflict) {
+        console.log(`🔍 [BLOB] Deck conflict detected for "${file.name}"`);
         
-        if (userChoice) {
-          // Use existing file
-          console.log(`🔄 [BLOB] Using existing deck: ${existingUrl}`);
-          blobUrl = existingUrl;
-        } else {
-          // User wants to overwrite, proceed with upload
-          console.log(`🔄 [BLOB] User chose to overwrite deck: ${file.name}`);
-        }
+        // Set up conflict for resolution
+        setConflictsAndShow([conflict]);
+        
+        // Wait for user resolution
+        return new Promise<void>((resolve, reject) => {
+          const handleResolution = async (resolution: FileConflictResolution) => {
+            try {
+              let processFile = file; // Create mutable reference
+              
+              switch (resolution.action) {
+                case 'use-existing':
+                  console.log(`🔄 [BLOB] Using existing deck: ${resolution.url}`);
+                  blobUrl = resolution.url!;
+                  shouldUpload = false;
+                  break;
+                case 'overwrite':
+                  console.log(`🔄 [BLOB] User chose to overwrite deck: ${file.name}`);
+                  shouldUpload = true;
+                  break;
+                case 'rename':
+                  console.log(`🔄 [BLOB] User chose to rename deck: ${resolution.fileName}`);
+                  // Update file name for upload
+                  processFile = new File([file], resolution.fileName, { type: file.type });
+                  shouldUpload = true;
+                  break;
+              }
+              
+              // Continue with upload process
+              await continueProcessDeck(processFile, blobUrl, shouldUpload);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          };
+          
+          // Store resolution handler for conflict dialog
+          (window as any).deckConflictResolver = handleResolution;
+        });
+      } else {
+        console.log(`📁 [BLOB] Deck "${file.name}" doesn't exist, proceeding with upload`);
+        await continueProcessDeck(file, blobUrl, shouldUpload);
       }
       
-      // Upload the deck if we don't have a URL yet
-      if (!blobUrl) {
+    } catch (err) {
+      console.error('❌ Deck upload error', err);
+      setProcessError(`Deck processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setIsProcessing(false);
+    }
+  };
+
+  // Continue deck processing after conflict resolution
+  const continueProcessDeck = async (file: File, existingBlobUrl: string | null, shouldUpload: boolean) => {
+    try {
+      let blobUrl = existingBlobUrl;
+      
+      // Upload the deck if needed
+      if (shouldUpload && !blobUrl) {
         const { upload } = await import('@vercel/blob/client');
         const blob = await upload(file.name, file, {
           access: 'public',
           handleUploadUrl: '/api/upload-deck',
           clientPayload: JSON.stringify({ 
-            allowOverwrite: fileExists // Allow overwrite if file exists
+            allowOverwrite: true // Allow overwrite when explicitly chosen
           }),
         });
         
@@ -458,6 +497,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         },
         body: JSON.stringify({
           blobUrl: blobUrl,
+          filename: file.name
         }),
       });
       
@@ -467,21 +507,25 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       }
 
       const data = await res.json();
-      console.log('✅ Real API responded:', data);
+      console.log('✅ Deck analysis completed:', data);
+      
+      // Check if analysis was cached
+      if (data.cached) {
+        console.log(`⚡ Analysis retrieved from cache (content hash: ${data.contentHash})`);
+      } else {
+        console.log(`🆕 New analysis completed and stored in RAG system`);
+      }
       
       // Update local state with deck analysis results
       if (data.assumptions) {
         setLocalBuyerMapData(data.assumptions);
-        // Don't set score until interviews are processed
-        // const calculatedScore = calculateOverallScore(data.assumptions);
-        // setScore(calculatedScore);
       }
       
       setUploaded(true);
       setCurrentStep(3);
       
     } catch (err) {
-      console.error('❌ Deck upload error', err);
+      console.error('❌ Deck processing error', err);
       setProcessError(`Deck processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
@@ -536,9 +580,68 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
         interviewProcessing.startInterviewProcessing(filesArray.length, assumptionTexts);
         
         try {
-          // Step 1: Check for file conflicts BEFORE starting any uploads
+          // Step 1: Check for duplicates BEFORE processing
+          console.log('🔍 [DUPLICATE] Starting duplicate detection for interviews...');
+          const { checkForDuplicatesAPI } = await import('../utils/deduplication');
+          
+          const filesWithDuplicateStatus = [];
+          for (const file of filesArray) {
+            try {
+              console.log(`🔍 [DUPLICATE] Checking file: ${file.name}`);
+              const duplicateCheck = await checkForDuplicatesAPI(file, 'interview', {
+                checkSimilarity: true,
+                similarityThreshold: 0.90
+              });
+              
+              if (duplicateCheck.hasExactDuplicate || duplicateCheck.hasSimilarDuplicate) {
+                console.log(`🚨 [DUPLICATE] Duplicate detected for ${file.name}:`, {
+                  hasExact: duplicateCheck.hasExactDuplicate,
+                  hasSimilar: duplicateCheck.hasSimilarDuplicate,
+                  exactFile: duplicateCheck.exactDuplicate?.filename,
+                  similarFile: duplicateCheck.similarDuplicate?.filename
+                });
+                
+                const duplicateType = duplicateCheck.hasExactDuplicate ? 'exact' : 'similar';
+                const originalFile = duplicateCheck.exactDuplicate?.filename || duplicateCheck.similarDuplicate?.filename;
+                
+                const userChoice = confirm(
+                  `🚨 DUPLICATE DETECTED!\n\n` +
+                  `File: ${file.name}\n` +
+                  `Type: ${duplicateType.toUpperCase()} duplicate\n` +
+                  `Original: ${originalFile}\n\n` +
+                  `Click OK to use existing results (recommended)\n` +
+                  `Click Cancel to process anyway`
+                );
+                
+                if (userChoice) {
+                  console.log(`✅ [DUPLICATE] User chose to use existing results for ${file.name}`);
+                  // Skip this file - use existing results
+                  continue;
+                } else {
+                  console.log(`🔄 [DUPLICATE] User chose to process anyway for ${file.name}`);
+                  // Continue with processing this file
+                }
+              } else {
+                console.log(`✅ [DUPLICATE] No duplicates found for ${file.name}`);
+              }
+              
+              filesWithDuplicateStatus.push(file);
+              
+            } catch (duplicateError) {
+              console.error(`❌ [DUPLICATE] Duplicate check failed for ${file.name}:`, duplicateError);
+              // Continue with upload if duplicate check fails
+              filesWithDuplicateStatus.push(file);
+            }
+          }
+          
+          console.log(`✅ [DUPLICATE] Duplicate check completed. Processing ${filesWithDuplicateStatus.length}/${filesArray.length} files`);
+          
+          // Update the files array to only include non-skipped files
+          const filesToProcess = filesWithDuplicateStatus;
+          
+          // Step 2: Check for file conflicts BEFORE starting any uploads
           console.log('🔍 [BLOB] Checking for file conflicts...');
-          const { conflictFiles, clearFiles } = await checkFilesForConflicts(filesArray);
+          const { conflictFiles, clearFiles } = await checkFilesForConflicts(filesToProcess);
         
         console.log(`📊 [BLOB] Conflict check results: ${conflictFiles.length} conflicts, ${clearFiles.length} clear files`);
 
@@ -634,79 +737,47 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           const payload = await analysisResponse.json();
           console.log('✅ [BLOB] Interview analysis completed:', payload);
           
-          // Enhanced debugging to identify field structure
-          console.log('🔍 [DEBUG] Complete payload structure:', {
-            keys: Object.keys(payload),
-            assumptionsExists: !!payload.assumptions,
-            assumptionsLength: payload.assumptions?.length || 0,
-            firstAssumptionKeys: payload.assumptions?.[0] ? Object.keys(payload.assumptions[0]) : [],
-            sampleFirstAssumption: payload.assumptions?.[0] || null
+          // Process assumptions and add interview data 
+          const processedAssumptions = payload.assumptions.map((assumption: any) => ({
+            ...assumption,
+            // Use the realityFromInterviews field from API response
+            reality: assumption.realityFromInterviews || assumption.reality || 'No interview data available for this assumption.',
+            // Add quote count for debugging
+            quotesCount: assumption.quotes?.length || 0,
+            // Ensure we have interview data flag
+            hasInterviewData: !!(assumption.quotes && assumption.quotes.length > 0)
+          }));
+
+          console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
+            count: processedAssumptions.length,
+            withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length,
+            sampleRealityData: processedAssumptions[0]?.reality?.slice(0, 100) || 'No data',
+            quoteCounts: processedAssumptions.map((a: any) => ({ 
+              assumption: a.v1Assumption?.slice(0, 30), 
+              quotes: a.quotesCount,
+              hasData: a.hasInterviewData 
+            }))
           });
+
+          setLocalBuyerMapData(processedAssumptions);
           
-          // Update state with interview data
-          if (payload.success && payload.assumptions) {
-            // Enhanced debugging before processing
-            console.log('🔍 [DEBUG] Raw interview API response:', {
-              payloadSuccess: payload.success,
-              assumptionsLength: payload.assumptions?.length || 0,
-              firstAssumption: payload.assumptions?.[0] ? {
-                id: payload.assumptions[0].id,
-                hasQuotes: !!(payload.assumptions[0].quotes && payload.assumptions[0].quotes.length > 0),
-                quotesLength: payload.assumptions[0].quotes?.length || 0,
-                hasRealityFromInterviews: !!payload.assumptions[0].realityFromInterviews,
-                realityPreview: payload.assumptions[0].realityFromInterviews?.slice(0, 100) || 'NONE',
-                // Check all possible reality field names
-                possibleRealityFields: {
-                  realityFromInterviews: payload.assumptions[0].realityFromInterviews ? 'EXISTS' : 'MISSING',
-                  reality: payload.assumptions[0].reality ? 'EXISTS' : 'MISSING', 
-                  interviewInsights: payload.assumptions[0].interviewInsights ? 'EXISTS' : 'MISSING',
-                  summary: payload.assumptions[0].summary ? 'EXISTS' : 'MISSING',
-                  keyFinding: payload.assumptions[0].keyFinding ? 'EXISTS' : 'MISSING'
-                }
-              } : 'no_assumptions'
-            });
-
-            // Ensure realityFromInterviews is properly mapped
-            const processedAssumptions = payload.assumptions.map((assumption: any) => ({
-              ...assumption,
-              realityFromInterviews: assumption.realityFromInterviews || 
-                                   assumption.reality ||
-                                   assumption.interviewInsights || 
-                                   assumption.keyFinding || 
-                                   assumption.summary ||
-                                   (assumption.quotes && assumption.quotes.length > 0 ? 
-                                     `Based on ${assumption.quotes.length} interview insights: ${assumption.quotes[0]?.text?.slice(0, 100) || 'Interview data available'}...` : 
-                                     'No interview data available')
-            }));
-
-            console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
-              count: processedAssumptions.length,
-              withReality: processedAssumptions.filter((a: any) => a.realityFromInterviews && a.realityFromInterviews !== 'No interview data available').length,
-              sampleRealityData: processedAssumptions[0]?.realityFromInterviews?.slice(0, 100) || 'NONE'
-            });
-
-            setLocalBuyerMapData(processedAssumptions);
-            
-            // Update score if available
-            if (payload.overallAlignmentScore) {
-              setScore(payload.overallAlignmentScore);
-            }
-            
-            // Update score breakdown data if available
-            if (payload.scoreBreakdown) {
-              setScoreBreakdown(payload.scoreBreakdown.breakdown);
-              setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
-              setSummary(payload.scoreBreakdown.summary);
-            }
-            
-            setUploadingInterviews(false);
-            interviewProcessing.resetProcessing();
-            setCurrentStep(3);
-            setUploaded(true);
-            console.log('✅ Interview data integrated with buyer map');
+          // Update score if available
+          if (payload.overallAlignmentScore) {
+            setScore(payload.overallAlignmentScore);
           }
-        } else if (conflictFiles.length === 0) {
-          console.log('ℹ️ No files were uploaded');
+          
+          // Update score breakdown data if available
+          if (payload.scoreBreakdown) {
+            setScoreBreakdown(payload.scoreBreakdown.breakdown);
+            setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
+            setSummary(payload.scoreBreakdown.summary);
+          }
+          
+          setUploadingInterviews(false);
+          interviewProcessing.resetProcessing();
+          setCurrentStep(3);
+          setUploaded(true);
+          console.log('✅ Interview data integrated with buyer map');
         }
 
       } catch (error: any) {
@@ -743,7 +814,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       // Handle the resolution
       switch (resolution.action) {
         case 'use-existing':
-          console.log(`♻️ [BLOB] Using existing file: ${resolution.fileName}`);
+          console.log(`♻️ [BLOB] Using existing file: ${resolution.url}`);
           resultUrl = resolution.url;
           break;
           
@@ -795,23 +866,33 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           const payload = await analysisResponse.json();
           console.log('✅ [BLOB] Single file analysis completed:', payload);
           
-          // Enhanced debugging to identify field structure
-          console.log('🔍 [DEBUG] Complete payload structure:', {
-            keys: Object.keys(payload),
-            assumptionsExists: !!payload.assumptions,
-            assumptionsLength: payload.assumptions?.length || 0,
-            firstAssumptionKeys: payload.assumptions?.[0] ? Object.keys(payload.assumptions[0]) : [],
-            sampleFirstAssumption: payload.assumptions?.[0] || null
+          // Process assumptions and add interview data 
+          const processedAssumptions = payload.assumptions.map((assumption: any) => ({
+            ...assumption,
+            // Use the realityFromInterviews field from API response
+            reality: assumption.realityFromInterviews || assumption.reality || 'No interview data available for this assumption.',
+            // Add quote count for debugging
+            quotesCount: assumption.quotes?.length || 0,
+            // Ensure we have interview data flag
+            hasInterviewData: !!(assumption.quotes && assumption.quotes.length > 0)
+          }));
+
+          console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
+            count: processedAssumptions.length,
+            withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length,
+            sampleRealityData: processedAssumptions[0]?.reality?.slice(0, 100) || 'No data',
+            quoteCounts: processedAssumptions.map((a: any) => ({ 
+              assumption: a.v1Assumption?.slice(0, 30), 
+              quotes: a.quotesCount,
+              hasData: a.hasInterviewData 
+            }))
           });
-          
-          // Update state with interview data
-          if (payload.success && payload.assumptions) {
-            setLocalBuyerMapData(payload.assumptions);
-            setUploadingInterviews(false);
-            setCurrentStep(3);
-            setUploaded(true);
-            console.log('✅ Interview data integrated with buyer map');
-          }
+
+          setLocalBuyerMapData(processedAssumptions);
+          setUploadingInterviews(false);
+          setCurrentStep(3);
+          setUploaded(true);
+          console.log('✅ Interview data integrated with buyer map');
         }
       }
 
@@ -852,42 +933,43 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     }
   }, [uploadedFiles.deck, uploaded]);
 
-  // Auto-advance to results when buyerMapData is provided
-  useEffect(() => {
-    const hasData = localBuyerMapData.length > 0 || buyerMapData.length > 0;
-    if (hasData && currentStep < 3) {
-      setCurrentStep(3);
-      setUploaded(true);
-      // Don't calculate score until interviews are processed
-      // const dataToScore = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-      // const calculatedScore = calculateOverallScore(dataToScore);
-      // setScore(calculatedScore);
-    }
-  }, [localBuyerMapData, buyerMapData, currentStep, setCurrentStep]);
+  // Note: Removed auto-advance useEffect to prevent premature navigation to results
+  // Step 3 advancement is now handled explicitly in deck/interview processing callbacks
 
   // Transform buyerMapData to validationInsights format for DetailedValidationCard
   const validationInsights = useMemo(() => {
     const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
     const hasInterviews = uploadedFiles.interviews.length > 0;
     
-    // Debug: Log data transformation
-    console.log('🔄 validationInsights useMemo triggered:', {
-      localBuyerMapDataLength: localBuyerMapData.length,
-      buyerMapDataLength: buyerMapData.length,
-      hasInterviews,
-      allDataLength: allData.length,
-      firstItemQuotes: allData[0]?.quotes?.length || 0,
-      firstItemReality: allData[0]?.realityFromInterviews?.slice(0, 50) || 'none',
-      // Enhanced debugging for quote data flow
-      sampleQuoteData: allData[0]?.quotes?.[0] ? {
-        hasText: !!allData[0].quotes[0].text,
-        hasSpeaker: !!allData[0].quotes[0].speaker,
-        hasRole: !!allData[0].quotes[0].role,
-        quotesCount: allData[0].quotes.length
-      } : 'no_quotes'
+    // ✅ Interview enrichment: Calculate total unique interviews from all assumptions
+    const allInterviewMetadata = new Set();
+    allData.forEach(assumption => {
+      if (assumption.quotes && assumption.quotes.length > 0) {
+        assumption.quotes.forEach(quote => {
+          if (quote.speaker) {
+            allInterviewMetadata.add(quote.speaker);
+          }
+        });
+      }
     });
+    const totalUniqueInterviews = allInterviewMetadata.size;
+
+    // ✅ Enrich assumptions with interview results
+    const enrichedAssumptions = allData.map((assumption, index) => ({
+      ...assumption,
+      icpValidation: {
+        title: assumption.icpValidation?.title || assumption.icpAttribute || 'Assumption',
+        subtitle: assumption.icpValidation?.subtitle || assumption.v1Assumption || '',
+        cardNumber: assumption.icpValidation?.cardNumber || index + 1,
+        series: assumption.icpValidation?.series || 'ICP Validation',
+        totalInterviews: (assumption.quotes || []).length > 0 
+          ? totalUniqueInterviews
+          : 0,
+        ...(assumption.icpValidation || {})
+      }
+    }));
     
-    const insights = allData.map(item => {
+    const insights = enrichedAssumptions.map(item => {
       // Use the enhanced mapping function that includes confidence breakdown
       const validationData = mapBuyerMapToValidationData(item);
       
@@ -907,44 +989,49 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           default: return 'Pending Validation';
         }
       };
-      
-      return {
-        id: item.id,
-        icpAttribute: item.icpAttribute || '',
-        title: item.v1Assumption || item.whyAssumption || '',
-        // Only show actual outcome and confidence if interviews have been uploaded
-        outcome: hasInterviews ? mapOutcome(item.comparisonOutcome || '') : 'Pending Validation',
-        confidence: hasInterviews ? (item.confidenceScore || 0) : 0,
-        confidenceExplanation: item.confidenceExplanation || '',
-        reality: item.realityFromInterviews || '',
-        quotes: (item.quotes || []).map((q, qIndex) => {
-          // Enhanced debugging for quote mapping
-          if (qIndex === 0) {
-            console.log(`🔍 [QUOTES] Mapping first quote for assumption ${item.id}:`, {
-              hasOriginalQuotes: !!(item.quotes && item.quotes.length > 0),
-              originalQuoteStructure: q ? Object.keys(q) : 'no_quote',
-              quotesArrayLength: item.quotes?.length || 0
-            });
-          }
-          
-          return {
+
+      // If there are interviews, use interview-based outcome/confidence
+      if (hasInterviews) {
+        return {
+          id: item.id,
+          icpAttribute: item.icpAttribute || '',
+          title: item.v1Assumption || item.whyAssumption || '',
+          outcome: mapOutcome(item.comparisonOutcome || ''),
+          confidence: item.confidenceScore || 0,
+          confidenceExplanation: item.confidenceExplanation || '',
+          reality: item.reality || item.realityFromInterviews || '',
+          quotes: (item.quotes || []).map((q, qIndex) => ({
             text: q.text || (q as any).quote || (q as any).quoteText || '',
             author: q.speaker || (q as any).author || (q as any).speakerName || 'Anonymous',
             role: q.role || (q as any).speakerRole || '',
             companySnapshot: q.companySnapshot || ''
-          };
-        }),
-        // Include enhanced confidence breakdown
-        confidenceBreakdown: hasInterviews ? validationData.confidenceBreakdown : undefined,
-        isPending: !hasInterviews
+          })),
+          confidenceBreakdown: validationData.confidenceBreakdown,
+          isPending: false,
+          icpValidation: item.icpValidation
+        };
+      }
+      // If no interviews, but deck evidence/assumption is present, show those
+      return {
+        id: item.id,
+        icpAttribute: item.icpAttribute || '',
+        title: item.v1Assumption || item.whyAssumption || '',
+        outcome: mapOutcome(item.comparisonOutcome || ''),
+        confidence: item.confidenceScore || 0,
+        confidenceExplanation: item.confidenceExplanation || '',
+        reality: item.v1Assumption || item.evidenceFromDeck || '',
+        quotes: [],
+        confidenceBreakdown: undefined,
+        isPending: false,
+        icpValidation: item.icpValidation
       };
     });
     
-    // Debug log to verify reality field mapping
-    console.log('🔍 ValidationInsights transformation:');
-    insights.forEach(insight => {
-      console.log(`  Assumption ${insight.id}: outcome="${insight.outcome}", isPending=${insight.isPending}, reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}", hasConfidenceBreakdown=${!!insight.confidenceBreakdown}"`);
-    });
+    // Debug log to verify reality field mapping and interview enrichment
+    // console.log('🔍 ValidationInsights transformation with interview enrichment:');
+    // insights.forEach(insight => {
+    //   console.log(`  Assumption ${insight.id}: outcome="${insight.outcome}", isPending=${insight.isPending}, reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}", hasConfidenceBreakdown=${!!insight.confidenceBreakdown}, totalInterviews=${insight.icpValidation?.totalInterviews || 0}"`);
+    // });
     
     return insights;
   }, [localBuyerMapData, buyerMapData, uploadedFiles.interviews.length]);
@@ -962,6 +1049,28 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       setUploaded(true);
     }} />;
   }
+
+  // Add a test function for debugging
+  const testInterviewAnalysis = async () => {
+    console.log('🧪 Testing interview analysis with debugging...');
+    try {
+      const response = await fetch('/api/analyze-interviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          blobUrls: [
+            'https://xuutptd9ceo11fte.public.blob.vercel-storage.com/_Interview_with_Yusuf_Elmarakby__Paralegal_at_Bruce_Harvey_Law_Firm-OOYZPuWNT6nxyNa9fFCzT2FErMm9V3.docx'
+          ],
+          assumptions: JSON.stringify(localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData)
+        })
+      });
+      
+      const result = await response.json();
+      console.log('🧪 Test result:', result);
+    } catch (error) {
+      console.error('🧪 Test error:', error);
+    }
+  };
 
   // Main return with step indicator and step conditionals
   return (
@@ -1103,61 +1212,64 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           <div className="space-y-8" data-testid={isMock ? "mock-dashboard" : "validation-dashboard"}>
             {/* Show deck processed message when no interviews uploaded yet */}
             {uploadedFiles.interviews.length === 0 && !isMock && (
-              <div className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-8 mb-8">
+              <div className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-6 mb-8">
                 <h2 className="text-xl font-medium mb-2">Deck Analysis Complete</h2>
-                <p className="text-lg opacity-90 mb-4">Your assumptions have been extracted from the sales deck.</p>
-                <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold mb-2">💡 Next Step: Add Customer Interviews</h3>
-                  <p className="text-sm opacity-90 mb-3">
-                    Upload interview transcripts to validate these assumptions with real customer data.
-                  </p>
-                  <div className="bg-blue-900/50 rounded-lg p-3 text-sm">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="font-semibold">📋 Processing Guidelines:</span>
-                    </div>
-                    <ul className="space-y-1 text-xs opacity-90">
-                      <li>• <strong>Recommended:</strong> 3-5 interviews for balanced insights</li>
-                      <li>• <strong>Maximum:</strong> 10 interviews per upload batch</li>
-                      <li>• <strong>Processing time:</strong> ~3-8 minutes depending on file count</li>
-                      <li>• <strong>File types:</strong> .txt, .doc, .docx, .pdf</li>
-                    </ul>
-                  </div>
-                </div>
+                <p className="text-lg opacity-90 mb-4">Add customer interviews to validate your assumptions</p>
+                
                 <button
-                  onClick={() => setCurrentStep(2)}
+                  onClick={() => {
+                    if (fileInputRef.current) fileInputRef.current.click();
+                  }}
                   className="bg-white/20 hover:bg-white/30 text-white px-6 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm border border-white/30"
                 >
                   Add Interviews
                 </button>
+                
+                {/* Debug test button */}
+                <button
+                  onClick={testInterviewAnalysis}
+                  className="ml-4 bg-red-600/80 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm border border-red-400/30 text-sm"
+                >
+                  🧪 Debug Test
+                </button>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  accept=".txt,.doc,.docx,.pdf"
+                  onChange={(e) => {
+                    handleFileUpload('interviews', e.target.files);
+                  }}
+                />
+                
+                <div className="mt-4 text-sm opacity-75">
+                  <p>Recommended: 3-5 interviews • Max: 10 files • Supports: .txt, .doc, .docx, .pdf</p>
+                </div>
               </div>
             )}
 
             {/* Show interview processing status when interviews are uploaded */}
             {uploadedFiles.interviews.length > 0 && uploadingInterviews && (
-              <div className="text-center bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl p-8 mb-8">
+              <div className="text-center bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl p-6 mb-8">
                 <h2 className="text-xl font-medium mb-2">Processing {uploadedFiles.interviews.length} Interview{uploadedFiles.interviews.length > 1 ? 's' : ''}</h2>
                 <p className="text-lg opacity-90 mb-4">
-                  Extracting insights and validating assumptions...
+                  Analyzing transcripts and validating assumptions...
                 </p>
-                <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4">
-                  <div className="flex items-center justify-center space-x-2 mb-3">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span className="text-sm">Processing batch of {uploadedFiles.interviews.length} files</span>
-                  </div>
-                  <div className="text-xs opacity-90">
-                    <p>✓ Files are processed in parallel for faster results</p>
-                    <p>✓ Expected completion: ~{Math.ceil(uploadedFiles.interviews.length / 3) * 3} minutes</p>
-                  </div>
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span className="text-sm">Est. {Math.ceil(uploadedFiles.interviews.length / 3) * 2}-{Math.ceil(uploadedFiles.interviews.length / 3) * 4} minutes</span>
                 </div>
               </div>
             )}
 
             {/* Show successful processing when interviews are complete */}
             {uploadedFiles.interviews.length > 0 && !uploadingInterviews && (
-              <div className="text-center bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl p-6 mb-8">
-                <h2 className="text-xl font-medium mb-2">✅ Analysis Complete</h2>
-                <p className="text-lg opacity-90">
-                  {uploadedFiles.interviews.length} interview{uploadedFiles.interviews.length > 1 ? 's' : ''} processed and integrated with deck assumptions
+              <div className="text-center bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl p-4 mb-8">
+                <h2 className="text-lg font-medium mb-1">✅ Analysis Complete</h2>
+                <p className="opacity-90">
+                  {uploadedFiles.interviews.length} interview{uploadedFiles.interviews.length > 1 ? 's' : ''} processed successfully
                 </p>
               </div>
             )}

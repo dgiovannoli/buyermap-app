@@ -33,17 +33,6 @@ interface DeckUploadStageProps {
 }
 
 const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUploadStageProps) => {
-  // Mock mode control
-  const useMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
-  
-  React.useEffect(() => {
-    if (useMock) {
-      console.log("⚠️ Running in mock mode. Switch to live data by setting NEXT_PUBLIC_USE_MOCK=false");
-    } else {
-      console.log("✅ Running with live API + DB + vector storage");
-    }
-  }, [useMock]);
-
   const [uploadedDeck, setUploadedDeck] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -134,14 +123,7 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
   const fetchCachedResults = (contentHash: string) => {
     console.log('🔄 Using existing results for hash:', contentHash);
     
-    if (useMock) {
-      console.log("⚠️ Using mock cached results (NEXT_PUBLIC_USE_MOCK=true)");
-    } else {
-      console.log("✅ Would fetch real cached results from database");
-      // TODO: Replace with actual database fetch when live mode is ready
-    }
-    
-    // Create mock results for existing analysis (used in both mock and live mode for now)
+    // Create mock results for existing analysis
     const mockResults: ICPValidationResponse = {
       assumptions: [
         {
@@ -244,7 +226,7 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
   const proceedWithDeckProcessing = async (file: File) => {
     console.log('🔄 Proceeding with deck processing for file:', file.name);
-    // Note: isProcessing is already set to true in handleStartProcessing
+    setIsProcessing(true);
     
     try {
       // Simulate the actual deck processing
@@ -299,8 +281,6 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
         console.log("⚠️ Duplicate detected:", metadata);
         setDuplicateData(metadata);
         setShowDuplicateDialog(true);
-        // Reset loading state since we're showing a dialog instead
-        setIsProcessing(false);
         return; // Stop normal processing
       }
 
@@ -314,8 +294,6 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
   const handleStartProcessing = () => {
     if (uploadedDeck) {
-      // Set loading state immediately for better UX
-      setIsProcessing(true);
       handleProcessDeck(uploadedDeck);
     }
   };

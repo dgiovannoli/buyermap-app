@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { ChevronDown, ChevronRight, ChevronUp, Target, BarChart3, MessageSquare, Quote, Plus, CheckCircle, XCircle, Info, ChartBar } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Target, BarChart3, MessageSquare, Quote, Plus, CheckCircle, XCircle, Info, ChartBar, FileText } from 'lucide-react';
 import { getOutcomeColors, getOutcomeIcon, getRoleStyle } from '../utils/validationHelpers';
 import { getAttributeIconAndColors } from '../utils/attributeStyles';
 import ConfidenceBreakdown from './ConfidenceBreakdown';
@@ -13,6 +13,7 @@ interface Quote {
   speaker?: string;
   role?: string;
   companySnapshot?: string;
+  relevanceScore?: number;
 }
 
 interface ValidationData {
@@ -22,6 +23,7 @@ interface ValidationData {
   reality: string;
   quotes: Quote[];
   confidenceBreakdown?: ConfidenceBreakdownType;
+  evidenceFromDeck?: string;
 }
 
 interface DetailedValidationCardProps {
@@ -36,6 +38,34 @@ interface DetailedValidationCardProps {
   onToggleExpand: (id: number) => void;
 }
 
+const getBestGuessLabel = (outcome: string, quotes: any[]): 'Validated' | 'Contradicted' | 'Gap Identified' | 'No Data' => {
+  if (!quotes || quotes.length === 0) return 'No Data';
+  switch (outcome) {
+    case 'Validated':
+      return 'Validated';
+    case 'Contradicted':
+      return 'Contradicted';
+    case 'Gap Identified':
+      return 'Gap Identified';
+    default:
+      return 'Validated'; // fallback to Validated if outcome is unclear but there is data
+  }
+};
+
+const getLabelColor = (label: string) => {
+  switch (label) {
+    case 'Validated':
+      return { primary: '#059669', bg: 'rgba(5, 150, 105, 0.1)', border: 'rgba(5, 150, 105, 0.3)' };
+    case 'Contradicted':
+      return { primary: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)', border: 'rgba(220, 38, 38, 0.3)' };
+    case 'Gap Identified':
+      return { primary: '#d97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' };
+    case 'No Data':
+    default:
+      return { primary: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.3)' };
+  }
+};
+
 const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
   id,
   attributeTitle,
@@ -46,7 +76,12 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
   onToggleExpand
 }) => {
   const [showAllQuotes, setShowAllQuotes] = useState(false);
-  const colors = validation ? getOutcomeColors(validation.outcome) : getOutcomeColors('New Data Added');
+  
+  const label = getBestGuessLabel(validation?.outcome || '', validation?.quotes || []);
+  const labelColors = getLabelColor(label);
+  const showNoData = (!validation || ((!validation.quotes || validation.quotes.length === 0) && !validation.evidenceFromDeck && !validation.reality));
+  const showLowConfidenceWarning = !showNoData && (validation?.confidence || 0) < 40;
+  
   const OutcomeIcon = validation ? getOutcomeIcon(validation.outcome) : getOutcomeIcon('New Data Added');
   
   // Pull in the dynamic icon + colors:
@@ -54,9 +89,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
     getAttributeIconAndColors(attributeTitle);
 
   // Extract values for the button
-  const outcomeColors = colors;
   const confidence = validation?.confidence || 0;
-  const outcome = validation?.outcome || 'New Data Added';
 
   const toggleExpanded = useCallback(() => {
     onToggleExpand(id);
@@ -118,20 +151,20 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               onClick={toggleExpanded}
               className="flex items-center space-x-2 text-sm font-medium p-1 hover:bg-gray-100 rounded transition-colors"
             >
-              {outcome === 'Pending Validation' ? (
-                // Show only "Pending Validation" in grey for pending state
+              {showNoData ? (
+                // Show only "No Data" in grey for no data state
                 <span className="text-gray-500">
-                  Pending Validation
+                  No Data
                 </span>
               ) : (
                 // Show confidence % and outcome for validated states
                 <>
-                  <span style={{ color: outcomeColors.primary }}>
+                  <span style={{ color: '#6b7280' }}>
                     {confidence}%
                   </span>
                   <span className="text-gray-400">•</span>
-                  <span style={{ color: outcomeColors.primary }}>
-                    {outcome}
+                  <span style={{ color: labelColors.primary }}>
+                    {label}
                   </span>
                 </>
               )}
@@ -146,132 +179,140 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
 
         {/* Assumption Text */}
         <div className="text-sm text-gray-800 leading-relaxed">
-          {subtitle}
+          {showNoData ? 'No Data' : subtitle || validation?.reality}
         </div>
+        {showLowConfidenceWarning && (
+          <div className="mt-2 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
+            Low confidence: Not enough interview data to validate this assumption.
+          </div>
+        )}
       </div>
 
       {/* Expanded Panel */}
-      {isExpanded && validation && (
+      {isExpanded && validation && !showNoData && (
         <div className="border-t border-gray-200 bg-gradient-to-b from-gray-50/30 to-white">
           <div className="p-6 space-y-6">
             
             {/* Hero Insight Section */}
-            <div className="relative">
-              <div 
-                className="rounded-xl p-6 border-l-4 shadow-lg"
-                style={{ 
-                  backgroundColor: colors.bg, 
-                  borderColor: colors.primary,
-                  border: `1px solid ${colors.border}`
-                }}
-              >
-                <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="p-2 bg-white rounded-lg shadow-sm">
-                      <Target className="w-6 h-6" style={{ color: colors.primary }} />
+            {validation.reality && (
+              <div className="relative">
+                <div 
+                  className="rounded-xl p-6 border-l-4 shadow-lg"
+                  style={{ 
+                    backgroundColor: labelColors.bg, 
+                    borderColor: labelColors.primary,
+                    border: `1px solid ${labelColors.border}`
+                  }}
+                >
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="p-2 bg-white rounded-lg shadow-sm">
+                        <Target className="w-6 h-6" style={{ color: labelColors.primary }} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-3">
-                      {React.createElement(getOutcomeIcon(validation.outcome), { className: "w-5 h-5", style: { color: colors.primary } })}
-                      <span className="font-bold text-lg" style={{ color: colors.primary }}>
-                        {validation.outcome}
-                      </span>
-                      <span className="text-sm text-gray-500">•</span>
-                      <span className="text-sm font-semibold text-gray-700">
-                        {validation.confidence}% confidence
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-3">
+                        {React.createElement(getOutcomeIcon(validation.outcome), { className: "w-5 h-5", style: { color: labelColors.primary } })}
+                        <span className="font-bold text-lg" style={{ color: labelColors.primary }}>
+                          {label}
+                        </span>
+                        <span className="text-sm text-gray-500">•</span>
+                        <span className="text-sm font-semibold text-gray-700">
+                          {validation.confidence}% confidence
+                        </span>
+                      </div>
+                      <h5 className="text-sm font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                        Key Finding
+                      </h5>
+                      <p className="text-base text-gray-900 leading-relaxed font-medium">
+                        {validation.reality}
+                      </p>
                     </div>
-                    <h5 className="text-sm font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                      Key Finding
-                    </h5>
-                    <p className="text-base text-gray-900 leading-relaxed font-medium">
-                      {validation.reality}
-                    </p>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Supporting Evidence */}
-            <div>
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <MessageSquare className="w-5 h-5 text-gray-600" />
+            {/* Deck Evidence Section */}
+            {validation.evidenceFromDeck && (
+              <div>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
+                    Evidence from Sales Deck
+                  </h4>
+                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                    Deck Analysis
+                  </span>
                 </div>
-                <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                  Supporting Evidence
-                </h5>
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                  {validation.quotes.length} interviews
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                {(showAllQuotes ? validation.quotes : getDiverseQuotes(validation.quotes, 2)).map((quote, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start space-x-3">
-                      <Quote className="w-5 h-5 text-blue-500 mt-1 flex-shrink-0" />
-                      <div className="flex-1">
-                        <blockquote className="text-gray-800 font-medium text-sm leading-relaxed mb-3 italic">
-                          "{quote.text}"
-                        </blockquote>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-600 font-medium">
-                              — {quote.author}
-                            </div>
-                            {quote.role && (
-                              <span
-                                className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleStyle(quote.role)}`}
-                              >
-                                {quote.role}
-                              </span>
-                            )}
-                          </div>
-                          {quote.companySnapshot && (
-                            <div className="bg-blue-50 border-l-2 border-blue-200 pl-3 py-2 rounded-r">
-                              <div className="text-xs text-blue-600 font-semibold uppercase tracking-wide mb-1">
-                                Firm Profile
-                              </div>
-                              <div className="text-xs text-blue-800 leading-relaxed">
-                                {quote.companySnapshot}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="text-sm font-semibold text-blue-800 mb-2">
+                        Supporting Evidence from Deck
+                      </h5>
+                      <div className="text-sm text-blue-900 leading-relaxed">
+                        {validation.evidenceFromDeck}
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-              
-              {validation.quotes.length > 2 && (
-                <div>
-                  <button
-                    onClick={toggleShowAllQuotes}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors flex items-center space-x-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200"
-                  >
-                    {showAllQuotes ? (
-                      <>
-                        <ChevronUp className="w-4 h-4" />
-                        <span>Show fewer quotes</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-4 h-4" />
-                        <span>View {validation.quotes.length - 2} more quotes</span>
-                      </>
-                    )}
-                  </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Enhanced Confidence Analysis */}
+            {/* Supporting Quotes */}
+            {validation.quotes && validation.quotes.length > 0 && (
+              <div>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <MessageSquare className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
+                    Supporting Evidence
+                  </h4>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                    {validation.quotes.length} quote{validation.quotes.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="space-y-4">
+                  {(showAllQuotes ? validation.quotes : getDiverseQuotes(validation.quotes, 2)).map((quote, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="text-sm font-medium text-gray-800">
+                          {quote.speaker || quote.author || 'Unknown Speaker'}
+                        </div>
+                        {quote.relevanceScore && (
+                          <div className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                            {quote.relevanceScore.toFixed(1)} relevance
+                          </div>
+                        )}
+                      </div>
+                      {quote.role && (
+                        <div className="text-xs text-gray-600 mb-1">{quote.role}</div>
+                      )}
+                      <div className="text-sm text-gray-700 italic">"{quote.text}"</div>
+                    </div>
+                  ))}
+                </div>
+                {validation.quotes.length > 2 && (
+                  <button
+                    className="mt-2 text-xs text-blue-600 hover:underline"
+                    onClick={toggleShowAllQuotes}
+                  >
+                    {showAllQuotes
+                      ? 'Show fewer quotes'
+                      : `View ${validation.quotes.length - 2} more quote${validation.quotes.length - 2 !== 1 ? 's' : ''}`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Confidence Analysis */}
             {validation.confidenceBreakdown ? (
               <ConfidenceBreakdown 
                 breakdown={validation.confidenceBreakdown}
@@ -279,12 +320,12 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
               />
             ) : (
               // Fallback to basic confidence display for legacy data
-              <div className="bg-white rounded-xl p-5 border border-blue-200 shadow-sm">
+              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                 <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <BarChart3 className="w-5 h-5 text-gray-400" />
                   </div>
-                  <h5 className="text-sm font-bold text-blue-800 uppercase tracking-wide">
+                  <h5 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
                     Confidence Analysis
                   </h5>
                 </div>
@@ -294,7 +335,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                       className="h-3 rounded-full transition-all duration-1000 ease-out"
                       style={{
                         width: `${validation.confidence}%`,
-                        background: `linear-gradient(90deg, ${colors.primary}dd, ${colors.primary})`
+                        background: 'linear-gradient(90deg, #9ca3afdd, #9ca3af)'
                       }}
                     />
                   </div>
@@ -302,7 +343,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                     {validation.confidence}%
                   </span>
                 </div>
-                <p className="text-sm text-blue-900 leading-relaxed">
+                <p className="text-sm text-gray-600 leading-relaxed">
                   {validation.confidence_explanation}
                 </p>
               </div>

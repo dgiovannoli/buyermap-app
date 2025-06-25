@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS user_interviews (
   pinecone_namespace TEXT,
   vectors_stored INTEGER DEFAULT 0,
   
+  -- Add content tracking fields
+  content_hash TEXT,
+  file_size BIGINT,
+  blob_url TEXT,
+  
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -99,6 +104,10 @@ CREATE POLICY "Users can update own interviews" ON user_interviews
 
 CREATE POLICY "Users can delete own interviews" ON user_interviews
   FOR DELETE USING (auth.uid() = user_id);
+
+-- Create index for fast content hash lookups
+CREATE INDEX IF NOT EXISTS idx_user_interviews_content_hash ON user_interviews(user_id, content_hash);
+CREATE INDEX IF NOT EXISTS idx_user_interviews_filename ON user_interviews(user_id, filename);
 ```
 
 ### 3. **Create User Quotes Table**

@@ -6,13 +6,14 @@ export function mapBuyerMapToValidationData(
 ): ValidationDataObject {
   // Generate enhanced confidence breakdown if we have interview data
   const hasInterviewData = (item.quotes?.length ?? 0) > 0 && item.realityFromInterviews;
+  
+  // Calculate unique speakers for interview-based confidence
+  const uniqueSpeakers = hasInterviewData ? new Set(item.quotes?.map(q => q.speaker).filter(Boolean)).size || 0 : 0;
+  
   const confidenceBreakdown = hasInterviewData ? generateConfidenceBreakdown(
     item.comparisonOutcome || 'Pending Validation',
-    item.quotes?.length ?? 0,
-    // Estimate interviews from unique speakers (rough approximation)
-    new Set(item.quotes?.map(q => q.speaker).filter(Boolean)).size || 0,
-    85, // Assume 85% deck extraction accuracy
-    true // Has interview data
+    uniqueSpeakers,
+    85 // Assume 85% deck extraction accuracy
   ) : undefined;
 
   return {
