@@ -27,7 +27,7 @@ export function mapBuyerMapToValidationData(
     confidence: item.confidenceScore ?? 0,
     confidence_explanation: item.confidenceExplanation || '',
     quotes: (item.quotes || []).map(q => ({
-      text: q.text || q.quote || '',
+      text: q.text || '',
       author: q.speaker || 'Anonymous',
       role: q.role,
     })),
