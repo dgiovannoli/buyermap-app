@@ -135,6 +135,49 @@ export async function demoRelevanceFiltering() {
     console.log(`🎯 Role Insight ${index + 1}: ${relevanceScore.toFixed(2)} (quality: ${qualityScore.toFixed(2)}) - "${quote.text}"`);
   });
   
+  // Test synthesis improvements
+  console.log('\n🔧 Testing Synthesis Improvements:');
+  console.log('-'.repeat(60));
+  
+  // Test role gap detection
+  const testAssumption = "The buyer titles are likely to be criminal defense attorneys and forensic psychologists, as the product is designed to assist in legal case preparation and evidence review.";
+  const testQuotes = sampleQuotes.filter(q => !q.text.toLowerCase().includes('coffee') && !q.text.toLowerCase().includes('thank you'));
+  
+  console.log(`Test Assumption: "${testAssumption}"`);
+  console.log(`Available Quotes: ${testQuotes.length}`);
+  
+  // Simulate role gap detection
+  const assumptionLower = testAssumption.toLowerCase();
+  const quoteTexts = testQuotes.map(q => q.text.toLowerCase()).join(' ');
+  
+  const professionalRoles = [
+    'attorney', 'lawyer', 'paralegal', 'coordinator', 'manager', 'director',
+    'forensic psychologist', 'psychologist', 'therapist', 'counselor',
+    'investigator', 'detective', 'officer', 'agent',
+    'executive', 'ceo', 'president', 'founder', 'partner',
+    'specialist', 'analyst', 'consultant', 'advisor'
+  ];
+  
+  const missingRoles: string[] = [];
+  const foundRoles: string[] = [];
+  
+  professionalRoles.forEach(role => {
+    if (assumptionLower.includes(role)) {
+      if (quoteTexts.includes(role)) {
+        foundRoles.push(role);
+      } else {
+        missingRoles.push(role);
+      }
+    }
+  });
+  
+  console.log(`✅ Found roles in quotes: ${foundRoles.join(', ') || 'None'}`);
+  console.log(`❌ Missing roles (should trigger gap): ${missingRoles.join(', ') || 'None'}`);
+  
+  if (missingRoles.length > 0) {
+    console.log(`🎯 EXPECTED: This should result in "Gap Identified" due to missing roles: ${missingRoles.join(', ')}`);
+  }
+  
   console.log('\n🎯 Enhanced Relevance Filtering Demo Complete!');
   console.log('Key Improvements:');
   console.log('• Stricter quote filtering removes obvious junk (coffee, thank yous)');
@@ -142,6 +185,8 @@ export async function demoRelevanceFiltering() {
   console.log('• Enhanced role detection for organizational structure');
   console.log('• Bonus scoring for role management patterns');
   console.log('• Better quality scoring with filler word penalties');
+  console.log('• Role gap detection prevents false validation');
+  console.log('• Anti-hallucination measures in synthesis');
 }
 
 // Run demo if called directly

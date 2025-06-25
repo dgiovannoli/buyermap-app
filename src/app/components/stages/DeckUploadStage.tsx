@@ -247,7 +247,8 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
     // Note: isProcessing is already set to true in handleStartProcessing
     
     try {
-      // Simulate the actual deck processing
+      // Start processing visualization immediately
+      console.log('🔄 Starting deck processing visualization');
       processingProgress.startDeckProcessing(10);
       
       // Upload and analyze the deck
@@ -314,14 +315,17 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
   const handleStartProcessing = () => {
     if (uploadedDeck) {
+      console.log('🔄 handleStartProcessing called - setting isProcessing to true');
       // Set loading state immediately for better UX
       setIsProcessing(true);
+      console.log('🔄 isProcessing set to true, should show ProcessVisualization');
       handleProcessDeck(uploadedDeck);
     }
   };
 
   // Show processing visualization when processing
   if (isProcessing && processingProgress.phase === 'deck') {
+    console.log('🔄 Showing ProcessVisualization, progress:', processingProgress.progress);
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
         <ProcessVisualization
