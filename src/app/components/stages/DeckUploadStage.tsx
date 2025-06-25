@@ -289,37 +289,25 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
     }
   };
 
-  const handleProcessDeck = async (file: File) => {
-    uploadedDeckRef.current = file;
-    console.log("🔄 Step 0: Checking for content duplicates...");
+  const handleProcessDeck = async () => {
+    console.log('🔄 [BLOB] handleProcessDeck called, uploadedDeck:', !!uploadedDeck);
+    if (!uploadedDeck) return;
 
-    try {
-      const { isDuplicate, metadata } = await checkDuplicatesViaAPI(file, 'deck');
+    // Store reference for duplicate dialog use
+    uploadedDeckRef.current = uploadedDeck;
+    setIsProcessing(true);
+    onError(null);
 
-      if (isDuplicate) {
-        console.log("⚠️ Duplicate detected:", metadata);
-        setDuplicateData(metadata);
-        setShowDuplicateDialog(true);
-        // Reset loading state since we're showing a dialog instead
-        setIsProcessing(false);
-        return; // Stop normal processing
-      }
-
-      await proceedWithDeckProcessing(file);
-    } catch (error) {
-      console.error('❌ Duplicate check failed:', error);
-      // Proceed with processing if duplicate check fails
-      await proceedWithDeckProcessing(file);
-    }
+    // BYPASS duplicate detection: always proceed with processing
+    await proceedWithDeckProcessing(uploadedDeck);
   };
 
   const handleStartProcessing = () => {
     if (uploadedDeck) {
       console.log('🔄 handleStartProcessing called - setting isProcessing to true');
-      // Set loading state immediately for better UX
       setIsProcessing(true);
       console.log('🔄 isProcessing set to true, should show ProcessVisualization');
-      handleProcessDeck(uploadedDeck);
+      handleProcessDeck();
     }
   };
 

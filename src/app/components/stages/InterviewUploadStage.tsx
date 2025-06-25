@@ -43,7 +43,7 @@ export default function InterviewUploadStage({
     setFileStatuses(newFileStatuses);
     
     // Auto-check for duplicates
-    checkAllForDuplicates(newFileStatuses);
+    // checkAllForDuplicates(newFileStatuses);
   };
 
   const checkAllForDuplicates = async (fileStatuses: FileStatus[]) => {
@@ -290,7 +290,7 @@ export default function InterviewUploadStage({
     setFileStatuses(newFileStatuses);
     
     // Auto-check for duplicates
-    checkAllForDuplicates(newFileStatuses);
+    // checkAllForDuplicates(newFileStatuses);
   };
 
   const getStatusIcon = (status: FileStatus['status']) => {
