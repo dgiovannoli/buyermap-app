@@ -2,146 +2,96 @@
 
 import React, { useState } from 'react';
 import ProcessVisualization from '../components/loading/ProcessVisualization';
-import InterviewProcessingOverlay from '../components/loading/InterviewProcessingOverlay';
 import { useProcessingProgress } from '../hooks/useProcessingProgress';
 
-export default function LoadingDemo() {
-  const [demoType, setDemoType] = useState<'deck' | 'interview' | 'none'>('none');
+export default function DemoLoadingPage() {
+  const [showDemo, setShowDemo] = useState(false);
   const processingProgress = useProcessingProgress();
 
-  const mockAssumptions = [
-    "Our target buyers are legal assistants and paralegals at mid-size law firms",
-    "Clients struggle with time-consuming administrative tasks and document management",
-    "Decision makers prioritize tools that save time and improve efficiency",
-    "Firms are triggered to seek new solutions during periods of high workload",
-    "Main barriers include data security concerns and compliance requirements",
-    "Messaging should emphasize strategic advantages and efficiency gains",
-    "Companies range from solo practitioners to large corporate law firms"
-  ];
-
   const startDeckDemo = () => {
-    setDemoType('deck');
-    // Randomize slide count for demo to show dynamic behavior
-    const randomSlides = Math.floor(Math.random() * 20) + 8; // 8-27 slides
-    processingProgress.startDeckProcessing(randomSlides);
+    setShowDemo(true);
+    processingProgress.startDeckProcessing(12);
   };
 
   const startInterviewDemo = () => {
-    setDemoType('interview');
-    processingProgress.startInterviewProcessing(6, mockAssumptions); // 6 interviews
+    setShowDemo(true);
+    processingProgress.startInterviewProcessing(8, [
+      'Buyer titles are attorneys and paralegals',
+      'Company size is small to mid-sized law firms',
+      'Pain points include manual review time'
+    ]);
   };
 
-  const resetDemo = () => {
-    setDemoType('none');
-    processingProgress.resetProcessing();
-  };
+  if (showDemo && processingProgress.phase !== 'idle') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+        <ProcessVisualization
+          phase={processingProgress.phase as 'deck' | 'interview'}
+          progress={processingProgress.progress}
+          stats={processingProgress.stats}
+          onComplete={() => {
+            console.log('Demo completed!');
+            setShowDemo(false);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white/10 backdrop-blur-xl rounded-lg shadow-lg border border-white/20 p-8 mb-8">
-          <h1 className="text-3xl font-bold text-white mb-4">
-            Enhanced Loading States Demo
-          </h1>
-          <p className="text-white/70 mb-8">
-            Experience the new process visualization and value countdown loading states 
-            that show users exactly what's happening during deck and interview processing.
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white p-8">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8 text-center">Loading Screen Demo</h1>
+        
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Test Loading Screens</h2>
+          <p className="text-gray-300 mb-6">
+            This page helps test the loading screen functionality to debug production issues.
           </p>
-
-          {/* Demo Controls */}
-          <div className="flex space-x-4 mb-8">
+          
+          <div className="space-y-4">
             <button
               onClick={startDeckDemo}
-              disabled={processingProgress.phase !== 'idle'}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-3 px-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
             >
-              Demo Deck Processing
+              Test Deck Processing Loading Screen
             </button>
+            
             <button
               onClick={startInterviewDemo}
-              disabled={processingProgress.phase !== 'idle'}
-              className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-3 px-6 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-semibold hover:from-green-700 hover:to-teal-700 transition-all duration-200"
             >
-              Demo Interview Processing
-            </button>
-            <button
-              onClick={resetDemo}
-              className="bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-lg font-semibold hover:bg-white/30 transition-colors border border-white/20"
-            >
-              Reset Demo
+              Test Interview Processing Loading Screen
             </button>
           </div>
+        </div>
 
-          {/* Current Status */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-8 border border-white/20">
-            <h3 className="font-semibold text-white mb-2">Current Status:</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-white/70">Phase:</span>
-                <span className="ml-2 font-medium capitalize text-white">{processingProgress.phase}</span>
-              </div>
-              <div>
-                <span className="text-white/70">Progress:</span>
-                <span className="ml-2 font-medium text-white">{Math.round(processingProgress.progress)}%</span>
-              </div>
-              <div>
-                <span className="text-white/70">Completed:</span>
-                <span className="ml-2 font-medium text-white">{processingProgress.isComplete ? 'Yes' : 'No'}</span>
-              </div>
-              <div>
-                <span className="text-white/70">Error:</span>
-                <span className="ml-2 font-medium text-white">{processingProgress.error || 'None'}</span>
-              </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-6">
+          <h3 className="text-lg font-semibold mb-4">Debug Information</h3>
+          <div className="space-y-2 text-sm">
+            <div>
+              <span className="text-gray-300">Current Phase:</span>
+              <span className="ml-2 text-white">{processingProgress.phase}</span>
             </div>
-          </div>
-
-          {/* Features Highlight */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="border border-blue-400/30 bg-blue-500/20 backdrop-blur-sm rounded-lg p-6">
-              <h3 className="font-semibold text-blue-300 mb-3">Deck Processing Features</h3>
-              <ul className="space-y-2 text-sm text-blue-100">
-                <li>• Real-time slide analysis progress</li>
-                <li>• Assumption identification counter</li>
-                <li>• Process step visualization</li>
-                <li>• Educational tips for product marketers</li>
-                <li>• Value creation messaging</li>
-              </ul>
+            <div>
+              <span className="text-gray-300">Progress:</span>
+              <span className="ml-2 text-white">{processingProgress.progress}%</span>
             </div>
-            <div className="border border-purple-400/30 bg-purple-500/20 backdrop-blur-sm rounded-lg p-6">
-              <h3 className="font-semibold text-purple-300 mb-3">Interview Processing Features</h3>
-              <ul className="space-y-2 text-sm text-purple-100">
-                <li>• Conversation-by-conversation progress</li>
-                <li>• Real-time quote discovery counter</li>
-                <li>• Statistical validity indicators</li>
-                <li>• Assumption-specific processing</li>
-                <li>• Speaker diversity tracking</li>
-              </ul>
+            <div>
+              <span className="text-gray-300">Is Complete:</span>
+              <span className="ml-2 text-white">{processingProgress.isComplete ? 'Yes' : 'No'}</span>
+            </div>
+            <div>
+              <span className="text-gray-300">Current Step:</span>
+              <span className="ml-2 text-white">{processingProgress.currentStep || 'None'}</span>
             </div>
           </div>
         </div>
 
-        {/* Deck Processing Visualization */}
-        {demoType === 'deck' && (
-          <ProcessVisualization
-            phase="deck"
-            progress={processingProgress.progress}
-            stats={processingProgress.stats}
-            onComplete={() => {
-              console.log('Deck processing demo completed!');
-            }}
-          />
-        )}
-
-        {/* Interview Processing Overlay */}
-        <InterviewProcessingOverlay
-          isVisible={demoType === 'interview' && processingProgress.phase === 'interview'}
-          progress={processingProgress.progress}
-          stats={processingProgress.stats}
-          assumptions={mockAssumptions}
-          onComplete={() => {
-            console.log('Interview processing demo completed!');
-          }}
-        />
+        <div className="mt-6 text-center text-sm text-gray-400">
+          <p>If the loading screen doesn't appear, check the browser console for debug logs.</p>
+          <p>This helps identify if the issue is with the component rendering or state management.</p>
+        </div>
       </div>
     </div>
   );
