@@ -482,18 +482,6 @@ export default function DeckUploadStage({ onDeckProcessed, onError, onProgressUp
     const estimatedSlides = estimateSlideCount(uploadedDeck);
     console.log('🔄 Estimated slides:', estimatedSlides);
 
-    // Step 0: Check for content duplicates BEFORE upload
-    console.log('🔄 Step 0: Checking for content duplicates...');
-    const { isDuplicate, metadata } = await checkDuplicatesViaAPI(uploadedDeck, 'deck');
-
-    if (isDuplicate) {
-      console.log("⚠️ Duplicate detected:", metadata);
-      setDuplicateData({ isDuplicate, metadata });
-      setShowDuplicateDialog(true);
-      setIsProcessing(false);
-      return; // Stop normal processing
-    }
-
     // Continue with processing
     await proceedWithProcessing();
   };

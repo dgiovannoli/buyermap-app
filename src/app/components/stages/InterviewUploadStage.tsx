@@ -3,21 +3,12 @@
 import React, { useState } from 'react';
 import { upload } from '@vercel/blob/client';
 import { BuyerMapData } from '../../../types/buyermap';
-import { checkForDuplicatesAPI, DuplicateCheckResult } from '../../../utils/deduplication';
-import DuplicateDetectionDialog from '../../../components/ui/DuplicateDetectionDialog';
 import { Loader2, AlertTriangle, CheckCircle, Upload as UploadIcon } from 'lucide-react';
 
 interface InterviewUploadStageProps {
   assumptions: BuyerMapData[];
   onUploaded: () => void;
   onUpload: (files: File[], assumptions: BuyerMapData[], onSuccess: (data: any) => void) => void;
-}
-
-interface FileStatus {
-  file: File;
-  status: 'pending' | 'checking' | 'duplicate' | 'ready' | 'uploading' | 'uploaded' | 'error';
-  duplicateCheck?: DuplicateCheckResult;
-  error?: string;
 }
 
 export default function InterviewUploadStage({
@@ -29,10 +20,6 @@ export default function InterviewUploadStage({
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
-  const [currentDuplicateCheck, setCurrentDuplicateCheck] = useState<{
-    fileIndex: number;
-    duplicateCheck: DuplicateCheckResult;
-  } | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -41,147 +28,6 @@ export default function InterviewUploadStage({
       status: 'pending'
     }));
     setFileStatuses(newFileStatuses);
-    
-    // Auto-check for duplicates
-    // checkAllForDuplicates(newFileStatuses);
-  };
-
-  const checkAllForDuplicates = async (fileStatuses: FileStatus[]) => {
-    console.log('🔍 Starting duplicate check for', fileStatuses.length, 'interview files');
-    console.log('🔍 File details:', fileStatuses.map(fs => ({ name: fs.file.name, size: fs.file.size, type: fs.file.type })));
-    
-    // Duplicate checking is running (removed alert for cleaner UX)
-    
-    // Update all statuses to 'checking' 
-    setFileStatuses(prev => prev.map(fs => ({ ...fs, status: 'checking' })));
-    
-    for (let i = 0; i < fileStatuses.length; i++) {
-      const fileStatus = fileStatuses[i];
-      
-      try {
-        console.log(`🔍 Checking file ${i + 1}/${fileStatuses.length}: ${fileStatus.file.name}`);
-        console.log(`🔍 File details:`, {
-          name: fileStatus.file.name,
-          size: fileStatus.file.size,
-          type: fileStatus.file.type,
-          lastModified: fileStatus.file.lastModified
-        });
-        
-        const duplicateCheck = await checkForDuplicatesAPI(fileStatus.file, 'interview', {
-          checkSimilarity: true,
-          similarityThreshold: 0.90 // Slightly lower threshold for interviews
-        });
-        
-        console.log(`🔍 Duplicate check result for ${fileStatus.file.name}:`, duplicateCheck);
-        
-        // Update individual file status
-        setFileStatuses(prev => prev.map((fs, index) => {
-          if (index === i) {
-            return {
-              ...fs,
-              status: duplicateCheck.hasExactDuplicate || duplicateCheck.hasSimilarDuplicate ? 'duplicate' : 'ready',
-              duplicateCheck
-            };
-          }
-          return fs;
-        }));
-        
-        // Show duplicate dialog if needed
-        if (duplicateCheck.hasExactDuplicate || duplicateCheck.hasSimilarDuplicate) {
-          console.log(`🚨 DUPLICATE DETECTED for ${fileStatus.file.name}:`, {
-            hasExact: duplicateCheck.hasExactDuplicate,
-            hasSimilar: duplicateCheck.hasSimilarDuplicate,
-            exactFile: duplicateCheck.exactDuplicate?.filename,
-            similarFile: duplicateCheck.similarDuplicate?.filename,
-            similarityScore: duplicateCheck.similarityScore
-          });
-          
-          // Duplicate detected - will show dialog component
-          
-          setCurrentDuplicateCheck({ fileIndex: i, duplicateCheck });
-          break; // Handle one duplicate at a time
-        } else {
-          console.log(`✅ No duplicates found for ${fileStatus.file.name}`);
-        }
-        
-      } catch (error) {
-        console.error(`❌ Duplicate check failed for ${fileStatus.file.name}:`, error);
-        console.error(`❌ Error details:`, {
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-          error
-        });
-        
-        // Error logged to console
-        
-        setFileStatuses(prev => prev.map((fs, index) => {
-          if (index === i) {
-            return {
-              ...fs,
-              status: 'ready', // Continue with upload if duplicate check fails
-              error: `Duplicate check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-            };
-          }
-          return fs;
-        }));
-      }
-    }
-    
-    console.log('✅ Duplicate check completed for all files');
-    console.log('📊 Final file statuses:', fileStatuses.map((fs, i) => ({ 
-      index: i, 
-      name: fs.file.name, 
-      status: fileStatuses[i]?.status || 'unknown' 
-    })));
-    
-    // Duplicate check completed
-  };
-
-  const handleDuplicateResolution = async (action: 'use-existing' | 'process-anyway' | 'cancel') => {
-    if (!currentDuplicateCheck) return;
-    
-    const { fileIndex } = currentDuplicateCheck;
-    
-    switch (action) {
-      case 'use-existing':
-        console.log('🔄 Using existing interview results');
-        // Remove the duplicate file from processing
-        setFileStatuses(prev => prev.filter((_, index) => index !== fileIndex));
-        // TODO: In a future phase, we could fetch and use existing results
-        break;
-        
-      case 'process-anyway':
-        console.log('🔄 Processing interview anyway despite duplicates');
-        // Mark file as ready for processing
-        setFileStatuses(prev => prev.map((fs, index) => {
-          if (index === fileIndex) {
-            return { ...fs, status: 'ready' };
-          }
-          return fs;
-        }));
-        break;
-        
-      case 'cancel':
-        console.log('🔄 User cancelled upload due to duplicates');
-        // Remove the duplicate file from processing
-        setFileStatuses(prev => prev.filter((_, index) => index !== fileIndex));
-        break;
-    }
-    
-    setCurrentDuplicateCheck(null);
-    
-    // Continue checking remaining files for duplicates
-    const remainingFiles = fileStatuses.filter((_, index) => index > fileIndex);
-    if (remainingFiles.length > 0 && action !== 'cancel') {
-      // Check next file
-      const nextFileIndex = fileStatuses.findIndex((fs, index) => 
-        index > fileIndex && fs.status === 'checking'
-      );
-      if (nextFileIndex !== -1) {
-        // Continue with next file check
-        checkAllForDuplicates(fileStatuses.slice(nextFileIndex));
-      }
-    }
   };
 
   const handleUpload = async () => {
@@ -288,9 +134,6 @@ export default function InterviewUploadStage({
       status: 'pending'
     }));
     setFileStatuses(newFileStatuses);
-    
-    // Auto-check for duplicates
-    // checkAllForDuplicates(newFileStatuses);
   };
 
   const getStatusIcon = (status: FileStatus['status']) => {
@@ -381,18 +224,6 @@ export default function InterviewUploadStage({
           </label>
         </div>
       </div>
-
-      {/* Duplicate Detection Dialog */}
-      {currentDuplicateCheck && (
-        <DuplicateDetectionDialog
-          isOpen={true}
-          fileName={fileStatuses[currentDuplicateCheck.fileIndex]?.file.name || ''}
-          duplicateType={currentDuplicateCheck.duplicateCheck.hasExactDuplicate ? 'exact' : 'similar'}
-          existingFile={currentDuplicateCheck.duplicateCheck.exactDuplicate || currentDuplicateCheck.duplicateCheck.similarDuplicate!}
-          similarityScore={currentDuplicateCheck.duplicateCheck.similarityScore}
-          onResolve={handleDuplicateResolution}
-        />
-      )}
 
       {fileStatuses.length > 0 && (
         <div className="mt-6">

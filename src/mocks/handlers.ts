@@ -16,11 +16,6 @@ export const handlers = [
     });
   }),
 
-  // Mock the aggregate-validation-results endpoint
-  http.get('/api/aggregate-validation-results', () => {
-    return HttpResponse.json(insights);
-  }),
-
   // Mock the analyze-interviews endpoint
   http.post('/api/analyze-interviews', () => {
     return HttpResponse.json({
