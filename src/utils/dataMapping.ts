@@ -78,24 +78,27 @@ export function mapAssumptionToValidation(assumptionData: AssumptionData): Valid
 export function mapComparisonOutcome(outcome: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' {
   const lowerOutcome = outcome.toLowerCase();
   
-  // Map to simplified outcomes based on content analysis
-  if (lowerOutcome.includes('validat') || lowerOutcome.includes('align') || lowerOutcome.includes('confirm')) {
+  // STRICT VALIDATION: Only use "Validated" if explicitly confirmed
+  if (lowerOutcome.includes('validat') && !lowerOutcome.includes('not validat')) {
     return 'Validated';
   }
   
+  // CONTRADICTION: Clear contradiction or challenge
   if (lowerOutcome.includes('contradict') || lowerOutcome.includes('misalign') || lowerOutcome.includes('challenge') || lowerOutcome.includes('conflict')) {
     return 'Contradicted';
   }
   
-  if (lowerOutcome.includes('gap') || lowerOutcome.includes('missing') || lowerOutcome.includes('new data') || lowerOutcome.includes('insight')) {
+  // GAP IDENTIFICATION: Missing information or new insights
+  if (lowerOutcome.includes('gap') || lowerOutcome.includes('missing') || lowerOutcome.includes('new data') || lowerOutcome.includes('insight') || lowerOutcome.includes('aligned') || lowerOutcome.includes('new_insight')) {
     return 'Gap Identified';
   }
   
-  if (lowerOutcome.includes('insufficient') || lowerOutcome.includes('pending') || lowerOutcome.includes('no data')) {
+  // INSUFFICIENT DATA: No clear evidence or pending
+  if (lowerOutcome.includes('insufficient') || lowerOutcome.includes('pending') || lowerOutcome.includes('no data') || lowerOutcome.includes('neutral')) {
     return 'Insufficient Data';
   }
   
-  // Default to insufficient data if unclear
+  // Default to insufficient data if unclear - BE CONSERVATIVE
   return 'Insufficient Data';
 }
 

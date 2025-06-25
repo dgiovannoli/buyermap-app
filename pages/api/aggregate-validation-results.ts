@@ -83,6 +83,31 @@ function calculateConversationStats(quotes: Quote[]): NonNullable<ResponseBody['
   };
 }
 
+// Helper function to detect role gaps in assumptions
+function detectRoleGaps(assumption: string, quotes: Quote[]): string[] {
+  const assumptionLower = assumption.toLowerCase();
+  const quoteTexts = quotes.map(q => q.text.toLowerCase()).join(' ');
+  
+  // Common professional roles that might be mentioned in assumptions
+  const professionalRoles = [
+    'attorney', 'lawyer', 'paralegal', 'coordinator', 'manager', 'director',
+    'forensic psychologist', 'psychologist', 'therapist', 'counselor',
+    'investigator', 'detective', 'officer', 'agent',
+    'executive', 'ceo', 'president', 'founder', 'partner',
+    'specialist', 'analyst', 'consultant', 'advisor'
+  ];
+  
+  const missingRoles: string[] = [];
+  
+  professionalRoles.forEach(role => {
+    if (assumptionLower.includes(role) && !quoteTexts.includes(role)) {
+      missingRoles.push(role);
+    }
+  });
+  
+  return missingRoles;
+}
+
 // Timeout wrapper
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -165,10 +190,19 @@ export default async function handler(
     // Calculate conversation statistics before synthesis
     const conversationStats = calculateConversationStats(flattenedQuotes);
     
+    // Detect role gaps in the assumption
+    const missingRoles = detectRoleGaps(assumption, flattenedQuotes);
+    const roleGapInfo = missingRoles.length > 0 
+      ? `\n\nROLE GAP DETECTED: The assumption mentions "${missingRoles.join(', ')}" but these roles do not appear in the provided quotes. This should be noted as a gap.`
+      : '';
+    
     // Debug: Log what quotes we received for synthesis
     console.log(`📋 Synthesizing for assumption: "${assumption}"`);
     console.log(`📋 Received ${flattenedQuotes.length} quotes for synthesis (relevance-filtered):`);
     console.log(`📊 Conversation Stats: ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers`);
+    if (missingRoles.length > 0) {
+      console.log(`⚠️ Role gap detected: assumption mentions "${missingRoles.join(', ')}" but these roles don't appear in quotes`);
+    }
     flattenedQuotes.forEach((quote, idx) => {
       const relevanceInfo = quote.relevanceScore ? ` (relevance: ${quote.relevanceScore.toFixed(1)}/3.0)` : '';
       console.log(`  Quote ${idx + 1}: "${quote.text.slice(0, 100)}..." (speaker: ${quote.speaker || 'Unknown'})${relevanceInfo}`);
@@ -179,7 +213,7 @@ export default async function handler(
 
 ASSUMPTION: "${assumption}"
 
-CONTEXT: ${conversationStats.totalQuotes} quotes from ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers (quotes have been filtered for relevance to this assumption)
+CONTEXT: ${conversationStats.totalQuotes} quotes from ${conversationStats.uniqueConversations} conversations, ${conversationStats.uniqueSpeakers} speakers (quotes have been filtered for relevance to this assumption)${roleGapInfo}
 
 ACTUAL INTERVIEW QUOTES PROVIDED:
 ${flattenedQuotes.map((quote, index) => `${index + 1}. "${quote.text}" - ${quote.speaker || 'Unknown'} (${quote.role || 'Unknown role'})${quote.relevanceScore ? ` [relevance: ${quote.relevanceScore.toFixed(1)}/3.0]` : ''}`).join('\n')}
@@ -193,13 +227,17 @@ CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 - If a speaker doesn't explicitly state their role, refer to them by name only
 - Synthesize ONLY from the actual interview content provided
 - If quotes don't directly address the assumption, acknowledge this limitation
+- STRICT VALIDATION: Only use "VALIDATE" if quotes explicitly confirm the specific claim in the assumption
+- GAP IDENTIFICATION: Use "IDENTIFY A GAP" if quotes reveal information missing from or different from the assumption
+- CONTRADICTION: Use "CONTRADICT" only if quotes directly challenge the assumption's claims
+- ROLE GAPS: If the assumption mentions specific roles that don't appear in quotes, this is a gap
 
 TASK: Write ONE concise paragraph (2-3 sentences) that states HOW the interview evidence relates to the assumption.
 
 Your response should DIRECTLY indicate whether the quotes:
-- VALIDATE the assumption (confirm what the deck claims)
-- CONTRADICT the assumption (challenge what the deck claims) 
-- IDENTIFY A GAP (reveal information missing from the deck)
+- VALIDATE the assumption (quotes explicitly confirm the specific claim)
+- CONTRADICT the assumption (quotes directly challenge the claim) 
+- IDENTIFY A GAP (quotes reveal information missing or different from the assumption)
 
 REQUIREMENTS:
 - Reference ONLY the speakers and content from provided quotes
@@ -208,6 +246,7 @@ REQUIREMENTS:
 - ${conversationStats.uniqueConversations > 2 ? 'Multiple conversations = strong validation' : conversationStats.uniqueConversations === 2 ? 'Two conversations = initial validation' : 'Single source = limited insight'}
 - NO preambles, NO confidence scores, NO recommendations
 - Focus on the relationship between quotes and assumption
+- If the assumption mentions specific roles/titles that don't appear in quotes, acknowledge this gap
 
 Return only the concise analysis paragraph based on the PROVIDED quotes.`;
 
@@ -218,7 +257,7 @@ Return only the concise analysis paragraph based on the PROVIDED quotes.`;
         messages: [
           {
             role: 'system',
-            content: 'You are an expert business analyst who synthesizes customer interview insights into clear, actionable summaries. CRITICAL: You must ONLY use information from the provided interview quotes. Do NOT create new quotes, examples, or mention content not explicitly in the provided quotes. Provide only the requested synthesis without additional commentary.'
+            content: 'You are an expert business analyst who synthesizes customer interview insights into clear, actionable summaries. CRITICAL RULES: 1) You must ONLY use information from the provided interview quotes. 2) Do NOT create new quotes, examples, or mention content not explicitly in the provided quotes. 3) Do NOT mention any professional roles, titles, or categories unless they are explicitly stated in the quotes. 4) If the assumption mentions specific roles that don\'t appear in quotes, acknowledge this as a gap. 5) Provide only the requested synthesis without additional commentary. 6) Be extremely strict about validation - only use "VALIDATE" if quotes explicitly confirm the specific claim.'
           },
           {
             role: 'user',
