@@ -5,6 +5,12 @@ import { upload } from '@vercel/blob/client';
 import { BuyerMapData } from '../../../types/buyermap';
 import { Loader2, AlertTriangle, CheckCircle, Upload as UploadIcon } from 'lucide-react';
 
+type FileStatus = {
+  file: File;
+  status: 'pending' | 'checking' | 'duplicate' | 'ready' | 'uploading' | 'uploaded' | 'error';
+  error?: string;
+};
+
 interface InterviewUploadStageProps {
   assumptions: BuyerMapData[];
   onUploaded: () => void;

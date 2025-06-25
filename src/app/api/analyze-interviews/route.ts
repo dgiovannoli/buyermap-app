@@ -15,9 +15,6 @@ import {
   RELEVANCE_FILTERING_CONFIG,
   filterQuotesByRelevance
 } from '../../../lib/rag';
-// Content hashing for duplicate detection
-import { generateContentHash } from '../../../lib/deduplication-server';
-import { saveFileRecord } from '../../../lib/simple-duplicate-store';
 import crypto from 'crypto';
 import { createServerClient } from '../../../lib/supabase-server';
 
@@ -913,9 +910,6 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
   // Extract metadata
   const extractedMetadata = await extractInterviewMetadata(interviewText, file.name);
   
-  // Generate content hash for storage
-  const contentHash = generateContentHash(interviewText);
-  
   // OPTIMIZED: Process all assumptions in a single batch call
   console.log(`🚀 [OPTIMIZED] Processing all ${assumptions.length} assumptions in single batch`);
   const quotesPerAssumption = await extractAllQuotesForAssumptions(interviewText, file.name, assumptions);
@@ -946,20 +940,11 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
     uniqueSpeakers: extractedMetadata.uniqueSpeakers || [],
     vectorsStored: totalQuotes * 3, // Estimate: each quote generates ~3 vectors
     tags: [], // Will be populated by user later
-    contentHash: contentHash, // Add content hash
     fileSize: file.size, // Add file size
     blobUrl: blobUrl, // Set from caller
   };
   
   console.log(`✅ Created stored interview record with OPTIMIZED batch processing:`, storedInterview);
-  
-  // Save file record to in-memory store for duplicate detection
-  saveFileRecord({
-    contentHash: contentHash,
-    filename: file.name,
-    fileSize: file.size,
-    contentType: 'interview'
-  });
   
   // Save to database with enhanced data (temporarily disabled for duplicate detection testing)
   let databaseId;

@@ -1,10 +1,15 @@
-import { ContentRecord } from '../../utils/deduplication';
+// If the component is now unused or empty, consider deleting the file
 
 interface DuplicateDetectionDialogProps {
   isOpen: boolean;
   fileName: string;
   duplicateType: 'exact' | 'similar';
-  existingFile: ContentRecord;
+  existingFile: {
+    filename: string;
+    uploadDate: Date;
+    fileSize: number;
+    contentType: string;
+  };
   similarityScore?: number;
   onResolve: (action: 'use-existing' | 'process-anyway' | 'cancel') => void;
 }

@@ -23,7 +23,6 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
-import { checkDuplicatesViaAPI, DuplicateApiResult } from '../../../utils/deduplication';
 import DuplicateDialog from '../../../components/ui/DuplicateDialog';
 
 interface DeckUploadStageProps {

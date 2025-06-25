@@ -1,6 +1,4 @@
 import React, { useState, useRef } from 'react';
-import DuplicateDialog from '../../../components/ui/DuplicateDialog';
-import { checkDuplicatesViaAPI } from '../../../utils/deduplication';
 import { ProcessingProgress } from '../../../types/buyer-map';
 import { ICPValidationResponse } from '../../../types/buyermap';
 import FileDropzone from '../ui/FileDropzone';
@@ -52,16 +50,6 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
   const fileConflictHandler = useFileConflictHandler();
   const [useCompression, setUseCompression] = useState(false);
   
-  // Duplicate detection state matching user's interface
-  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
-  const [duplicateData, setDuplicateData] = useState<{
-    hasExactDuplicate?: boolean;
-    hasSimilarDuplicate?: boolean;
-    exactDuplicate?: any;
-    similarDuplicate?: any;
-    contentHash: string;
-    similarityScore?: number;
-  } | null>(null);
   const uploadedDeckRef = useRef<File | null>(null);
 
   const handleFileUpload = (file: File | null) => {
@@ -78,16 +66,10 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
       setUploadProgress(100);
       setUseCompression(file.size > 50 * 1024 * 1024);
       onError(null);
-      
-      // Reset duplicate dialog state
-      setDuplicateData(null);
-      setShowDuplicateDialog(false);
     } else {
       setUploadedDeck(null);
       setUploadProgress(0);
       setUseCompression(false);
-      setDuplicateData(null);
-      setShowDuplicateDialog(false);
     }
   };
 
@@ -237,8 +219,6 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
     console.log('🔄 Resetting upload');
     setUploadedDeck(null);
     setUploadProgress(0);
-    setDuplicateData(null);
-    setShowDuplicateDialog(false);
     setIsProcessing(false);
   };
 
@@ -459,25 +439,6 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
             )}
           </div>
         </div>
-
-        {/* Your upload UI here */}
-        {showDuplicateDialog && duplicateData && (
-          <DuplicateDialog
-            data={duplicateData}
-            onUseExisting={() => {
-              fetchCachedResults(duplicateData.contentHash);
-              setShowDuplicateDialog(false);
-            }}
-            onProcessAnyway={async () => {
-              await proceedWithDeckProcessing(uploadedDeckRef.current!);
-              setShowDuplicateDialog(false);
-            }}
-            onCancel={() => {
-              resetUpload();
-              setShowDuplicateDialog(false);
-            }}
-          />
-        )}
 
         {/* File Conflict Dialog */}
         <FileConflictDialog 

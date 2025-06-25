@@ -533,116 +533,62 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   };
 
   // File upload handlers
-      const handleFileUpload = async (type: 'deck' | 'interviews', files: FileList | null) => {
-      if (!files || files.length === 0) return;
+  const handleFileUpload = async (type: 'deck' | 'interviews', files: FileList | null) => {
+    if (!files || files.length === 0) return;
 
-      console.log(`handleFileUpload called with:`, { type, files });
+    console.log(`handleFileUpload called with:`, { type, files });
 
-      if (type === 'deck') {
-        setUploadedFiles(prev => ({ ...prev, deck: Array.from(files) }));
-        await handleProcessDeck(Array.from(files));
-      } else if (type === 'interviews') {
-        const filesArray = Array.from(files);
-        console.log(`Processing new files:`, filesArray.map(f => f.name));
+    if (type === 'deck') {
+      setUploadedFiles(prev => ({ ...prev, deck: Array.from(files) }));
+      await handleProcessDeck(Array.from(files));
+    } else if (type === 'interviews') {
+      const filesArray = Array.from(files);
+      console.log(`Processing new files:`, filesArray.map(f => f.name));
+      
+      // Check interview upload limits
+      const currentInterviewCount = uploadedFiles.interviews.length;
+      const newFileCount = filesArray.length;
+      const maxInterviews = 10;
+      
+      if (currentInterviewCount + newFileCount > maxInterviews) {
+        const allowedCount = maxInterviews - currentInterviewCount;
+        const excessCount = (currentInterviewCount + newFileCount) - maxInterviews;
         
-        // Check interview upload limits
-        const currentInterviewCount = uploadedFiles.interviews.length;
-        const newFileCount = filesArray.length;
-        const maxInterviews = 10;
+        alert(`⚠️ Upload Limit: You can upload ${allowedCount} more interview(s). ${excessCount} file(s) will be skipped.\n\nFor best results, limit to 10 interviews total to avoid processing timeouts.`);
         
-        if (currentInterviewCount + newFileCount > maxInterviews) {
-          const allowedCount = maxInterviews - currentInterviewCount;
-          const excessCount = (currentInterviewCount + newFileCount) - maxInterviews;
-          
-          alert(`⚠️ Upload Limit: You can upload ${allowedCount} more interview(s). ${excessCount} file(s) will be skipped.\n\nFor best results, limit to 10 interviews total to avoid processing timeouts.`);
-          
-          // Take only the allowed number of files
-          if (allowedCount > 0) {
-            const allowedFiles = filesArray.slice(0, allowedCount);
-            setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...allowedFiles] }));
-          } else {
-            console.log('❌ No more interviews can be uploaded (limit reached)');
-            return;
-          }
+        // Take only the allowed number of files
+        if (allowedCount > 0) {
+          const allowedFiles = filesArray.slice(0, allowedCount);
+          setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...allowedFiles] }));
         } else {
-          setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...filesArray] }));
+          console.log('❌ No more interviews can be uploaded (limit reached)');
+          return;
         }
+      } else {
+        setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...filesArray] }));
+      }
 
-              console.log('🎙️ [BLOB] Starting interview upload process for', filesArray.length, 'files');
-        setUploadingInterviews(true);
-        setProcessError(null);
+      console.log('🎙️ [BLOB] Starting interview upload process for', filesArray.length, 'files');
+      setUploadingInterviews(true);
+      setProcessError(null);
+      
+      // Store files for conflict resolution
+      setPendingFiles(filesArray);
+      
+      // Start enhanced interview processing visualization
+      const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
+      interviewProcessing.startInterviewProcessing(filesArray.length, assumptionTexts);
+      
+      try {
+        console.log('🚀 [BLOB] Processing interview files without duplicate checking...');
         
-        // Store files for conflict resolution
-        setPendingFiles(filesArray);
+        // Skip duplicate checking - process all files
+        const filesToProcess = filesArray;
         
-        // Start enhanced interview processing visualization
-        const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
-        interviewProcessing.startInterviewProcessing(filesArray.length, assumptionTexts);
-        
-        try {
-          // Step 1: Check for duplicates BEFORE processing
-          console.log('🔍 [DUPLICATE] Starting duplicate detection for interviews...');
-          const { checkForDuplicatesAPI } = await import('../utils/deduplication');
-          
-          const filesWithDuplicateStatus = [];
-          for (const file of filesArray) {
-            try {
-              console.log(`🔍 [DUPLICATE] Checking file: ${file.name}`);
-              const duplicateCheck = await checkForDuplicatesAPI(file, 'interview', {
-                checkSimilarity: true,
-                similarityThreshold: 0.90
-              });
-              
-              if (duplicateCheck.hasExactDuplicate || duplicateCheck.hasSimilarDuplicate) {
-                console.log(`🚨 [DUPLICATE] Duplicate detected for ${file.name}:`, {
-                  hasExact: duplicateCheck.hasExactDuplicate,
-                  hasSimilar: duplicateCheck.hasSimilarDuplicate,
-                  exactFile: duplicateCheck.exactDuplicate?.filename,
-                  similarFile: duplicateCheck.similarDuplicate?.filename
-                });
-                
-                const duplicateType = duplicateCheck.hasExactDuplicate ? 'exact' : 'similar';
-                const originalFile = duplicateCheck.exactDuplicate?.filename || duplicateCheck.similarDuplicate?.filename;
-                
-                const userChoice = confirm(
-                  `🚨 DUPLICATE DETECTED!\n\n` +
-                  `File: ${file.name}\n` +
-                  `Type: ${duplicateType.toUpperCase()} duplicate\n` +
-                  `Original: ${originalFile}\n\n` +
-                  `Click OK to use existing results (recommended)\n` +
-                  `Click Cancel to process anyway`
-                );
-                
-                if (userChoice) {
-                  console.log(`✅ [DUPLICATE] User chose to use existing results for ${file.name}`);
-                  // Skip this file - use existing results
-                  continue;
-                } else {
-                  console.log(`🔄 [DUPLICATE] User chose to process anyway for ${file.name}`);
-                  // Continue with processing this file
-                }
-              } else {
-                console.log(`✅ [DUPLICATE] No duplicates found for ${file.name}`);
-              }
-              
-              filesWithDuplicateStatus.push(file);
-              
-            } catch (duplicateError) {
-              console.error(`❌ [DUPLICATE] Duplicate check failed for ${file.name}:`, duplicateError);
-              // Continue with upload if duplicate check fails
-              filesWithDuplicateStatus.push(file);
-            }
-          }
-          
-          console.log(`✅ [DUPLICATE] Duplicate check completed. Processing ${filesWithDuplicateStatus.length}/${filesArray.length} files`);
-          
-          // Update the files array to only include non-skipped files
-          const filesToProcess = filesWithDuplicateStatus;
-          
-          // Step 2: Check for file conflicts BEFORE starting any uploads
-          console.log('🔍 [BLOB] Checking for file conflicts...');
-          const { conflictFiles, clearFiles } = await checkFilesForConflicts(filesToProcess);
-        
+        // Step 1: Check for file conflicts BEFORE starting any uploads
+        console.log('🔍 [BLOB] Checking for file conflicts...');
+        const { conflictFiles, clearFiles } = await checkFilesForConflicts(filesToProcess);
+      
         console.log(`📊 [BLOB] Conflict check results: ${conflictFiles.length} conflicts, ${clearFiles.length} clear files`);
 
         // Step 2: Upload files without conflicts immediately
@@ -1337,7 +1283,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
             <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
               
 
-
               {/* WHO Section */}
               {getFilteredDataBySection("WHO").length > 0 && (
                 <div className="mb-8">
@@ -1560,4 +1505,4 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   );
 };
 
-export default ModernBuyerMapLanding; 
+export default ModernBuyerMapLanding;

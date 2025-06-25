@@ -8,7 +8,6 @@ import { getPineconeIndex } from '../../../lib/pinecone';
 import { createEmbedding } from '../../../lib/openai';
 import { chunkify } from '../../../utils/transcriptParser';
 import crypto from 'crypto';
-import { saveFileRecord } from '../../../lib/simple-duplicate-store';
 
 // Configure API route for larger file uploads
 export const runtime = 'nodejs'
@@ -522,14 +521,6 @@ AVOID:
       // 6. Store in enhanced RAG system for future retrieval
       console.log('Step 6: Storing analysis in RAG system...');
       await storeProcessedDeckInRAG(filename, parsedResult.text, assumptions, contentHash);
-
-      // 6.5. Save file record to in-memory store for duplicate detection
-      saveFileRecord({
-        contentHash: contentHash,
-        filename: filename,
-        fileSize: deckFile.size,
-        contentType: 'deck'
-      });
 
       // Calculate final metrics
       const overallAlignmentScore = calculateOverallAlignmentScore(transformedData);
