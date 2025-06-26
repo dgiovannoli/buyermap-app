@@ -46,6 +46,10 @@ export function useBuyerMapFlow() {
     console.log('Validation update:', data);
     if (data.assumptions) {
       setBuyerMapData(data.assumptions);
+      console.log('✅ Updated buyerMapData state with interview validation results');
+    } else if (Array.isArray(data)) {
+      setBuyerMapData(data);
+      console.log('✅ Updated buyerMapData state with interview validation results (array)');
     }
   };
 
@@ -63,7 +67,13 @@ export function useBuyerMapFlow() {
       }
       
       const data = await buyerMapApi.validateInterviews(files, assumptions);
-      setBuyerMapData(data.assumptions);
+      
+      // Update the state with the processed interview data
+      if (data.assumptions) {
+        setBuyerMapData(data.assumptions);
+        console.log('✅ Updated buyerMapData state with processed interview data');
+      }
+      
       setPhase('interview-processing');
       onSuccess(data);
     } catch (err) {

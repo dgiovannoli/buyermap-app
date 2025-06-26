@@ -24,6 +24,14 @@ interface ValidationData {
   quotes: Quote[];
   confidenceBreakdown?: ConfidenceBreakdownType;
   evidenceFromDeck?: string;
+  dataSource?: 'interview' | 'deck' | 'none';
+  validationAttributes?: Array<{
+    outcome: 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+    reality: string;
+    confidence: number;
+    quotes: Quote[];
+  }>;
+  displayOutcome?: string;
 }
 
 interface DetailedValidationCardProps {
@@ -36,10 +44,14 @@ interface DetailedValidationCardProps {
   validation?: ValidationData;
   isExpanded: boolean;
   onToggleExpand: (id: number) => void;
+  hasInterviewData?: boolean;
 }
 
-const getBestGuessLabel = (outcome: string, quotes: any[]): 'Validated' | 'Contradicted' | 'Gap Identified' | 'No Data' => {
-  if (!quotes || quotes.length === 0) return 'No Data';
+const getBestGuessLabel = (outcome: string, quotes: any[], dataSource?: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'No Data' | 'From Deck Analysis' => {
+  if (!quotes || quotes.length === 0) {
+    if (dataSource === 'deck') return 'From Deck Analysis';
+    return 'No Data';
+  }
   switch (outcome) {
     case 'Validated':
       return 'Validated';
@@ -47,8 +59,10 @@ const getBestGuessLabel = (outcome: string, quotes: any[]): 'Validated' | 'Contr
       return 'Contradicted';
     case 'Gap Identified':
       return 'Gap Identified';
+    case 'New Data Added':
+      return dataSource === 'deck' ? 'From Deck Analysis' : 'Gap Identified';
     default:
-      return 'Validated'; // fallback to Validated if outcome is unclear but there is data
+      return dataSource === 'deck' ? 'From Deck Analysis' : 'Validated'; // fallback based on data source
   }
 };
 
@@ -60,6 +74,8 @@ const getLabelColor = (label: string) => {
       return { primary: '#dc2626', bg: 'rgba(220, 38, 38, 0.1)', border: 'rgba(220, 38, 38, 0.3)' };
     case 'Gap Identified':
       return { primary: '#d97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' };
+    case 'From Deck Analysis':
+      return { primary: '#2563eb', bg: 'rgba(37, 99, 235, 0.1)', border: 'rgba(37, 99, 235, 0.3)' };
     case 'No Data':
     default:
       return { primary: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.3)' };
@@ -73,23 +89,25 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
   hasValidation = false,
   validation,
   isExpanded,
-  onToggleExpand
+  onToggleExpand,
+  hasInterviewData
 }) => {
   const [showAllQuotes, setShowAllQuotes] = useState(false);
   
-  const label = getBestGuessLabel(validation?.outcome || '', validation?.quotes || []);
+  // Use the flat validation structure that's actually being passed
+  const label = validation?.displayOutcome || '';
+  const confidence = validation?.confidence || 0;
+  const reality = validation?.reality || '';
+  
   const labelColors = getLabelColor(label);
-  const showNoData = (!validation || ((!validation.quotes || validation.quotes.length === 0) && !validation.evidenceFromDeck && !validation.reality));
-  const showLowConfidenceWarning = !showNoData && (validation?.confidence || 0) < 40;
+  const showNoData = label === 'Insufficient Data' || label === 'No Data';
+  const showLowConfidenceWarning = showNoData;
   
   const OutcomeIcon = validation ? getOutcomeIcon(validation.outcome) : getOutcomeIcon('New Data Added');
   
   // Pull in the dynamic icon + colors:
   const { Icon: AttributeIcon, bgClass, iconClass, titleClass } =
     getAttributeIconAndColors(attributeTitle);
-
-  // Extract values for the button
-  const confidence = validation?.confidence || 0;
 
   const toggleExpanded = useCallback(() => {
     onToggleExpand(id);
@@ -157,12 +175,8 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                   No Data
                 </span>
               ) : (
-                // Show confidence % and outcome for validated states
+                // Show only outcome label for validated states
                 <>
-                  <span style={{ color: '#6b7280' }}>
-                    {confidence}%
-                  </span>
-                  <span className="text-gray-400">•</span>
                   <span style={{ color: labelColors.primary }}>
                     {label}
                   </span>
@@ -179,11 +193,11 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
 
         {/* Assumption Text */}
         <div className="text-sm text-gray-800 leading-relaxed">
-          {showNoData ? 'No Data' : subtitle || validation?.reality}
+          {showNoData ? 'No Data' : subtitle || reality}
         </div>
-        {showLowConfidenceWarning && (
+        {showLowConfidenceWarning && hasInterviewData && (
           <div className="mt-2 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
-            Low confidence: Not enough interview data to validate this assumption.
+            Not enough data to validate this assumption.
           </div>
         )}
       </div>
@@ -194,7 +208,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
           <div className="p-6 space-y-6">
             
             {/* Hero Insight Section */}
-            {validation.reality && (
+            {reality && (
               <div className="relative">
                 <div 
                   className="rounded-xl p-6 border-l-4 shadow-lg"
@@ -216,16 +230,12 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                         <span className="font-bold text-lg" style={{ color: labelColors.primary }}>
                           {label}
                         </span>
-                        <span className="text-sm text-gray-500">•</span>
-                        <span className="text-sm font-semibold text-gray-700">
-                          {validation.confidence}% confidence
-                        </span>
                       </div>
                       <h5 className="text-sm font-semibold text-gray-600 mb-2 uppercase tracking-wide">
                         Key Finding
                       </h5>
                       <p className="text-base text-gray-900 leading-relaxed font-medium">
-                        {validation.reality}
+                        {reality}
                       </p>
                     </div>
                   </div>
@@ -309,43 +319,6 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                       : `View ${validation.quotes.length - 2} more quote${validation.quotes.length - 2 !== 1 ? 's' : ''}`}
                   </button>
                 )}
-              </div>
-            )}
-
-            {/* Confidence Analysis */}
-            {validation.confidenceBreakdown ? (
-              <ConfidenceBreakdown 
-                breakdown={validation.confidenceBreakdown}
-                comparisonOutcome={validation.outcome}
-              />
-            ) : (
-              // Fallback to basic confidence display for legacy data
-              <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <BarChart3 className="w-5 h-5 text-gray-400" />
-                  </div>
-                  <h5 className="text-sm font-bold text-gray-600 uppercase tracking-wide">
-                    Confidence Analysis
-                  </h5>
-                </div>
-                <div className="flex items-center space-x-4 mb-3">
-                  <div className="flex-1 bg-gray-200 rounded-full h-3">
-                    <div
-                      className="h-3 rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${validation.confidence}%`,
-                        background: 'linear-gradient(90deg, #9ca3afdd, #9ca3af)'
-                      }}
-                    />
-                  </div>
-                  <span className="text-lg font-bold text-gray-900">
-                    {validation.confidence}%
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 leading-relaxed">
-                  {validation.confidence_explanation}
-                </p>
               </div>
             )}
           </div>

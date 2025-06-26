@@ -44,6 +44,13 @@ export interface BuyerMapData {
   validationStatus?: 'pending' | 'partial' | 'validated' | 'contradicted' | 'VALIDATED' | 'GAP_IDENTIFIED' | 'CONTRADICTED' | 'INSUFFICIENT_DATA';
   icpValidation?: ICPValidationData;
   validationAttributes?: ValidationAttribute[];
+  
+  // Display fields for pre-processed data from BuyerMapApp
+  displayOutcome?: string;
+  displayReality?: string;
+  displayConfidence?: number;
+  _originalOutcome?: string;
+  _validationOutcome?: string;
 }
 
 export interface ICPValidationResponse {

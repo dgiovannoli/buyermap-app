@@ -15,12 +15,16 @@ interface InterviewUploadStageProps {
   assumptions: BuyerMapData[];
   onUploaded: () => void;
   onUpload: (files: File[], assumptions: BuyerMapData[], onSuccess: (data: any) => void) => void;
+  lastInterviewResult?: any;
+  onReplayLastInterview?: () => void;
 }
 
 export default function InterviewUploadStage({
   assumptions,
   onUploaded,
-  onUpload
+  onUpload,
+  lastInterviewResult,
+  onReplayLastInterview
 }: InterviewUploadStageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -103,6 +107,19 @@ export default function InterviewUploadStage({
       console.log('✅ [BLOB] Interview analysis completed:', data);
       
       // Call the success callback with the analysis results
+      if (data.assumptions) {
+        console.log('🔍 [InterviewUploadStage] Calling onUpload with processed data:', {
+          assumptionsCount: data.assumptions.length,
+          sampleAssumption: data.assumptions[0],
+          hasValidationAttributes: data.assumptions[0]?.validationAttributes?.length > 0
+        });
+        
+        onUpload(readyFiles.map(fs => fs.file), assumptions, (processedData) => {
+          console.log('✅ Interview data integrated with buyer map');
+        });
+      }
+      
+      // Also call onUploaded for UI state updates
       onUploaded();
       
     } catch (error) {
@@ -193,6 +210,18 @@ export default function InterviewUploadStage({
           Upload your customer interview transcripts to validate the {assumptions.length} assumptions we found.
         </p>
       </div>
+
+      {/* Replay Last Interview Button */}
+      {lastInterviewResult && onReplayLastInterview && (
+        <div className="mb-6 text-center">
+          <button
+            onClick={onReplayLastInterview}
+            className="inline-flex items-center space-x-2 bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+          >
+            <span>🔁 Replay Last Interview</span>
+          </button>
+        </div>
+      )}
 
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${

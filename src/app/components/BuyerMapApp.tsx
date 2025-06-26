@@ -9,8 +9,8 @@ import { ICPValidationResponse } from '../../types/buyermap';
 import FileUploadStep from './steps/FileUploadStep';
 import dynamic from 'next/dynamic';
 import DeckUploadStage from './stages/DeckUploadStage';
-import DeckResultsStage from './stages/DeckResultsStage';
 import ProgressTracker from './ProgressTracker';
+import ModernBuyerMapLanding from '../../components/modern-buyermap-landing';
 
 const BATCH_SIZE = 3; // Process 3 interview files at a time
 
@@ -68,27 +68,13 @@ export default function BuyerMapApp() {
     processedBatches: 0
   });
   const [error, setError] = useState<string | null>(null);
+  // Store the last successful deck upload/analysis result
+  const [lastDeckResult, setLastDeckResult] = useState<ICPValidationResponse | null>(null);
+  // Store the last successful interview upload/analysis result
+  const [lastInterviewResult, setLastInterviewResult] = useState<any>(null);
 
-  const handleStart = useCallback(() => {
-    console.log('handleStart called');
-    setCurrentStage('deck-upload');
-  }, []);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  if (!isClient) {
-    return <div>Loading...</div>;
-  }
-
-  const handleDeckProcessed = (data: ICPValidationResponse) => {
-    setBuyerMapData(data);
-    setCurrentStage('deck-results');
-    updateValidationProgress(data);
-  };
-
-  const updateValidationProgress = (data: ICPValidationResponse) => {
+  // Memoize all callback functions at the top level
+  const updateValidationProgress = useCallback((data: ICPValidationResponse) => {
     setBuyerMapData(data);
     const assumptions = data.assumptions || [];
     setValidationProgress({
@@ -102,15 +88,145 @@ export default function BuyerMapApp() {
       totalInterviews: 0,
       processedBatches: 0
     });
-  };
+  }, []);
 
-  const handleDeckResultsError = (error: Error) => {
+  const handleDeckProcessed = useCallback((data: ICPValidationResponse) => {
+    console.log('🚨 [BuyerMapApp] handleDeckProcessed called:', {
+      timestamp: new Date().toISOString(),
+      assumptionsCount: data.assumptions?.length || 0
+    });
+    setBuyerMapData(data);
+    setCurrentStage('deck-results');
+    setLastDeckResult(data); // Save the last successful result
+    updateValidationProgress(data);
+  }, [updateValidationProgress]);
+
+  const handleDeckResultsError = useCallback((error: Error) => {
     setError(error.message);
+  }, []);
+
+  const handleDeckResultsProgress = useCallback((progress: number) => {
+    setProcessingProgress(prev => ({ ...prev, percentage: progress }));
+  }, []);
+
+  const handleInterviewDataUpdated = useCallback((updatedBuyerMapData: any) => {
+    console.log('🔄 [PARENT] Interview data update received:', {
+      hasData: !!updatedBuyerMapData,
+      assumptionsCount: updatedBuyerMapData?.length || 0,
+      sampleReality: updatedBuyerMapData?.[0]?.validationAttributes?.[0]?.reality?.slice(0, 100)
+    });
+    
+    // Store the last successful interview result
+    setLastInterviewResult(updatedBuyerMapData);
+    
+    // Update the buyerMapData state with the new interview data
+    if (updatedBuyerMapData && buyerMapData) {
+      const updatedData = {
+        ...buyerMapData,
+        assumptions: updatedBuyerMapData
+      };
+      setBuyerMapData(updatedData);
+      updateValidationProgress(updatedData);
+      console.log('✅ [PARENT] Updated BuyerMapApp state with interview data');
+    }
+  }, [buyerMapData, updateValidationProgress]);
+
+  const handleStart = useCallback(() => {
+    console.log('handleStart called');
+    setCurrentStage('deck-upload');
+  }, []);
+
+  // Add data processing function to clean up assumptions data
+  const processAssumptionsForDisplay = (buyerMapData: ICPValidationResponse | null) => {
+    if (!buyerMapData?.assumptions) return buyerMapData;
+    
+    const processedAssumptions = buyerMapData.assumptions.map(assumption => {
+      // Get the correct outcome and reality from validationAttributes first, then fallback
+      const validationData = assumption.validationAttributes?.[0];
+      
+      return {
+        ...assumption,
+        // Override with processed display values
+        displayOutcome: validationData?.outcome || assumption.comparisonOutcome || 'pending',
+        displayReality: validationData?.reality || assumption.evidenceFromDeck || 'Pending validation...',
+        displayConfidence: validationData?.confidence || assumption.confidenceScore || 0,
+        // Keep original data for debugging
+        _originalOutcome: assumption.comparisonOutcome,
+        _validationOutcome: validationData?.outcome
+      };
+    });
+
+    console.log('🔧 [BuyerMapApp] Processed assumptions for display:', {
+      originalCount: buyerMapData.assumptions.length,
+      processedCount: processedAssumptions.length,
+      sampleProcessed: processedAssumptions[0] ? {
+        id: processedAssumptions[0].id,
+        attribute: processedAssumptions[0].icpAttribute,
+        displayOutcome: processedAssumptions[0].displayOutcome,
+        displayReality: processedAssumptions[0].displayReality?.substring(0, 100) + '...'
+      } : null
+    });
+
+    return {
+      ...buyerMapData,
+      assumptions: processedAssumptions
+    };
   };
 
-  const handleDeckResultsProgress = (progress: number) => {
-    setProcessingProgress(prev => ({ ...prev, percentage: progress }));
-  };
+  // Replay last upload result as if a new upload just completed
+  const replayLastUpload = useCallback(() => {
+    if (lastDeckResult) {
+      console.log('🔁 [BuyerMapApp] Replaying last upload result');
+      handleDeckProcessed(lastDeckResult);
+    }
+  }, [lastDeckResult, handleDeckProcessed]);
+
+  // Replay last interview result as if a new interview upload just completed
+  const replayLastInterview = useCallback(() => {
+    if (lastInterviewResult) {
+      console.log('🔁 [BuyerMapApp] Replaying last interview result');
+      handleInterviewDataUpdated(lastInterviewResult);
+    }
+  }, [lastInterviewResult, handleInterviewDataUpdated]);
+
+  // Load replay state from localStorage on mount
+  useEffect(() => {
+    const storedDeck = localStorage.getItem('lastDeckResult');
+    const storedInterview = localStorage.getItem('lastInterviewResult');
+    if (storedDeck) setLastDeckResult(JSON.parse(storedDeck));
+    if (storedInterview) setLastInterviewResult(JSON.parse(storedInterview));
+  }, []);
+
+  // Persist lastDeckResult to localStorage
+  useEffect(() => {
+    if (lastDeckResult) {
+      localStorage.setItem('lastDeckResult', JSON.stringify(lastDeckResult));
+    }
+  }, [lastDeckResult]);
+
+  // Persist lastInterviewResult to localStorage
+  useEffect(() => {
+    if (lastInterviewResult) {
+      localStorage.setItem('lastInterviewResult', JSON.stringify(lastInterviewResult));
+    }
+  }, [lastInterviewResult]);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    console.log('BuyerMapApp: buyerMapData changed:', {
+      hasData: !!buyerMapData,
+      assumptionsCount: buyerMapData?.assumptions?.length || 0,
+      firstRealityData: buyerMapData?.assumptions?.[0]?.validationAttributes?.[0]?.reality?.slice(0, 100),
+      timestamp: new Date().toISOString()
+    });
+  }, [buyerMapData]);
+
+  if (!isClient) {
+    return <div>Loading...</div>;
+  }
 
   const renderCurrentStage = () => {
     console.log('🔍 renderCurrentStage called, currentStage:', currentStage);
@@ -126,15 +242,21 @@ export default function BuyerMapApp() {
             onDeckProcessed={handleDeckProcessed}
             onError={setError}
             onProgressUpdate={setProcessingProgress}
+            lastDeckResult={lastDeckResult}
+            onReplayLastUpload={replayLastUpload}
           />
         );
       case 'deck-results':
         return (
-          <DeckResultsStage
-            buyerMapData={buyerMapData!}
-            onError={handleDeckResultsError}
-            onProgressUpdate={handleDeckResultsProgress}
-            onValidationUpdate={updateValidationProgress}
+          <ModernBuyerMapLanding
+            buyerMapData={buyerMapData?.assumptions || []}
+            overallScore={validationProgress.overallProgress || 0}
+            currentStep={0}
+            setCurrentStep={(step: number) => setCurrentStage('deck-results')}
+            initialInsights={undefined}
+            onInterviewDataUpdated={handleInterviewDataUpdated}
+            lastInterviewResult={lastInterviewResult}
+            onReplayLastInterview={replayLastInterview}
           />
         );
       default:

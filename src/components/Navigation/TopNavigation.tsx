@@ -73,8 +73,8 @@ export default function TopNavigation() {
         <div className="flex justify-between items-center h-16">
           {/* Logo/Brand */}
           <Link href="/" className="flex items-center space-x-3 group">
-            <div className="p-2 bg-blue-600 rounded-lg">
-              <Brain className="h-6 w-6 text-white" />
+            <div className="p-2 rounded-lg">
+              <img src="/logo.svg" alt="BuyerMap Logo" className="h-6 w-6" />
             </div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-bold text-white group-hover:text-blue-200 transition-colors">

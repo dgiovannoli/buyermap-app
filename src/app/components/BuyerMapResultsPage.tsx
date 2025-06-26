@@ -12,6 +12,8 @@ interface BuyerMapResultsPageProps {
   onProgressUpdate: (progress: any) => void;
   onValidationUpdate: (data: any) => void;
   onUploaded: () => void;
+  lastInterviewResult?: any;
+  onReplayLastInterview?: () => void;
 }
 
 export default function BuyerMapResultsPage({
@@ -21,6 +23,8 @@ export default function BuyerMapResultsPage({
   onProgressUpdate,
   onValidationUpdate,
   onUploaded,
+  lastInterviewResult,
+  onReplayLastInterview,
 }: BuyerMapResultsPageProps) {
   return (
     <div className="px-8 py-12">
@@ -57,6 +61,8 @@ export default function BuyerMapResultsPage({
           assumptions={buyerMapData}
           onUploaded={onUploaded}
           onUpload={onUploadInterviews}
+          lastInterviewResult={lastInterviewResult}
+          onReplayLastInterview={onReplayLastInterview}
         />
       </div>
     </div>

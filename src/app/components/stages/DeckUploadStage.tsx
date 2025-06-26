@@ -28,9 +28,11 @@ interface DeckUploadStageProps {
   onDeckProcessed: (data: ICPValidationResponse) => void;
   onError: (error: string | null) => void;
   onProgressUpdate: (progress: ProcessingProgress) => void;
+  lastDeckResult?: ICPValidationResponse | null;
+  onReplayLastUpload?: () => void;
 }
 
-const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUploadStageProps) => {
+const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate, lastDeckResult, onReplayLastUpload }: DeckUploadStageProps) => {
   // Mock mode control
   const useMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
   
@@ -51,6 +53,11 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
   const [useCompression, setUseCompression] = useState(false);
   
   const uploadedDeckRef = useRef<File | null>(null);
+  
+  // 🚨 UPLOAD PREVENTION: Track upload state and completed uploads
+  const [uploadInProgress, setUploadInProgress] = useState(false);
+  const completedUploads = useRef(new Set<string>());
+  const uploadCache = useRef(new Map<string, any>());
 
   const handleFileUpload = (file: File | null) => {
     console.log('🔄 File uploaded:', file?.name);
@@ -220,11 +227,35 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
     setUploadedDeck(null);
     setUploadProgress(0);
     setIsProcessing(false);
+    setUploadInProgress(false);
   };
 
   const proceedWithDeckProcessing = async (file: File) => {
-    console.log('🔄 Proceeding with deck processing for file:', file.name);
-    // Note: isProcessing is already set to true in handleStartProcessing
+    // 🚨 UPLOAD PREVENTION: Check if upload is already in progress
+    if (uploadInProgress) {
+      console.log('⚠️ Upload already in progress, skipping duplicate call for:', file.name);
+      return;
+    }
+
+    // 🚨 UPLOAD PREVENTION: Check if this file was already processed
+    const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+    if (completedUploads.current.has(fileKey)) {
+      console.log('⚠️ File already processed, using cached result for:', file.name);
+      const cachedResult = uploadCache.current.get(fileKey);
+      if (cachedResult) {
+        onDeckProcessed(cachedResult);
+        return;
+      }
+    }
+
+    console.log('🚨 [UPLOAD] Proceeding with deck processing for file:', {
+      fileName: file.name,
+      fileSize: file.size,
+      timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    });
+
+    setUploadInProgress(true);
     
     try {
       // Start processing visualization immediately
@@ -259,6 +290,11 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
       const data = await response.json();
       console.log('✅ Deck analysis completed:', data);
+      
+      // 🚨 UPLOAD PREVENTION: Cache the result and mark as completed
+      uploadCache.current.set(fileKey, data);
+      completedUploads.current.add(fileKey);
+      
       onDeckProcessed(data);
       
     } catch (error) {
@@ -266,12 +302,19 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
       onError(`Deck processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
+      setUploadInProgress(false);
     }
   };
 
   const handleProcessDeck = async () => {
     console.log('🔄 [BLOB] handleProcessDeck called, uploadedDeck:', !!uploadedDeck);
     if (!uploadedDeck) return;
+
+    // 🚨 UPLOAD PREVENTION: Check if already processing
+    if (isProcessing || uploadInProgress) {
+      console.log('⚠️ Already processing, skipping duplicate call');
+      return;
+    }
 
     // Store reference for duplicate dialog use
     uploadedDeckRef.current = uploadedDeck;
@@ -284,6 +327,12 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
   const handleStartProcessing = () => {
     if (uploadedDeck) {
+      // 🚨 UPLOAD PREVENTION: Check if already processing
+      if (isProcessing || uploadInProgress) {
+        console.log('⚠️ Already processing, skipping duplicate start request');
+        return;
+      }
+
       console.log('🔄 handleStartProcessing called - setting isProcessing to true');
       setIsProcessing(true);
       console.log('🔄 isProcessing set to true, should show ProcessVisualization');
@@ -310,20 +359,7 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
-      {/* Header */}
-      <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-white">BuyerMap Analysis</h1>
-              <p className="text-sm text-gray-300">Upload & Analyze Your Sales Deck</p>
-            </div>
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full font-medium border border-blue-400/30">Step 1 of 3</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Removed Header */}
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-6 py-8">
@@ -335,6 +371,18 @@ const DeckUploadStage = ({ onDeckProcessed, onError, onProgressUpdate }: DeckUpl
             AI-powered analysis to extract and validate your ICP assumptions against real customer data
           </p>
         </div>
+
+        {/* Replay Last Upload Button */}
+        {lastDeckResult && onReplayLastUpload && (
+          <div className="mb-6 text-center">
+            <button
+              onClick={onReplayLastUpload}
+              className="inline-flex items-center space-x-2 bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              <span>🔁 Replay Last Upload</span>
+            </button>
+          </div>
+        )}
 
         {/* Upload Card */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden mb-6">

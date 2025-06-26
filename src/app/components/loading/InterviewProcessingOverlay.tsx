@@ -26,7 +26,7 @@ export default function InterviewProcessingOverlay({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 top-0 left-0 h-screen bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-gradient-to-br from-blue-900/90 via-purple-900/90 to-indigo-900/90 backdrop-blur-xl rounded-lg shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-white/20">
         <div className="p-6">
           <ProcessVisualization

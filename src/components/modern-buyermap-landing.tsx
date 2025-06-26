@@ -6,13 +6,13 @@ import { BuyerMapData, ExampleQuote, Quote, ConfidenceBreakdown } from '../types
 import DetailedValidationCard from './DetailedValidationCard';
 import { mapBuyerMapToValidationData } from '../utils/mapToValidationData';
 import UploadComponent from './UploadComponent';
-import { MOCK_BUYER_MAP_DATA } from './__mocks__/buyerMapData';
 import InterviewProcessingOverlay from '../app/components/loading/InterviewProcessingOverlay';
 import { useProcessingProgress } from '../app/hooks/useProcessingProgress';
 import ProcessVisualization from '../app/components/loading/ProcessVisualization';
 import { upload, put } from '@vercel/blob/client';
 import FileConflictDialog from './ui/FileConflictDialog';
 import { useFileConflictHandler, type FileConflictResolution } from '../hooks/useFileConflictHandler';
+import sampleBuyerMapData from '../mocks/sampleBuyerMapData.json';
 
 
 // Assume buyerMapData and overallScore are passed as props or from parent state
@@ -124,12 +124,56 @@ const getScoreMessage = (score: number): string => {
   return 'Significant misalignment, revisit ICP assumptions.';
 };
 
+// Add this transformation function
+const transformAssumptionForCard = (assumption: any) => {
+  // Use realityFromInterviews if present, otherwise fallback to reality
+  const realityText = assumption?.realityFromInterviews || assumption?.reality || '';
+  const hasInterviewData = !!assumption?.realityFromInterviews || (assumption?.quotes && assumption?.quotes.length > 0);
+  const parseOutcomeFromReality = (reality: string) => {
+    if (!reality) return 'Pending Validation';
+    const upperReality = reality.toUpperCase();
+    if (upperReality.startsWith('GAP IDENTIFIED:') || upperReality.startsWith('- GAP IDENTIFIED:')) {
+      return 'Gap Identified';
+    } else if (upperReality.startsWith('VALIDATED:')) {
+      return 'Validated';
+    } else if (upperReality.startsWith('CONTRADICTED:')) {
+      return 'Contradicted';
+    } else if (upperReality.startsWith('INSUFFICIENT DATA:')) {
+      return 'Insufficient Data';
+    } else {
+      if (upperReality.includes('GAP IDENTIFIED') || upperReality.includes('INSUFFICIENT DATA')) {
+        return 'Gap Identified';
+      } else if (upperReality.includes('VALIDATED')) {
+        return 'Validated';
+      } else if (upperReality.includes('CONTRADICTED')) {
+        return 'Contradicted';
+      }
+      return 'Pending Validation';
+    }
+  };
+
+  // If no interview data, always return Pending Validation
+  const correctOutcome = hasInterviewData ? parseOutcomeFromReality(realityText) : 'Pending Validation';
+  return {
+    ...assumption,
+    displayOutcome: correctOutcome,
+    displayReality: hasInterviewData ? (realityText || 'Pending validation...') : 'Upload customer interviews to validate this assumption.',
+    displayConfidence: assumption?.confidence || 0,
+    _parsedFromReality: realityText?.substring(0, 50) + '...',
+    _originalOutcome: assumption?.outcome,
+    _correctedOutcome: correctOutcome
+  };
+};
+
 interface ModernBuyerMapLandingProps {
   buyerMapData: BuyerMapData[];
   overallScore: number;
   currentStep: number;
   setCurrentStep: (step: number) => void;
   initialInsights?: BuyerMapData[]; // Optional prop for testing/mock data
+  onInterviewDataUpdated?: (data: BuyerMapData[]) => void; // Callback to notify parent of interview data updates
+  lastInterviewResult?: any; // Last successful interview result for replay
+  onReplayLastInterview?: () => void; // Function to replay last interview
 }
 
 // Component to display score breakdown
@@ -275,12 +319,16 @@ const ProcessingTimeEstimate: React.FC<{
   );
 };
 
-const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({ 
+const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterviewUpload?: (files: FileList) => void }> = ({ 
   buyerMapData, 
   overallScore, 
   currentStep, 
   setCurrentStep,
-  initialInsights 
+  initialInsights,
+  onInterviewDataUpdated,
+  lastInterviewResult,
+  onReplayLastInterview,
+  onInterviewUpload
 }) => {
   // Debug logging moved to useEffect to prevent excessive re-renders
   useEffect(() => {
@@ -303,7 +351,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   
   // Pick from real data or mocks - prioritize mock mode
   const initialLocalData = isMock 
-    ? MOCK_BUYER_MAP_DATA 
+    ? (sampleBuyerMapData as BuyerMapData[])
     : (initialInsights ?? buyerMapData ?? []);
   
   // If we have buyerMapData, it means deck was already processed, so set uploaded to true
@@ -347,6 +395,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [resultsSummary, setResultsSummary] = useState<string>('');
 
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+
   // Auto-setup for mock mode
   useEffect(() => {
     if (!isMock) return;         // bail out immediately when mocks are OFF
@@ -356,7 +406,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       setUploaded(true);
       setCurrentStep(3);
       // Set mock score based on the mock data (mock mode exception)
-      const mockScore = calculateOverallScore(MOCK_BUYER_MAP_DATA);
+      const mockScore = calculateOverallScore(sampleBuyerMapData as BuyerMapData[]);
       setScore(mockScore);
     }
   }, [isMock, uploaded, setCurrentStep]);
@@ -376,16 +426,105 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     // console.log('localBuyerMapData updated:', localBuyerMapData);
   }, [localBuyerMapData]);
 
-  // Add debug logging for render - commented out for performance
-  // console.log('Rendering component with:', {
-  //   currentStep,
-  //   showUploadMore,
-  //   score,
-  //   uploaded,
-  //   isDemoMode,
-  //   isMock,
-  //   localBuyerMapDataLength: localBuyerMapData?.length ?? 0
-  // });
+  // Sync localBuyerMapData with buyerMapData prop
+  useEffect(() => {
+    if (buyerMapData && buyerMapData.length > 0) {
+      setLocalBuyerMapData(buyerMapData);
+    }
+  }, [buyerMapData]);
+
+  // Add this logic to detect if interviews have been uploaded
+  const hasInterviewData = useMemo(() => {
+    if (!buyerMapData?.length) return false;
+    return buyerMapData.some(assumption => {
+      const hasQuotes = assumption.quotes && assumption.quotes.length > 0;
+      const hasRealValidation = assumption.reality && 
+        assumption.reality !== 'Pending validation...' &&
+        !assumption.reality.startsWith('Pending');
+      const hasValidationData = assumption.validationAttributes?.[0]?.reality &&
+        assumption.validationAttributes[0].reality !== 'Pending validation...' &&
+        !assumption.validationAttributes[0].reality.startsWith('Pending');
+      return hasQuotes || hasRealValidation || hasValidationData;
+    });
+  }, [buyerMapData]);
+
+  // Memoized data processing - moved outside conditional blocks
+  const whoAssumptions = useMemo(() => {
+    return localBuyerMapData
+      .filter(assumption => {
+        const attribute = assumption.icpAttribute?.toLowerCase() || '';
+        return attribute.includes('buyer') || attribute.includes('title') || attribute.includes('decision maker') ||
+               attribute.includes('company') || attribute.includes('size') || attribute.includes('firm');
+      })
+      .map(transformAssumptionForCard);
+  }, [localBuyerMapData]);
+
+  const whatAssumptions = useMemo(() => {
+    return localBuyerMapData
+      .filter(assumption => {
+        const attribute = assumption.icpAttribute?.toLowerCase() || '';
+        return attribute.includes('pain') || attribute.includes('problem') || attribute.includes('challenge') ||
+               attribute.includes('desired') || attribute.includes('outcome') || attribute.includes('goal');
+      })
+      .map(transformAssumptionForCard);
+  }, [localBuyerMapData]);
+
+  const whenAssumptions = useMemo(() => {
+    return localBuyerMapData
+      .filter(assumption => {
+        const attribute = assumption.icpAttribute?.toLowerCase() || '';
+        return attribute.includes('trigger') || attribute.includes('timing') || attribute.includes('when');
+      })
+      .map(transformAssumptionForCard);
+  }, [localBuyerMapData]);
+
+  const whyAssumptions = useMemo(() => {
+    return localBuyerMapData
+      .filter(assumption => {
+        const attribute = assumption.icpAttribute?.toLowerCase() || '';
+        return attribute.includes('barrier') || attribute.includes('objection') || attribute.includes('concern') ||
+               attribute.includes('messaging') || attribute.includes('communication') || attribute.includes('emphasis');
+      })
+      .map(transformAssumptionForCard);
+  }, [localBuyerMapData]);
+
+  const otherAssumptions = useMemo(() => {
+    return localBuyerMapData
+      .filter(assumption => {
+        const attribute = assumption.icpAttribute?.toLowerCase() || '';
+        return !(attribute.includes('buyer') || attribute.includes('title') || attribute.includes('decision maker') ||
+                attribute.includes('company') || attribute.includes('size') || attribute.includes('firm') ||
+                attribute.includes('pain') || attribute.includes('problem') || attribute.includes('challenge') ||
+                attribute.includes('desired') || attribute.includes('outcome') || attribute.includes('goal') ||
+                attribute.includes('trigger') || attribute.includes('timing') || attribute.includes('when') ||
+                attribute.includes('barrier') || attribute.includes('objection') || attribute.includes('concern') ||
+                attribute.includes('messaging') || attribute.includes('communication') || attribute.includes('emphasis'));
+      })
+      .map(transformAssumptionForCard);
+  }, [localBuyerMapData]);
+
+  // Add this before rendering the main results UI
+  const summaryCounts = useMemo(() => {
+    let validated = 0, gaps = 0, pending = 0;
+    localBuyerMapData.forEach((a: any) => {
+      const outcome = a.displayOutcome;
+      if (outcome === 'Validated') validated++;
+      else if (outcome === 'Gap Identified') gaps++;
+      else pending++;
+    });
+    return { validated, gaps, pending };
+  }, [localBuyerMapData]);
+
+  // Debug log for transformation
+  useEffect(() => {
+    if (buyerMapData && buyerMapData.length > 0) {
+      console.log('🔍 PARSING TEST:', {
+        reality: buyerMapData[0]?.reality,
+        originalOutcome: (buyerMapData[0] as any)?.outcome,
+        parsedOutcome: transformAssumptionForCard(buyerMapData[0])?.displayOutcome
+      });
+    }
+  }, [buyerMapData]);
 
   // Helper to calculate overall score (simple average for demo)
   const calculateOverallScore = (data: BuyerMapData[]) => {
@@ -393,6 +532,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     const total = data.reduce((sum, item) => sum + (item.confidenceScore || 0), 0);
     return Math.round(total / data.length);
   };
+
+  console.log('🔍 [ModernBuyerMapLanding] State detection:', {
+    hasInterviewData,
+    assumptionsCount: buyerMapData?.length,
+    sampleAssumption: buyerMapData?.[0]
+  });
 
   // Process deck with real API endpoint
   const handleProcessDeck = async (files: File[]) => {
@@ -523,6 +668,14 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
       
       setUploaded(true);
       setCurrentStep(3);
+      
+      // After setLocalBuyerMapData(processedAssumptions); and related updates
+      console.log('🔍 AFTER INTEGRATION - buyerMapData state:', buyerMapData);
+      console.log('🔍 Sample reality:', buyerMapData?.[0]?.validationAttributes?.[0]?.reality);
+      
+      if (onInterviewDataUpdated) {
+        onInterviewDataUpdated(data.assumptions);
+      }
       
     } catch (err) {
       console.error('❌ Deck processing error', err);
@@ -697,7 +850,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
             count: processedAssumptions.length,
             withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length,
-            sampleRealityData: processedAssumptions[0]?.reality?.slice(0, 100) || 'No data',
+            sampleRealityData: processedAssumptions[0]?.reality || 'No data',
             quoteCounts: processedAssumptions.map((a: any) => ({ 
               assumption: a.v1Assumption?.slice(0, 30), 
               quotes: a.quotesCount,
@@ -724,6 +877,29 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           setCurrentStep(3);
           setUploaded(true);
           console.log('✅ Interview data integrated with buyer map');
+          
+          // Call the callback to notify parent component of updated data
+          if (onInterviewDataUpdated && processedAssumptions) {
+            // Create the correct data structure with validationAttributes properly mapped
+            const updatedData = processedAssumptions.map((assumption: any) => ({
+              ...assumption,
+              validationAttributes: [{
+                reality: assumption.realityFromInterviews || assumption.reality || "Pending validation...",
+                outcome: assumption.realityFromInterviews ? "Validated" : "Gap Identified",
+                confidence: assumption.confidenceScore || 85,
+                quotes: assumption.quotes || [],
+                confidence_explanation: assumption.confidenceExplanation || "Based on interview analysis"
+              }]
+            }));
+
+            console.log('🚀 [DEBUG] Calling onInterviewDataUpdated with CORRECT data:', {
+              assumptionsCount: updatedData.length,
+              sampleReality: updatedData[0]?.validationAttributes?.[0]?.reality,
+              hasInterviewData: updatedData[0]?.validationAttributes?.[0]?.reality !== "Pending validation..."
+            });
+            
+            onInterviewDataUpdated(updatedData);
+          }
         }
 
       } catch (error: any) {
@@ -826,7 +1002,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           console.log('🔍 [DEBUG] Processed assumptions with reality data:', {
             count: processedAssumptions.length,
             withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length,
-            sampleRealityData: processedAssumptions[0]?.reality?.slice(0, 100) || 'No data',
+            sampleRealityData: processedAssumptions[0]?.reality || 'No data',
             quoteCounts: processedAssumptions.map((a: any) => ({ 
               assumption: a.v1Assumption?.slice(0, 30), 
               quotes: a.quotesCount,
@@ -839,6 +1015,29 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
           setCurrentStep(3);
           setUploaded(true);
           console.log('✅ Interview data integrated with buyer map');
+          
+          // Call the callback to notify parent component of updated data
+          if (onInterviewDataUpdated && processedAssumptions) {
+            // Create the correct data structure with validationAttributes properly mapped
+            const updatedData = processedAssumptions.map((assumption: any) => ({
+              ...assumption,
+              validationAttributes: [{
+                reality: assumption.realityFromInterviews || assumption.reality || "Pending validation...",
+                outcome: assumption.realityFromInterviews ? "Validated" : "Gap Identified",
+                confidence: assumption.confidenceScore || 85,
+                quotes: assumption.quotes || [],
+                confidence_explanation: assumption.confidenceExplanation || "Based on interview analysis"
+              }]
+            }));
+
+            console.log('🚀 [DEBUG] Calling onInterviewDataUpdated with CORRECT data:', {
+              assumptionsCount: updatedData.length,
+              sampleReality: updatedData[0]?.validationAttributes?.[0]?.reality,
+              hasInterviewData: updatedData[0]?.validationAttributes?.[0]?.reality !== "Pending validation..."
+            });
+            
+            onInterviewDataUpdated(updatedData);
+          }
         }
       }
 
@@ -883,113 +1082,117 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
   // Step 3 advancement is now handled explicitly in deck/interview processing callbacks
 
   // Transform buyerMapData to validationInsights format for DetailedValidationCard
-  const validationInsights = useMemo(() => {
-    const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-    const hasInterviews = uploadedFiles.interviews.length > 0;
+  const getValidationInsights = useMemo(() => {
+    const data = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
     
-    // ✅ Interview enrichment: Calculate total unique interviews from all assumptions
-    const allInterviewMetadata = new Set();
-    allData.forEach(assumption => {
-      if (assumption.quotes && assumption.quotes.length > 0) {
-        assumption.quotes.forEach(quote => {
-          if (quote.speaker) {
-            allInterviewMetadata.add(quote.speaker);
-          }
-        });
+    // Type-safe outcome mapping for new validation statuses
+    const mapOutcome = (outcome: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' | 'Pending Validation' | 'Aligned' | 'Misaligned' | 'Challenged' | 'New Data Added' | 'Refined' => {
+      switch (outcome) {
+        case 'Validated': return 'Validated';
+        case 'Contradicted': return 'Contradicted';
+        case 'Gap Identified': return 'Gap Identified';
+        case 'Insufficient Data': return 'Insufficient Data';
+        // Legacy fallback for old values
+        case 'Aligned': return 'Aligned';
+        case 'Misaligned': return 'Misaligned';
+        case 'Challenged': return 'Challenged';
+        case 'New Data Added': return 'New Data Added';
+        case 'Refined': return 'Refined';
+        default: return 'Pending Validation';
       }
-    });
-    const totalUniqueInterviews = allInterviewMetadata.size;
-
-    // ✅ Enrich assumptions with interview results
-    const enrichedAssumptions = allData.map((assumption, index) => ({
-      ...assumption,
-      icpValidation: {
-        title: assumption.icpValidation?.title || assumption.icpAttribute || 'Assumption',
-        subtitle: assumption.icpValidation?.subtitle || assumption.v1Assumption || '',
-        cardNumber: assumption.icpValidation?.cardNumber || index + 1,
-        series: assumption.icpValidation?.series || 'ICP Validation',
-        totalInterviews: (assumption.quotes || []).length > 0 
-          ? totalUniqueInterviews
-          : 0,
-        ...(assumption.icpValidation || {})
-      }
-    }));
+    };
     
-    const insights = enrichedAssumptions.map(item => {
-      // Use the enhanced mapping function that includes confidence breakdown
-      const validationData = mapBuyerMapToValidationData(item);
-      
-      // Type-safe outcome mapping for new validation statuses
-      const mapOutcome = (outcome: string): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' | 'Pending Validation' => {
-        switch (outcome) {
-          case 'Validated': return 'Validated';
-          case 'Contradicted': return 'Contradicted';
-          case 'Gap Identified': return 'Gap Identified';
-          case 'Insufficient Data': return 'Insufficient Data';
-          // Legacy fallback for old values
-          case 'Aligned': return 'Validated';
-          case 'Misaligned': return 'Contradicted';
-          case 'Challenged': return 'Contradicted';
-          case 'New Data Added': return 'Gap Identified';
-          case 'Refined': return 'Gap Identified';
-          default: return 'Pending Validation';
-        }
-      };
+    const insights = data.map((item, index) => {
+      // Check if we have interview validation data
+      const hasInterviewValidation = item.validationAttributes && 
+        item.validationAttributes.length > 0 && 
+        item.validationAttributes[0]?.reality && 
+        item.validationAttributes[0].reality !== 'Pending validation...' &&
+        item.validationAttributes[0].reality.trim() !== '';
 
-      // If there are interviews, use interview-based outcome/confidence
-      if (hasInterviews) {
+      // Check if we have deck data as fallback
+      const hasDeckData = item.v1Assumption && item.v1Assumption.trim() !== '';
+
+      // Determine what to show based on data availability
+      if (hasInterviewValidation && item.validationAttributes) {
+        // Show interview validation results with green styling
+        const validation = item.validationAttributes[0];
         return {
           id: item.id,
           icpAttribute: item.icpAttribute || '',
-          title: item.v1Assumption || item.whyAssumption || '',
-          outcome: mapOutcome(item.comparisonOutcome || ''),
-          confidence: item.confidenceScore || 0,
-          confidenceExplanation: item.confidenceExplanation || '',
-          reality: item.reality || item.realityFromInterviews || '',
-          quotes: (item.quotes || []).map((q, qIndex) => ({
+          title: item.v1Assumption || item.whyAssumption || '', // Keep original assumption as title
+          outcome: mapOutcome(item.displayOutcome || validation.outcome || ''),
+          confidence: item.displayConfidence || validation.confidence || 0,
+          confidenceExplanation: validation.confidence_explanation || '',
+          reality: item.displayReality || validation.reality, // Use pre-processed display reality
+          quotes: (validation.quotes || []).map((q, qIndex) => ({
             text: q.text || (q as any).quote || (q as any).quoteText || '',
             author: q.speaker || (q as any).author || (q as any).speakerName || 'Anonymous',
             role: q.role || (q as any).speakerRole || '',
             companySnapshot: q.companySnapshot || ''
           })),
-          confidenceBreakdown: validationData.confidenceBreakdown,
+          confidenceBreakdown: validation.confidenceBreakdown,
           isPending: false,
-          icpValidation: item.icpValidation
+          icpValidation: item.icpValidation,
+          dataSource: 'interview' // Mark as interview data for styling
+        };
+      } else if (hasDeckData) {
+        // Show deck analysis data with blue styling as fallback
+        return {
+          id: item.id,
+          icpAttribute: item.icpAttribute || '',
+          title: item.v1Assumption || item.whyAssumption || '',
+          outcome: mapOutcome(item.displayOutcome || 'New Data Added'), // Use pre-processed display outcome
+          confidence: item.displayConfidence || item.confidenceScore || 0,
+          confidenceExplanation: 'Analysis based on sales deck content',
+          reality: item.displayReality || item.v1Assumption || item.evidenceFromDeck || '', // Use pre-processed display reality
+          quotes: [],
+          confidenceBreakdown: undefined,
+          isPending: false,
+          icpValidation: item.icpValidation,
+          dataSource: 'deck' // Mark as deck data for styling
+        };
+      } else {
+        // No data available
+        return {
+          id: item.id,
+          icpAttribute: item.icpAttribute || '',
+          title: item.v1Assumption || item.whyAssumption || '',
+          outcome: mapOutcome(item.displayOutcome || 'Insufficient Data'), // Use pre-processed display outcome
+          confidence: item.displayConfidence || 0,
+          confidenceExplanation: 'No validation data available',
+          reality: item.displayReality || 'No data available for validation', // Use pre-processed display reality
+          quotes: [],
+          confidenceBreakdown: undefined,
+          isPending: true,
+          icpValidation: item.icpValidation,
+          dataSource: 'none'
         };
       }
-      // If no interviews, but deck evidence/assumption is present, show those
-      return {
-        id: item.id,
-        icpAttribute: item.icpAttribute || '',
-        title: item.v1Assumption || item.whyAssumption || '',
-        outcome: mapOutcome(item.comparisonOutcome || ''),
-        confidence: item.confidenceScore || 0,
-        confidenceExplanation: item.confidenceExplanation || '',
-        reality: item.v1Assumption || item.evidenceFromDeck || '',
-        quotes: [],
-        confidenceBreakdown: undefined,
-        isPending: false,
-        icpValidation: item.icpValidation
-      };
     });
-    
-    // Debug log to verify reality field mapping and interview enrichment
-    // console.log('🔍 ValidationInsights transformation with interview enrichment:');
-    // insights.forEach(insight => {
-    //   console.log(`  Assumption ${insight.id}: outcome="${insight.outcome}", isPending=${insight.isPending}, reality="${insight.reality ? insight.reality.substring(0, 50) + '...' : 'EMPTY'}", hasConfidenceBreakdown=${!!insight.confidenceBreakdown}, totalInterviews=${insight.icpValidation?.totalInterviews || 0}"`);
-    // });
     
     return insights;
   }, [localBuyerMapData, buyerMapData, uploadedFiles.interviews.length]);
+
+  // Debug log for transformation - moved before conditional return
+  useEffect(() => {
+    if (buyerMapData && buyerMapData.length > 0) {
+      console.log('🔍 PARSING TEST:', {
+        reality: buyerMapData[0]?.reality,
+        originalOutcome: (buyerMapData[0] as any)?.outcome,
+        parsedOutcome: transformAssumptionForCard(buyerMapData[0])?.displayOutcome
+      });
+    }
+  }, [buyerMapData]);
 
   // Bypass logic for mock mode or when no data is available to show
   if (!uploaded && localBuyerMapData.length === 0 && buyerMapData.length === 0) {
     return <UploadComponent onComplete={() => {
       // Load mock data directly
-      setLocalBuyerMapData(MOCK_BUYER_MAP_DATA);
+      setLocalBuyerMapData(sampleBuyerMapData as BuyerMapData[]);
       // Don't set score until interviews are processed (mock mode exception)
       if (isMock) {
-        setScore(calculateOverallScore(MOCK_BUYER_MAP_DATA));
+        setScore(calculateOverallScore(sampleBuyerMapData as BuyerMapData[]));
       }
       setCurrentStep(3);
       setUploaded(true);
@@ -1018,489 +1221,408 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps> = ({
     }
   };
 
-  // Main return with step indicator and step conditionals
+  // Add the replay handler function
+  const handleReplayLastUpload = async () => {
+    if (!lastInterviewResult) return;
+    setUploadingInterviews(true);
+    try {
+      // Re-run the analysis with the last upload's blobUrls and assumptions
+      const analysisResponse = await fetch('/api/analyze-interviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blobUrls: lastInterviewResult.blobUrls,
+          assumptions: JSON.stringify(lastInterviewResult.assumptions),
+        }),
+      });
+      if (!analysisResponse.ok) {
+        setProcessError('Replay failed.');
+        return;
+      }
+      const payload = await analysisResponse.json();
+      setLocalBuyerMapData(payload.assumptions);
+      if (payload.overallAlignmentScore) setScore(payload.overallAlignmentScore);
+      if (payload.scoreBreakdown) {
+        setScoreBreakdown(payload.scoreBreakdown.breakdown);
+        setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
+        setSummary(payload.scoreBreakdown.summary);
+      }
+      setCurrentStep(3);
+      setUploaded(true);
+    } catch (err) {
+      setProcessError('Replay failed.');
+    } finally {
+      setUploadingInterviews(false);
+      interviewProcessing.resetProcessing();
+    }
+  };
+
+  // Always render the main results UI, but conditionally show content based on state
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
       <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center mb-8">
-          {[1, 2, 3, 4].map((step) => (
-            <div key={step} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
-                currentStep >= step ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-white/20 text-white/60'
-              }`}>
-                {step}
-              </div>
-              {step < 4 && (
-                <div className={`w-16 h-1 mx-2 ${
-                  currentStep > step ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-white/20'
-                }`} />
-              )}
+        <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-6">
+          {/* Compact Deck Analysis Header */}
+          <div className="flex flex-col items-center justify-center mb-2">
+            <div className="inline-flex items-center justify-center w-10 h-10 bg-green-100 rounded-full mb-1 shadow-md">
+              <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
-          ))}
-        </div>
-
-        {/* Step 2: Upload */}
-        {currentStep === 2 && (
-          <div className="space-y-8">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white mb-2">Upload Your Materials</h2>
-              <p className="text-white/70">We'll validate your ICP assumptions against interview data</p>
-            </div>
-            {processError && (
-              <div className="text-center text-red-400 font-semibold mb-4">{processError}</div>
-            )}
-            <div className="border-2 border-dashed border-white/30 rounded-lg p-8 bg-white/5">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-white/20 mx-auto mb-4 rounded"></div>
-                <h3 className="text-lg font-semibold mb-2 text-white">Sales Deck / Pitch Materials</h3>
-                <p className="text-white/60 mb-4">Upload your current sales presentation</p>
-                {uploadedFiles.deck.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{uploadedFiles.deck[0].name}</span>
-                      <button onClick={() => removeFile('deck')} className="text-red-500 hover:text-red-700 text-xl">×</button>
-                    </div>
-                  </div>
-                )}
-                <label className="cursor-pointer">
-                  <input type="file" className="hidden" accept=".pdf,.ppt,.pptx" onChange={(e) => handleFileUpload('deck', e.target.files)} />
-                  <div className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 inline-block">Choose File</div>
-                </label>
-              </div>
-            </div>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-gray-400 mx-auto mb-4 rounded"></div>
-                <h3 className="text-lg font-semibold mb-2">Customer Interview Transcripts</h3>
-                <p className="text-gray-500 mb-4">Upload up to 10 interview transcripts</p>
-                {uploadedFiles.interviews.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {uploadedFiles.interviews.map((file, index) => (
-                      <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{file.name}</span>
-                          <button onClick={() => removeFile('interviews', index)} className="text-red-500 hover:text-red-700 text-xl">×</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <label className={uploadingInterviews ? "cursor-not-allowed" : "cursor-pointer"}>
-                  <input 
-                    ref={fileInputRef}
-                    type="file" 
-                    className="hidden" 
-                    multiple 
-                    accept=".txt,.doc,.docx,.pdf" 
-                    disabled={uploadingInterviews}
-                    onChange={(e) => {
-                      if (!uploadingInterviews) {
-                        handleFileUpload('interviews', e.target.files);
-                      }
-                    }}
-                  />
-                  <div className={`px-6 py-2 rounded-lg inline-block transition-colors ${
-                    uploadingInterviews 
-                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
-                      : 'bg-green-600 text-white hover:bg-green-700'
-                  }`}>
-                    {uploadingInterviews ? 'Uploading...' : 'Add Interview Files'}
-                  </div>
-                </label>
-              </div>
-            </div>
-            <div className="text-center">
-              {/* Show different button states based on progress */}
-              {!uploaded && uploadedFiles.deck.length === 0 && (
-                <p className="text-gray-500 mb-4">Please upload a sales deck to get started</p>
-              )}
-              {!uploaded && uploadedFiles.deck.length > 0 && (
-                <p className="text-blue-600 mb-4">Processing deck...</p>
-              )}
-              {uploaded && (
-                <div>
-                  <p className="text-green-600 mb-4">
-                    ✅ Deck processed! 
-                    {uploadedFiles.interviews.length > 0 
-                      ? ` ${uploadedFiles.interviews.length} interview(s) added for validation.`
-                      : ' Add interviews to validate assumptions.'
-                    }
-                  </p>
-                  <button
-                    onClick={() => setCurrentStep(3)}
-                    className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700"
-                  >
-                    View Results
-                  </button>
-                  {uploadingInterviews && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-center space-x-2 mb-3">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                        <p className="text-blue-600">🚀 Uploading and processing interviews...</p>
-                      </div>
-                      <ProcessingTimeEstimate
-                        interviewCount={uploadedFiles.interviews.length || 1}
-                        isProcessing={uploadingInterviews}
-                        currentStep={currentStep}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Results */}
-        {currentStep === 3 && (
-          <div className="space-y-8" data-testid={isMock ? "mock-dashboard" : "validation-dashboard"}>
-            {/* Show deck processed message when no interviews uploaded yet */}
-            {uploadedFiles.interviews.length === 0 && !isMock && (
-              <div className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-6 mb-8">
-                <h2 className="text-xl font-medium mb-2">Deck Analysis Complete</h2>
-                <p className="text-lg opacity-90 mb-4">Add customer interviews to validate your assumptions</p>
-                
-                <button
-                  onClick={() => {
-                    if (fileInputRef.current) fileInputRef.current.click();
-                  }}
-                  className="bg-white/20 hover:bg-white/30 text-white px-6 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm border border-white/30"
-                >
-                  Add Interviews
-                </button>
-                
-                {/* Debug test button */}
-                <button
-                  onClick={testInterviewAnalysis}
-                  className="ml-4 bg-red-600/80 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors backdrop-blur-sm border border-red-400/30 text-sm"
-                >
-                  🧪 Debug Test
-                </button>
-                
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  accept=".txt,.doc,.docx,.pdf"
-                  onChange={(e) => {
+            <h1 className="text-xl font-extrabold text-white mb-0.5 drop-shadow">Deck Analysis Complete!</h1>
+            <p className="text-xs text-blue-100 mb-2">We've analyzed your deck and generated {buyerMapData?.length || 7} buyer assumptions</p>
+            <div className="flex flex-row gap-2 mt-2">
+              <label htmlFor="interview-upload" className="cursor-pointer inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-base shadow hover:from-blue-700 hover:to-purple-700 transition-all duration-200">
+                <span className="mr-2 text-lg">📁</span> Upload Interview Files
+              </label>
+              <input
+                type="file"
+                multiple
+                accept=".docx,.doc,.pdf,.txt"
+                onChange={(e) => { 
+                  if (e.target.files) {
                     handleFileUpload('interviews', e.target.files);
-                  }}
-                />
-                
-                <div className="mt-4 text-sm opacity-75">
-                  <p>Recommended: 3-5 interviews • Max: 10 files • Supports: .txt, .doc, .docx, .pdf</p>
-                </div>
-              </div>
+                  }
+                }}
+                className="hidden"
+                id="interview-upload"
+              />
+              {/* Removed Replay Last Upload Button */}
+            </div>
+            {!hasInterviewData && (
+              <p className="text-xs text-blue-200 mt-2">Upload customer interviews to validate your assumptions.</p>
             )}
+            <p className="text-[11px] text-blue-200 mt-0.5">Supports .docx, .doc, .pdf, .txt files</p>
+          </div>
 
-            {/* Show interview processing status when interviews are uploaded */}
-            {uploadedFiles.interviews.length > 0 && uploadingInterviews && (
-              <div className="text-center bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl p-6 mb-8">
-                <h2 className="text-xl font-medium mb-2">Processing {uploadedFiles.interviews.length} Interview{uploadedFiles.interviews.length > 1 ? 's' : ''}</h2>
-                <p className="text-lg opacity-90 mb-4">
-                  Analyzing transcripts and validating assumptions...
-                </p>
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span className="text-sm">Est. {Math.ceil(uploadedFiles.interviews.length / 3) * 2}-{Math.ceil(uploadedFiles.interviews.length / 3) * 4} minutes</span>
-                </div>
-              </div>
-            )}
+          {/* Loading overlays for interview upload */}
+          {uploadingInterviews && (
+            <InterviewProcessingOverlay
+              isVisible={uploadingInterviews}
+              progress={interviewProcessing.progress}
+              stats={interviewProcessing.stats}
+              assumptions={localBuyerMapData.map(a => a.v1Assumption || '')}
+              onComplete={() => {
+                setUploadingInterviews(false);
+                interviewProcessing.resetProcessing();
+              }}
+            />
+          )}
 
-            {/* Show successful processing when interviews are complete */}
-            {uploadedFiles.interviews.length > 0 && !uploadingInterviews && (
-              <div className="text-center bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl p-4 mb-8">
-                <h2 className="text-lg font-medium mb-1">✅ Analysis Complete</h2>
-                <p className="opacity-90">
-                  {uploadedFiles.interviews.length} interview{uploadedFiles.interviews.length > 1 ? 's' : ''} processed successfully
-                </p>
-              </div>
-            )}
-
-            {/* Enhanced Overall Score Header with integrated navigation */}
-            {/* Only show score after interviews have been uploaded and processed */}
-            {score !== null && uploadedFiles.interviews.length > 0 && (
-              <div className="text-center bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl p-8 mb-8">
-                {/* Page Title */}
-                <h2 className="text-xl font-medium mb-2 opacity-90">BuyerMap Validation Results</h2>
-                {/* Overall Score */}
-                <div className="text-6xl font-bold mb-2">{score}%</div>
-                <h3 className="text-lg font-medium mb-4">Overall Alignment Score</h3>
-                {/* Score Message */}
-                <p className="text-lg opacity-90 mb-4">{getScoreMessage(score)}</p>
-                
-                {/* Score Breakdown */}
-                <ScoreBreakdown
-                  scoreBreakdown={scoreBreakdown}
-                  outcomeWeights={outcomeWeights}
-                  summary={summary}
-                />
-
-                {/* Action Buttons */}
-                <div className="flex justify-center space-x-4">
-                  <button
-                    onClick={() => {
-                      if (fileInputRef.current) fileInputRef.current.click();
-                    }}
-                    disabled={uploadingInterviews}
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors border border-white/30 ${
-                      uploadingInterviews 
-                        ? 'bg-white/10 text-white/60 cursor-not-allowed' 
-                        : 'bg-white/20 hover:bg-white/30 text-white'
-                    }`}
-                  >
-                    {uploadingInterviews 
-                      ? 'Uploading...' 
-                      : uploadedFiles.interviews.length === 0 
-                        ? 'Add Interviews' 
-                        : 'Upload More Interviews'
-                    }
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    multiple
-                    accept=".txt,.doc,.docx,.pdf"
-                    onChange={(e) => {
-                      handleFileUpload('interviews', e.target.files);
-                    }}
-                  />
-                  <button
-                    onClick={() => setCurrentStep(4)}
-                    className="bg-white text-indigo-600 px-8 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-                  >
-                    Generate Report
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Main Container with Glassmorphism */}
-            <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-8">
-              
-
+          {/* Deck Only State - Show when no interviews uploaded yet */}
+          {!hasInterviewData && (
+            <div className="space-y-6 mt-2">
+              {/* Removed Replay Last Upload Button for deck-only state */}
+              {/* Sectioned Assumptions Display (WHO/WHAT/WHEN/WHY/OTHER) */}
               {/* WHO Section */}
-              {getFilteredDataBySection("WHO").length > 0 && (
-                <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Users className="w-5 h-5 mr-2 text-blue-400" />
-                    WHO • Target Customer Profile
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {validationInsights
-                      .filter(insight => {
-                        const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-                        const item = allData.find(item => item.id === insight.id);
-                        return item && getSectionInfo(item.icpAttribute).section === "WHO";
-                      })
-                      .map(insight => (
-                        <DetailedValidationCard
-                          key={insight.id}
-                          id={insight.id}
-                          attributeTitle={insight.icpAttribute}
-                          subtitle={insight.title}
-                          hasValidation={true}
-                          validation={{
-                            outcome: insight.outcome,
-                            confidence: insight.confidence,
-                            confidence_explanation: insight.confidenceExplanation,
-                            reality: insight.reality,
-                            quotes: insight.quotes
-                          }}
-                          isExpanded={expandedId === insight.id}
-                          onToggleExpand={(id) =>
-                            setExpandedId(prev => prev === id ? null : id)
-                          }
-                        />
-                      ))}
+              {whoAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Users className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHO</h2>
+                      <p className="text-blue-200 text-xs">Buyer Personas & Company Profiles</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whoAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
               {/* WHAT Section */}
-              {getFilteredDataBySection("WHAT").length > 0 && (
-                <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-red-400" />
-                    WHAT • Problems & Solutions
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {validationInsights
-                      .filter(insight => {
-                        const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-                        const item = allData.find(item => item.id === insight.id);
-                        return item && getSectionInfo(item.icpAttribute).section === "WHAT";
-                      })
-                      .map(insight => (
-                        <DetailedValidationCard
-                          key={insight.id}
-                          id={insight.id}
-                          attributeTitle={insight.icpAttribute}
-                          subtitle={insight.title}
-                          hasValidation={true}
-                          validation={{
-                            outcome: insight.outcome,
-                            confidence: insight.confidence,
-                            confidence_explanation: insight.confidenceExplanation,
-                            reality: insight.reality,
-                            quotes: insight.quotes
-                          }}
-                          isExpanded={expandedId === insight.id}
-                          onToggleExpand={(id) =>
-                            setExpandedId(prev => prev === id ? null : id)
-                          }
-                        />
-                      ))}
+              {whatAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Target className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHAT</h2>
+                      <p className="text-purple-200 text-xs">Pain Points & Desired Outcomes</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whatAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
               {/* WHEN Section */}
-              {getFilteredDataBySection("WHEN").length > 0 && (
-                <div className="mb-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Zap className="w-5 h-5 mr-2 text-amber-400" />
-                    WHEN • Purchase Triggers
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {validationInsights
-                      .filter(insight => {
-                        const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-                        const item = allData.find(item => item.id === insight.id);
-                        return item && getSectionInfo(item.icpAttribute).section === "WHEN";
-                      })
-                      .map(insight => (
-                        <DetailedValidationCard
-                          key={insight.id}
-                          id={insight.id}
-                          attributeTitle={insight.icpAttribute}
-                          subtitle={insight.title}
-                          hasValidation={true}
-                          validation={{
-                            outcome: insight.outcome,
-                            confidence: insight.confidence,
-                            confidence_explanation: insight.confidenceExplanation,
-                            reality: insight.reality,
-                            quotes: insight.quotes
-                          }}
-                          isExpanded={expandedId === insight.id}
-                          onToggleExpand={(id) =>
-                            setExpandedId(prev => prev === id ? null : id)
-                          }
-                        />
-                      ))}
+              {whenAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Zap className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHEN</h2>
+                      <p className="text-amber-200 text-xs">Triggers & Timing</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whenAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
-              {/* WHY & HOW Section */}
-              {getFilteredDataBySection("WHY").length > 0 && (
-                <div>
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Shield className="w-5 h-5 mr-2 text-indigo-400" />
-                    WHY & HOW • Barriers & Messaging
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {validationInsights
-                      .filter(insight => {
-                        const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-                        const item = allData.find(item => item.id === insight.id);
-                        return item && getSectionInfo(item.icpAttribute).section === "WHY";
-                      })
-                      .map(insight => (
-                        <DetailedValidationCard
-                          key={insight.id}
-                          id={insight.id}
-                          attributeTitle={insight.icpAttribute}
-                          subtitle={insight.title}
-                          hasValidation={true}
-                          validation={{
-                            outcome: insight.outcome,
-                            confidence: insight.confidence,
-                            confidence_explanation: insight.confidenceExplanation,
-                            reality: insight.reality,
-                            quotes: insight.quotes
-                          }}
-                          isExpanded={expandedId === insight.id}
-                          onToggleExpand={(id) =>
-                            setExpandedId(prev => prev === id ? null : id)
-                          }
-                        />
-                      ))}
+              {/* WHY Section */}
+              {whyAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Shield className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHY</h2>
+                      <p className="text-indigo-200 text-xs">Barriers & Messaging</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whyAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
-              {/* Fallback for uncategorized items */}
-              {getFilteredDataBySection("OTHER").length > 0 && (
-                <div className="mt-8">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-gray-400" />
-                    Other Insights
-                  </h2>
-                  <div className="grid grid-cols-1 gap-6">
-                    {validationInsights
-                      .filter(insight => {
-                        const allData = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
-                        const item = allData.find(item => item.id === insight.id);
-                        return item && getSectionInfo(item.icpAttribute).section === "OTHER";
-                      })
-                      .map(insight => (
-                        <DetailedValidationCard
-                          key={insight.id}
-                          id={insight.id}
-                          attributeTitle={insight.icpAttribute}
-                          subtitle={insight.title}
-                          hasValidation={true}
-                          validation={{
-                            outcome: insight.outcome,
-                            confidence: insight.confidence,
-                            confidence_explanation: insight.confidenceExplanation,
-                            reality: insight.reality,
-                            quotes: insight.quotes
-                          }}
-                          isExpanded={expandedId === insight.id}
-                          onToggleExpand={(id) =>
-                            setExpandedId(prev => prev === id ? null : id)
-                          }
-                        />
-                      ))}
+              {/* OTHER Section */}
+              {otherAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Info className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">OTHER</h2>
+                      <p className="text-gray-200 text-xs">Additional Insights</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {otherAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Step 4: Export */}
-        {currentStep === 4 && (
-          <div className="text-center p-12">
-            <h2 className="text-2xl font-bold text-white mb-4">Export Your BuyerMap Report</h2>
-            <p className="text-white/70">Export functionality coming soon.</p>
-          </div>
-        )}
+          {/* Results State - Show when interviews have been uploaded and validated */}
+          {hasInterviewData && (
+            <div className="space-y-8 mt-2" data-testid={isMock ? "mock-dashboard" : "validation-dashboard"}>
+              {/* Removed Replay Last Upload Button */}
+              {/* Removed BuyerMap Validation Summary grid here */}
+              {/* WHO Section */}
+              {whoAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Users className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHO</h2>
+                      <p className="text-blue-200 text-xs">Buyer Personas & Company Profiles</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whoAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* WHAT Section */}
+              {whatAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Target className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHAT</h2>
+                      <p className="text-purple-200 text-xs">Pain Points & Desired Outcomes</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whatAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* WHEN Section */}
+              {whenAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Zap className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHEN</h2>
+                      <p className="text-amber-200 text-xs">Triggers & Timing</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whenAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* WHY Section */}
+              {whyAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Shield className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">WHY</h2>
+                      <p className="text-indigo-200 text-xs">Barriers & Messaging</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {whyAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* OTHER Section */}
+              {otherAssumptions.length > 0 && (
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center mb-4">
+                    <div className="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center mr-3">
+                      <Info className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">OTHER</h2>
+                      <p className="text-gray-200 text-xs">Additional Insights</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    {otherAssumptions.map((assumption) => (
+                      <DetailedValidationCard
+                        key={assumption.id}
+                        id={assumption.id}
+                        attributeTitle={assumption.icpAttribute || 'Unknown'}
+                        subtitle={assumption.v1Assumption || assumption.title || assumption.assumption}
+                        hasValidation={true}
+                        validation={assumption}
+                        isExpanded={expandedId === assumption.id}
+                        onToggleExpand={(id) => setExpandedId(prev => prev === id ? null : id)}
+                        hasInterviewData={hasInterviewData}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* File Conflict Dialog */}
+          <FileConflictDialog
+            isOpen={isDialogOpen}
+            fileName={currentConflict?.fileName || ''}
+            existingFileInfo={currentConflict?.existingFileInfo}
+            onResolve={handleConflictResolve}
+            onCancel={cancelConflict}
+          />
         </div>
       </div>
-      
-      {/* Interview Processing Overlay */}
-      <InterviewProcessingOverlay
-        isVisible={uploadingInterviews && interviewProcessing.phase === 'interview'}
-        progress={interviewProcessing.progress}
-        stats={interviewProcessing.stats}
-        assumptions={localBuyerMapData.map(a => a.v1Assumption || '')}
-        onComplete={() => {
-          // Processing visualization completed, API call should finish soon
-        }}
-      />
-
-      {/* File Conflict Dialog */}
-      <FileConflictDialog
-        isOpen={isDialogOpen}
-        fileName={currentConflict?.fileName || ''}
-        existingFileInfo={currentConflict?.existingFileInfo}
-        onResolve={handleConflictResolve}
-        onCancel={cancelConflict}
-      />
     </div>
   );
 };

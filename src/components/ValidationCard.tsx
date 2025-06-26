@@ -122,10 +122,19 @@ const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObj
   const [progress, setProgress] = useState(0);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
 
+  // 🚨 EMERGENCY DEBUG: Log what data we're receiving
+  console.log('🚨 VALIDATION CARD DEBUG:', {
+    data: data,
+    comparisonOutcome: data.comparisonOutcome,
+    outcome: data.outcome,
+    icpAttribute: data.icpAttribute,
+    confidenceScore: data.confidenceScore
+  });
+
   const sectionInfo = useMemo(() => getSectionInfo(data.icpAttribute), [data.icpAttribute]);
   const IconComponent = sectionInfo.icon;
-  const outcomeColors = useMemo(() => getOutcomeColors(data.comparisonOutcome), [data.comparisonOutcome]);
-  const OutcomeIcon = useMemo(() => getOutcomeIcon(data.comparisonOutcome), [data.comparisonOutcome]);
+  const outcomeColors = useMemo(() => getOutcomeColors(data.outcome || data.comparisonOutcome), [data.outcome, data.comparisonOutcome]);
+  const OutcomeIcon = useMemo(() => getOutcomeIcon(data.outcome || data.comparisonOutcome), [data.outcome, data.comparisonOutcome]);
 
   const progressBarStyle = useMemo(() => ({
     width: `${progress}%`,
@@ -156,7 +165,7 @@ const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObj
     }
   }, [isExpanded, data.confidenceScore]);
 
-  const label = getBestGuessLabel(data.comparisonOutcome, data.quotes);
+  const label = getBestGuessLabel(data.outcome || data.comparisonOutcome, data.quotes);
   const labelColors = getLabelColor(label);
   const showNoData = (!data.quotes || data.quotes.length === 0) && !data.evidenceFromDeck && !data.reality;
   const showLowConfidenceWarning = !showNoData && (data.confidenceScore < 40);

@@ -2,21 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { parseFile } from '../../../utils/fileParser';
 import { BuyerMapData, Quote, StoredInterview } from '../../../types/buyermap';
-import { createICPValidationData, createValidationData, getAssumptionSpecificInstructions, mapComparisonOutcome } from '../../../utils/dataMapping';
+import { mapComparisonOutcome } from '../../../utils/dataMapping';
 import pLimit from 'p-limit';
-import { createInterview, createInterviewWithHash, createQuote, getCurrentUserServer } from '../../../lib/database-server';
+import { createInterviewWithHash, createQuote, getCurrentUserServer, createInterview } from '../../../lib/database-server';
 // RAG system imports for chunk-based processing
-import { getPineconeIndex } from '../../../lib/pinecone';
 import { 
-  fetchRelevantQuotes, 
   getTopQuotesForSynthesis,
   scoreQuoteRelevanceEnhanced, 
-  filterRelevantQuotesEnhanced,
-  RELEVANCE_FILTERING_CONFIG,
-  filterQuotesByRelevance
+  RELEVANCE_FILTERING_CONFIG
 } from '../../../lib/rag';
 import crypto from 'crypto';
-import { createServerClient } from '../../../lib/supabase-server';
 
 // Initialize OpenAI conditionally
 let openai: OpenAI | null = null;
@@ -800,13 +795,13 @@ Return JSON:
       messages: [
         { 
           role: "system", 
-          content: "Extract relevant quotes for business validation across multiple assumptions. Focus on substance over quantity." 
+          content: "You are a senior business analyst specializing in customer research and ICP validation. Generate specific, actionable key findings that sales teams can use to adjust their messaging and targeting strategies. Focus on concrete insights about roles, decision-making processes, and behavioral patterns." 
         },
         { role: "user", content: prompt }
       ],
       temperature: 0.1,
       response_format: { type: "json_object" },
-      max_tokens: 2000 // Increased for multiple assumptions
+      max_tokens: 2000
     });
     
     const duration = Date.now() - startTime;
@@ -898,7 +893,6 @@ async function processSingleInterviewWithStorage(file: File, assumptions: string
   console.log(`📁 Processing interview with OPTIMIZED batch architecture: ${file.name}`);
   const processingStartTime = Date.now();
   
-  // Note: Duplicate detection is now handled at the client upload level via /api/check-duplicates
   
   const parsed = await parseFile(file);
   if (parsed.error) {
@@ -1095,21 +1089,31 @@ ${quotesText}
 `;
   }).join('\n');
 
-  const prompt = `Analyze each assumption against its supporting quotes and provide a synthesis:
+  const prompt = `You are a senior business analyst specializing in customer research and ICP validation. Analyze each assumption against its supporting quotes and provide SPECIFIC, ACTIONABLE key findings.
 
 ${synthesisPrompts}
 
-For each assumption, provide a 2-3 sentence synthesis that:
-1. Summarizes the key insights from the quotes
-2. Indicates whether the assumption is validated, contradicted, or if gaps are identified
-3. Highlights actionable insights for product marketing
+ANALYSIS REQUIREMENTS FOR EACH ASSUMPTION:
+1. **Be Specific**: Name exact roles, processes, or behaviors mentioned
+2. **Identify Patterns**: Look for recurring themes across multiple speakers
+3. **Understand Workflows**: Describe how decisions are made and who does what
+4. **Find Actionable Insights**: What should the business do differently?
+
+EXAMPLES OF GOOD KEY FINDINGS:
+✅ "Paralegals are the primary evaluators of transcription tools, despite attorneys being the formal buyers. They handle research, testing, and implementation, then present recommendations to attorneys for approval."
+
+✅ "While our deck targets criminal defense attorneys, interviews reveal that paralegals handle 80% of transcription tasks and are the actual decision-makers for Rev adoption."
+
+❌ AVOID: "Target buyers include criminal defense attorneys and forensic psychologists, as evidenced by quotes from professionals in these roles discussing the use of Rev."
+
+For each assumption, provide a specific, actionable synthesis that a sales team could use to adjust their messaging or targeting strategy.
 
 Return JSON:
 {
   "syntheses": [
     {
       "assumptionIndex": 1,
-      "synthesis": "2-3 sentence synthesis of the evidence and insights"
+      "synthesis": "[LABEL]: [Specific, actionable insight with concrete details]"
     }
   ]
 }`;
@@ -1127,7 +1131,7 @@ Return JSON:
       messages: [
         { 
           role: "system", 
-          content: "Synthesize interview evidence against business assumptions. Focus on actionable insights for product marketing." 
+          content: "You are a senior business analyst specializing in customer research and ICP validation. Generate specific, actionable key findings that sales teams can use to adjust their messaging and targeting strategies. Focus on concrete insights about roles, decision-making processes, and behavioral patterns." 
         },
         { role: "user", content: prompt }
       ],
@@ -1163,6 +1167,164 @@ Return JSON:
   } catch (error) {
     console.error(`[OpenAI][batch-synthesis] Error:`, error);
     return {};
+  }
+}
+
+// Helper: Filter quotes relevant to an assumption (same logic as aggregate-validation-results)
+function filterQuotesForAssumption(quotes: Quote[], assumption: string): Quote[] {
+  return quotes
+    .filter(q => q.text && q.text.length > 20 && assumption && q.text.toLowerCase().includes(assumption.split(' ')[0].toLowerCase()))
+    .slice(0, 10);
+}
+
+// === EMBEDDED VALIDATION FUNCTIONS ===
+// These replace the HTTP calls to /api/aggregate-validation-results
+
+function buildSynthesisPrompt(assumption: string, quotes: any[]) {
+  return `
+You are a senior business analyst specializing in customer research and ICP validation. Your task is to analyze interview quotes against a business assumption and provide a SPECIFIC, ACTIONABLE key finding.
+
+ASSUMPTION: "${assumption}"
+
+QUOTES:
+${quotes.map((q, i) => `${i + 1}. "${q.text}" - ${q.speaker} (${q.role})`).join('\n')}
+
+ANALYSIS REQUIREMENTS:
+1. **Be Specific**: Name exact roles, processes, or behaviors mentioned
+2. **Identify Patterns**: Look for recurring themes across multiple speakers
+3. **Understand Workflows**: Describe how decisions are made and who does what
+4. **Find Actionable Insights**: What should the business do differently?
+
+RESPONSE FORMAT:
+[LABEL]: [Specific, actionable insight with concrete details]
+
+Where LABEL must be one of:
+- VALIDATED: Interviews directly support the assumption with specific evidence
+- GAP IDENTIFIED: Interviews reveal missing elements, broader scope, or different patterns than assumed
+- CONTRADICTED: Interviews directly contradict the assumption with specific evidence
+- INSUFFICIENT DATA: Not enough interview data to assess
+
+EXAMPLES OF GOOD KEY FINDINGS:
+✅ "Paralegals are the primary evaluators of transcription tools, despite attorneys being the formal buyers. They handle research, testing, and implementation, then present recommendations to attorneys for approval."
+
+✅ "While our deck targets criminal defense attorneys, interviews reveal that paralegals handle 80% of transcription tasks and are the actual decision-makers for Rev adoption."
+
+✅ "Target buyers include criminal defense attorneys and forensic psychologists, with paralegals emerging as key influencers who manage daily transcription workflows and often make tool recommendations to attorneys."
+
+❌ AVOID: "Target buyers include criminal defense attorneys and forensic psychologists, as evidenced by quotes from professionals in these roles discussing the use of Rev."
+
+CRITICAL: Your key finding should be specific enough that a sales team could use it to adjust their messaging or targeting strategy.
+`;
+}
+
+function calculateConfidence(quotes: any[], hasGaps: boolean) {
+  const baseConfidence = Math.min(100, quotes.length * 15);
+  return hasGaps ? Math.max(baseConfidence - 30, 30) : baseConfidence;
+}
+
+function determineValidationLabel(synthesis: string, quotes: any[]): 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data' {
+  if (quotes.length === 0) return 'Insufficient Data';
+
+  // Debug: Log the full synthesis and first line
+  console.log('🔍 [DEBUG] Full synthesis text:', synthesis);
+  const firstLine = synthesis.split('\n')[0].trim().toUpperCase();
+  console.log('🔍 [DEBUG] First line:', firstLine);
+
+  // Handle the new enhanced format: "[LABEL]: [Detailed insight]"
+  const labelMatch = firstLine.match(/^(VALIDATED|GAP IDENTIFIED|CONTRADICTED|INSUFFICIENT DATA):/);
+  if (labelMatch) {
+    const label = labelMatch[1];
+    console.log(`🔍 [DEBUG] Found explicit label: ${label}`);
+    return label as 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+  }
+
+  // Fallback to old format detection
+  if (firstLine.startsWith('GAP IDENTIFIED')) {
+    console.log('🔍 [DEBUG] Found GAP IDENTIFIED label');
+    return 'Gap Identified';
+  }
+  if (firstLine.startsWith('CONTRADICTED')) {
+    console.log('🔍 [DEBUG] Found CONTRADICTED label');
+    return 'Contradicted';
+  }
+  if (firstLine.startsWith('VALIDATED')) {
+    console.log('🔍 [DEBUG] Found VALIDATED label');
+    return 'Validated';
+  }
+  if (firstLine.startsWith('INSUFFICIENT DATA')) {
+    console.log('🔍 [DEBUG] Found INSUFFICIENT DATA label');
+    return 'Insufficient Data';
+  }
+
+  // Fallback: If no explicit label, default to 'Gap Identified' for safety
+  console.log('🔍 [DEBUG] No explicit label found, defaulting to Gap Identified');
+  return 'Gap Identified';
+}
+
+async function validateAssumptionDirectly(assumption: string, quotes: Quote[]): Promise<{
+  keyFinding: string;
+  label: 'Validated' | 'Contradicted' | 'Gap Identified' | 'Insufficient Data';
+  confidence: number;
+  supportingQuotes: Quote[];
+}> {
+  try {
+    console.log(`🔍 [validateAssumptionDirectly] Starting validation for assumption: "${assumption.slice(0, 50)}..."`);
+    console.log(`📊 [validateAssumptionDirectly] Input quotes count: ${quotes.length}`);
+    
+    if (quotes.length === 0) {
+      console.log(`⚠️ [validateAssumptionDirectly] No quotes provided, returning insufficient data`);
+      return {
+        keyFinding: 'No interview data available for this assumption.',
+        label: 'Insufficient Data',
+        confidence: 0,
+        supportingQuotes: []
+      };
+    }
+    
+    if (!openai) {
+      throw new Error('OpenAI client not initialized');
+    }
+    
+    const prompt = buildSynthesisPrompt(assumption, quotes);
+    
+    console.log(`🚀 [validateAssumptionDirectly] Making OpenAI call for validation`);
+    console.log(`📤 [validateAssumptionDirectly] Prompt preview:`, prompt.substring(0, 200) + '...');
+    
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'system', content: prompt }],
+      max_tokens: 300,
+      temperature: 0.2,
+    });
+    
+    const synthesis = completion.choices[0]?.message?.content?.trim() || '';
+    const label = determineValidationLabel(synthesis, quotes);
+    const hasGaps = label === 'Gap Identified' || label === 'Contradicted';
+    const confidence = calculateConfidence(quotes, hasGaps);
+    
+    console.log(`✅ [validateAssumptionDirectly] Validation completed:`, {
+      keyFinding: synthesis.substring(0, 100) + '...',
+      label,
+      confidence,
+      supportingQuotesCount: quotes.length
+    });
+    
+    return {
+      keyFinding: synthesis,
+      label,
+      confidence,
+      supportingQuotes: quotes
+    };
+    
+  } catch (error) {
+    console.error(`❌ [validateAssumptionDirectly] Failed to validate assumption "${assumption.slice(0, 50)}...":`, error);
+    // Return fallback data if validation fails
+    return {
+      keyFinding: quotes.length > 0 ? `Analysis completed with ${quotes.length} supporting quotes.` : 'No interview data available for this assumption.',
+      label: quotes.length > 0 ? 'Gap Identified' : 'Insufficient Data',
+      confidence: Math.min(100, quotes.length * 10),
+      supportingQuotes: quotes.slice(0, 5)
+    };
   }
 }
 
@@ -1349,6 +1511,63 @@ export async function POST(request: NextRequest) {
      // Calculate overall scores using synthesized assumptions
      const { overallScore, breakdown, summary } = calculateOverallAlignmentScore(synthesizedAssumptions);
      
+     // CRITICAL FIX: Call aggregate-validation-results API for each assumption
+     console.log('🔍 Starting assumption validation with embedded validation logic');
+     
+     // Validate each assumption against interview quotes
+     for (let i = 0; i < synthesizedAssumptions.length; i++) {
+       const assumption = synthesizedAssumptions[i];
+       
+       try {
+         console.log(`🎯 Validating assumption ${i + 1}: "${assumption.v1Assumption?.substring(0, 50)}..."`);
+         
+         // Get quotes for this assumption
+         const relevantQuotes = assumption.quotes || [];
+         console.log(`📊 Found ${relevantQuotes.length} quotes for assumption ${i + 1}`);
+         
+         if (relevantQuotes.length > 0) {
+           // Use embedded validation instead of HTTP call
+           const validationResult = await validateAssumptionDirectly(assumption.v1Assumption, relevantQuotes);
+           console.log(`✅ Validation completed for assumption ${i + 1}:`, validationResult.keyFinding?.substring(0, 100) + '...');
+           
+           // Update with ACTUAL validation results
+           assumption.realityFromInterviews = validationResult.keyFinding;
+           assumption.validationAttributes = [{
+             assumption: assumption.v1Assumption,
+             reality: validationResult.keyFinding,
+             outcome: validationResult.label,
+             confidence: validationResult.confidence,
+             quotes: validationResult.supportingQuotes || relevantQuotes,
+             confidence_explanation: `Based on ${validationResult.supportingQuotes?.length || relevantQuotes.length} relevant interview quotes`
+           }];
+         } else {
+           console.log(`⚠️ No quotes found for assumption ${i + 1}, keeping placeholder`);
+           assumption.validationAttributes = [{
+             assumption: assumption.v1Assumption,
+             reality: "No interview data available for this assumption.",
+             outcome: "Insufficient Data",
+             confidence: 0,
+             quotes: [],
+             confidence_explanation: "No relevant quotes found"
+           }];
+         }
+         
+       } catch (error) {
+         console.error(`❌ Validation error for assumption ${i + 1}:`, error);
+         // Keep original assumption if validation fails
+         assumption.validationAttributes = [{
+           assumption: assumption.v1Assumption,
+           reality: assumption.realityFromInterviews || "Pending validation...",
+           outcome: "Insufficient Data",
+           confidence: 0,
+           quotes: [],
+           confidence_explanation: "Validation error"
+         }];
+       }
+     }
+     
+     console.log('🎉 All assumptions validated, returning results');
+     
      const response = {
        success: true,
        assumptions: synthesizedAssumptions,
@@ -1365,7 +1584,13 @@ export async function POST(request: NextRequest) {
          batchQuoteExtraction: true,
          batchSynthesis: true,
          apiCallsReduced: true
-       }
+       },
+       validationResults: synthesizedAssumptions.map(a => ({
+         keyFinding: a.realityFromInterviews,
+         label: a.comparisonOutcome,
+         confidence: a.confidenceScore || 0,
+         supportingQuotes: a.quotes
+       }))
      };
      
      console.log('✅ OPTIMIZED batch interview analysis completed:', {
