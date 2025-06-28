@@ -126,8 +126,8 @@ const getScoreMessage = (score: number): string => {
 
 // Add this transformation function
 const transformAssumptionForCard = (assumption: any) => {
-  // Use realityFromInterviews if present, otherwise fallback to reality
-  const realityText = assumption?.realityFromInterviews || assumption?.reality || '';
+  // Prioritize keyFinding if present, otherwise use realityFromInterviews or reality
+  const realityText = assumption?.keyFinding || assumption?.realityFromInterviews || assumption?.reality || '';
   const hasInterviewData = !!assumption?.realityFromInterviews || (assumption?.quotes && assumption?.quotes.length > 0);
   const parseOutcomeFromReality = (reality: string) => {
     if (!reality) return 'Pending Validation';
@@ -157,7 +157,7 @@ const transformAssumptionForCard = (assumption: any) => {
   return {
     ...assumption,
     displayOutcome: correctOutcome,
-    displayReality: hasInterviewData ? (realityText || 'Pending validation...') : 'Upload customer interviews to validate this assumption.',
+    displayReality: hasInterviewData ? (realityText.replace(/^(GAP IDENTIFIED:|VALIDATED:|CONTRADICTED:|INSUFFICIENT DATA:|ALIGNED:|MISALIGNED:|CHALLENGED:|NEW DATA ADDED:|REFINED:)\s*/i, '') || 'Pending validation...') : 'Upload customer interviews to validate this assumption.',
     displayConfidence: assumption?.confidence || 0,
     _parsedFromReality: realityText?.substring(0, 50) + '...',
     _originalOutcome: assumption?.outcome,
@@ -330,32 +330,28 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   onReplayLastInterview,
   onInterviewUpload
 }) => {
-  // Debug logging moved to useEffect to prevent excessive re-renders
-  useEffect(() => {
-    console.log('🔍 ModernBuyerMapLanding received props:', {
-      buyerMapDataLength: buyerMapData?.length || 0,
-      overallScore,
-      currentStep,
-      initialInsightsLength: initialInsights?.length || 0,
-      firstBuyerMapItem: buyerMapData?.[0]
-    });
-  }, [buyerMapData, overallScore, currentStep, initialInsights]);
-  
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+  
+  // Detect if we're in demo mode (when initialInsights is passed and matches demo data)
+  const isDemoMode = initialInsights && initialInsights.length > 0 && 
+    (initialInsights[0] as any)?.keyFinding && (initialInsights[0] as any)?.icpTheme === 'DTC Returns Management';
   
   // Debug logging for environment variable
   useEffect(() => {
     console.log('🔥 NEXT_PUBLIC_USE_MOCK is:', process.env.NEXT_PUBLIC_USE_MOCK);
     console.log('🔥 isMock boolean flag:', isMock);
-  }, [isMock]);
+    console.log('🔥 isDemoMode:', isDemoMode);
+  }, [isMock, isDemoMode]);
   
-  // Pick from real data or mocks - prioritize mock mode
-  const initialLocalData = isMock 
-    ? (sampleBuyerMapData as BuyerMapData[])
+  // Pick from real data or mocks - prioritize demo mode, then mock mode
+  const initialLocalData = isDemoMode 
+    ? (initialInsights as any)
+    : isMock 
+    ? (sampleBuyerMapData as any)
     : (initialInsights ?? buyerMapData ?? []);
   
   // If we have buyerMapData, it means deck was already processed, so set uploaded to true
-  const [uploaded, setUploaded] = useState<boolean>(isMock || (buyerMapData?.length ?? 0) > 0);
+  const [uploaded, setUploaded] = useState<boolean>(isDemoMode || isMock || (buyerMapData?.length ?? 0) > 0);
   
   const [uploadedFiles, setUploadedFiles] = useState<{
     deck: File[];
@@ -368,6 +364,8 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   const [processError, setProcessError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadingInterviews, setUploadingInterviews] = useState(false);
+  const [processingOverlayVisible, setProcessingOverlayVisible] = useState(false);
+  const overlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [localBuyerMapData, setLocalBuyerMapData] = useState<BuyerMapData[]>(initialLocalData);
   const [score, setScore] = useState<number | null>(isMock ? overallScore : null);
   const [scoreBreakdown, setScoreBreakdown] = useState<Record<string, { score: number; outcome: string; weight: number }> | undefined>(undefined);
@@ -377,7 +375,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllQuotes, setShowAllQuotes] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const interviewProcessing = useProcessingProgress();
 
   // Add file conflict handler
@@ -396,6 +393,263 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   const [resultsSummary, setResultsSummary] = useState<string>('');
 
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+
+  // Add state to track if a session exists
+  const [hasPersistedSession, setHasPersistedSession] = useState(false);
+  const [localStorageRestored, setLocalStorageRestored] = useState(false);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const [selectedInterviewsForAnalysis, setSelectedInterviewsForAnalysis] = useState<any[]>([]);
+  const [interviewDataReady, setInterviewDataReady] = useState(false);
+  // Add state for upload info popover
+  const [showFileInfo, setShowFileInfo] = useState(false);
+
+  // Debug logging moved to useEffect to prevent excessive re-renders
+  useEffect(() => {
+    console.log('🔍 ModernBuyerMapLanding received props:', {
+      buyerMapDataLength: buyerMapData?.length || 0,
+      overallScore,
+      currentStep,
+      initialInsightsLength: initialInsights?.length || 0,
+      firstBuyerMapItem: buyerMapData?.[0],
+      localBuyerMapDataLength: localBuyerMapData?.length || 0,
+      hasInterviewDataInLocal: localBuyerMapData?.some((a: any) => a.quotes && a.quotes.length > 0) || false
+    });
+  }, [buyerMapData, overallScore, currentStep, initialInsights, localBuyerMapData]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const buyerMapData = localStorage.getItem('buyerMapData');
+      const interviewData = localStorage.getItem('interviewData');
+      const selectedInterviews = localStorage.getItem('selectedInterviewsForAnalysis');
+      
+      setHasPersistedSession(!!buyerMapData && buyerMapData !== '[]');
+      
+      // Check for selected interviews from interview library
+      if (selectedInterviews) {
+        try {
+          const parsedSelectedInterviews = JSON.parse(selectedInterviews);
+          console.log('🔍 [SELECTED_INTERVIEWS] Found selected interviews in localStorage:', {
+            count: parsedSelectedInterviews.length,
+            interviews: parsedSelectedInterviews.map((i: any) => ({
+              filename: i.filename,
+              hasBlobUrl: !!i.blobUrl,
+              blobUrl: i.blobUrl ? `${i.blobUrl.substring(0, 50)}...` : 'null'
+            }))
+          });
+          
+          setSelectedInterviewsForAnalysis(parsedSelectedInterviews);
+          
+          // Clear the localStorage to prevent re-triggering
+          localStorage.removeItem('selectedInterviewsForAnalysis');
+          
+          // Trigger analysis of selected interviews
+          if (parsedSelectedInterviews.length > 0) {
+            console.log('🚀 [SELECTED_INTERVIEWS] Triggering analysis of selected interviews...');
+            analyzeSelectedInterviews(parsedSelectedInterviews);
+          }
+        } catch (error) {
+          console.error('❌ [SELECTED_INTERVIEWS] Failed to parse selected interviews:', error);
+          localStorage.removeItem('selectedInterviewsForAnalysis');
+        }
+      }
+      
+      // Restore interview data if it exists
+      if (interviewData) {
+        try {
+          const parsedInterviewData = JSON.parse(interviewData);
+          console.log('🔄 [PERSISTENCE] Restoring interview data from localStorage:', {
+            count: parsedInterviewData.length,
+            hasQuotes: parsedInterviewData.some((a: any) => a.quotes && a.quotes.length > 0),
+            sampleAssumption: parsedInterviewData[0] ? {
+              assumption: parsedInterviewData[0].v1Assumption?.slice(0, 30),
+              hasQuotes: !!(parsedInterviewData[0].quotes && parsedInterviewData[0].quotes.length > 0),
+              quotesCount: parsedInterviewData[0].quotes?.length || 0,
+              hasReality: !!parsedInterviewData[0].reality,
+              reality: parsedInterviewData[0].reality?.slice(0, 50),
+              hasValidationAttributes: !!parsedInterviewData[0].validationAttributes,
+              validationReality: parsedInterviewData[0].validationAttributes?.[0]?.reality?.slice(0, 50)
+            } : 'No data'
+          });
+          setLocalBuyerMapData(parsedInterviewData);
+        } catch (error) {
+          console.error('❌ [PERSISTENCE] Failed to parse interview data from localStorage:', error);
+        }
+      }
+      
+      // Mark localStorage restoration as complete
+      setLocalStorageRestored(true);
+    }
+  }, []);
+
+  // Function to analyze selected interviews from interview library
+  const analyzeSelectedInterviews = async (selectedInterviews: any[]) => {
+    console.log('🎙️ [SELECTED_INTERVIEWS] Starting analysis of selected interviews:', {
+      count: selectedInterviews.length,
+      interviews: selectedInterviews.map((i: any) => i.filename)
+    });
+    
+    setUploadingInterviews(true);
+    setProcessError(null);
+    
+    try {
+      // Extract blob URLs from selected interviews
+      const blobUrls = selectedInterviews
+        .filter((interview: any) => interview.blobUrl) // Only include interviews with blob URLs
+        .map((interview: any) => interview.blobUrl);
+      
+      if (blobUrls.length === 0) {
+        throw new Error('No valid blob URLs found in selected interviews');
+      }
+      
+      console.log('🔗 [SELECTED_INTERVIEWS] Extracted blob URLs:', blobUrls);
+      
+      // Start enhanced interview processing visualization
+      const assumptionTexts = localBuyerMapData.map(a => a.v1Assumption || '');
+      interviewProcessing.startInterviewProcessing(blobUrls.length, assumptionTexts);
+      
+      // Create a timeout for the analysis request (5 minutes)
+      const timeoutMs = 5 * 60 * 1000; // 5 minutes
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Analysis request timed out after 5 minutes')), timeoutMs)
+      );
+
+      console.log(`⏰ [SELECTED_INTERVIEWS] Starting analysis with ${timeoutMs/1000}s timeout...`);
+      
+      const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          blobUrls,
+          assumptions: JSON.stringify(localBuyerMapData),
+        }),
+      });
+
+      const analysisResponse = await Promise.race([analysisPromise, timeoutPromise]) as Response;
+
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text();
+        console.error('❌ [SELECTED_INTERVIEWS] Analysis response error:', {
+          status: analysisResponse.status,
+          statusText: analysisResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Analysis failed (${analysisResponse.status}): ${analysisResponse.statusText || errorText}`);
+      }
+
+      const payload = await analysisResponse.json();
+      console.log('✅ [SELECTED_INTERVIEWS] Interview analysis completed:', payload);
+      
+      // Process assumptions and add interview data 
+      const processedAssumptions = payload.assumptions.map((assumption: any) => ({
+        ...assumption,
+        // Use the realityFromInterviews field from API response
+        reality: assumption.realityFromInterviews || assumption.reality || 'No interview data available for this assumption.',
+        // Add quote count for debugging
+        quotesCount: assumption.quotes?.length || 0,
+        // Ensure we have interview data flag
+        hasInterviewData: !!(assumption.quotes && assumption.quotes.length > 0)
+      }));
+
+      console.log('🔍 [SELECTED_INTERVIEWS] Processed assumptions with reality data:', {
+        count: processedAssumptions.length,
+        withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length,
+        sampleRealityData: processedAssumptions[0]?.reality || 'No data',
+        quoteCounts: processedAssumptions.map((a: any) => ({ 
+          assumption: a.v1Assumption?.slice(0, 30), 
+          quotes: a.quotesCount,
+          hasData: a.hasInterviewData 
+        }))
+      });
+
+      setLocalBuyerMapData(processedAssumptions);
+      
+      // Persist interview data to localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('interviewData', JSON.stringify(processedAssumptions));
+          // Also persist to backend for dashboard reliability
+          fetch('/api/user-results', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ results: processedAssumptions })
+          }).then(r => r.json()).then(r => {
+            if (!r.success) console.warn('Failed to persist results to backend:', r.error);
+          }).catch(e => console.warn('Failed to persist results to backend:', e));
+        } catch (error) {
+          console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
+        }
+      }
+      
+      // Update score if available
+      if (payload.overallAlignmentScore) {
+        setScore(payload.overallAlignmentScore);
+      }
+      
+      // Update score breakdown data if available
+      if (payload.scoreBreakdown) {
+        setScoreBreakdown(payload.scoreBreakdown.breakdown);
+        setOutcomeWeights(payload.scoreBreakdown.outcomeWeights);
+        setSummary(payload.scoreBreakdown.summary);
+      }
+      
+      setUploadingInterviews(false);
+      interviewProcessing.resetProcessing();
+      setCurrentStep(3);
+      setUploaded(true);
+      
+      // Mark interview data as ready after a short delay to ensure UI updates
+      setTimeout(() => {
+        setInterviewDataReady(true);
+      }, 500);
+      
+      console.log('✅ [SELECTED_INTERVIEWS] Interview data integrated with buyer map');
+      
+      // Call the callback to notify parent component of updated data
+      if (onInterviewDataUpdated && processedAssumptions) {
+        // Create the correct data structure with validationAttributes properly mapped
+        const updatedData = processedAssumptions.map((assumption: any) => ({
+          ...assumption,
+          validationAttributes: [{
+            reality: assumption.realityFromInterviews || assumption.reality || "Pending validation...",
+            outcome: assumption.realityFromInterviews ? "Validated" : "Gap Identified",
+            confidence: assumption.confidenceScore || 85,
+            quotes: assumption.quotes || [],
+            confidence_explanation: assumption.confidenceExplanation || "Based on interview analysis"
+          }]
+        }));
+
+        console.log('🚀 [SELECTED_INTERVIEWS] Calling onInterviewDataUpdated with CORRECT data:', {
+          assumptionsCount: updatedData.length,
+          sampleReality: updatedData[0]?.validationAttributes?.[0]?.reality,
+          hasInterviewData: updatedData[0]?.validationAttributes?.[0]?.reality !== "Pending validation..."
+        });
+        
+        onInterviewDataUpdated(updatedData);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ [SELECTED_INTERVIEWS] Interview analysis error:', error);
+      setProcessError(`Selected interview analysis failed: ${error.message}`);
+      setIsProcessing(false);
+      setUploadingInterviews(false);
+      interviewProcessing.resetProcessing();
+    } finally {
+      setUploadingInterviews(false);
+      interviewProcessing.resetProcessing();
+    }
+  };
+
+  // Handler to resume last session
+  const handleResumeSession = () => {
+    if (typeof window !== 'undefined') {
+      const buyerMapData = localStorage.getItem('buyerMapData');
+      if (buyerMapData && buyerMapData !== '[]') {
+        setLocalBuyerMapData(JSON.parse(buyerMapData));
+        setUploaded(true);
+        setCurrentStep(3);
+      }
+    }
+  };
 
   // Auto-setup for mock mode
   useEffect(() => {
@@ -416,6 +670,11 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     // console.log('showUploadMore state changed:', showUploadMore);
   }, [showUploadMore]);
 
+  // Check auth status on mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
   // Add debug logging for currentStep changes
   useEffect(() => {
     // console.log('currentStep changed:', currentStep);
@@ -426,17 +685,49 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     // console.log('localBuyerMapData updated:', localBuyerMapData);
   }, [localBuyerMapData]);
 
-  // Sync localBuyerMapData with buyerMapData prop
+  // Sync localBuyerMapData with buyerMapData prop (but preserve interview data)
   useEffect(() => {
+    // Only run sync after localStorage restoration is complete
+    if (!localStorageRestored) return;
+    
     if (buyerMapData && buyerMapData.length > 0) {
+      // Check if we have interview data in the current localBuyerMapData
+      const hasInterviewDataInLocal = localBuyerMapData.some(assumption => 
+        assumption.quotes && assumption.quotes.length > 0
+      );
+      
+      // Also check if we have interview data in localStorage that hasn't been loaded yet
+      let hasInterviewDataInStorage = false;
+      if (typeof window !== 'undefined') {
+        const interviewData = localStorage.getItem('interviewData');
+        if (interviewData) {
+          try {
+            const parsedInterviewData = JSON.parse(interviewData);
+            hasInterviewDataInStorage = parsedInterviewData.some((a: any) => a.quotes && a.quotes.length > 0);
+          } catch (error) {
+            console.error('❌ [SYNC] Failed to parse interview data from localStorage:', error);
+          }
+        }
+      }
+      
+      if (!hasInterviewDataInLocal && !hasInterviewDataInStorage) {
+        console.log('🔄 [SYNC] Updating localBuyerMapData with buyerMapData (no interview data to preserve)');
       setLocalBuyerMapData(buyerMapData);
+      } else {
+        console.log('🔄 [SYNC] Preserving interview data in localBuyerMapData (not overwriting with buyerMapData)', {
+          hasInterviewDataInLocal,
+          hasInterviewDataInStorage
+        });
+      }
     }
-  }, [buyerMapData]);
+  }, [buyerMapData, localBuyerMapData, localStorageRestored]);
 
   // Add this logic to detect if interviews have been uploaded
   const hasInterviewData = useMemo(() => {
-    if (!buyerMapData?.length) return false;
-    return buyerMapData.some(assumption => {
+    const data = localBuyerMapData.length > 0 ? localBuyerMapData : buyerMapData;
+    if (!data?.length) return false;
+    
+    const result = data.some(assumption => {
       const hasQuotes = assumption.quotes && assumption.quotes.length > 0;
       const hasRealValidation = assumption.reality && 
         assumption.reality !== 'Pending validation...' &&
@@ -444,9 +735,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       const hasValidationData = assumption.validationAttributes?.[0]?.reality &&
         assumption.validationAttributes[0].reality !== 'Pending validation...' &&
         !assumption.validationAttributes[0].reality.startsWith('Pending');
+      
       return hasQuotes || hasRealValidation || hasValidationData;
     });
-  }, [buyerMapData]);
+    
+    return result;
+  }, [localBuyerMapData, buyerMapData]);
 
   // Memoized data processing - moved outside conditional blocks
   const whoAssumptions = useMemo(() => {
@@ -532,12 +826,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     const total = data.reduce((sum, item) => sum + (item.confidenceScore || 0), 0);
     return Math.round(total / data.length);
   };
-
-  console.log('🔍 [ModernBuyerMapLanding] State detection:', {
-    hasInterviewData,
-    assumptionsCount: buyerMapData?.length,
-    sampleAssumption: buyerMapData?.[0]
-  });
 
   // Process deck with real API endpoint
   const handleProcessDeck = async (files: File[]) => {
@@ -635,7 +923,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
       // Step 2: Send blob URL to analysis API
       console.log('📊 [BLOB] Sending deck blob URL to analysis API...');
-      const res = await fetch('/api/analyze-deck', {
+      const res = await fetch('http://localhost:3000/api/analyze-deck', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -685,11 +973,34 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     }
   };
 
+  // Add this before the handleFileUpload function
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/test-auth');
+      const data = await response.json();
+      console.log('🔐 [AUTH] Current auth status:', data);
+      setAuthStatus(data.authenticated ? 'authenticated' : 'unauthenticated');
+      return data.authenticated;
+    } catch (error) {
+      console.error('❌ [AUTH] Failed to check auth status:', error);
+      setAuthStatus('unauthenticated');
+      return false;
+    }
+  };
+
   // File upload handlers
   const handleFileUpload = async (type: 'deck' | 'interviews', files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     console.log(`handleFileUpload called with:`, { type, files });
+
+    // Check authentication before proceeding
+    const isAuthenticated = await checkAuthStatus();
+    if (!isAuthenticated) {
+      alert('Please log in to upload files. You will be redirected to the login page.');
+      // You could redirect to login here if needed
+      return;
+    }
 
     if (type === 'deck') {
       setUploadedFiles(prev => ({ ...prev, deck: Array.from(files) }));
@@ -698,32 +1009,59 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       const filesArray = Array.from(files);
       console.log(`Processing new files:`, filesArray.map(f => f.name));
       
-      // Check interview upload limits
-      const currentInterviewCount = uploadedFiles.interviews.length;
-      const newFileCount = filesArray.length;
-      const maxInterviews = 10;
+      // PHASE 1.1: Implement 5-interview limit for optimal quality
+      const maxInterviewsPerBatch = 5; // Reduced from 10 to 5 for better quality
       
-      if (currentInterviewCount + newFileCount > maxInterviews) {
-        const allowedCount = maxInterviews - currentInterviewCount;
-        const excessCount = (currentInterviewCount + newFileCount) - maxInterviews;
+      if (filesArray.length > maxInterviewsPerBatch) {
+        const excessCount = filesArray.length - maxInterviewsPerBatch;
+        const allowedFiles = filesArray.slice(0, maxInterviewsPerBatch);
         
-        alert(`⚠️ Upload Limit: You can upload ${allowedCount} more interview(s). ${excessCount} file(s) will be skipped.\n\nFor best results, limit to 10 interviews total to avoid processing timeouts.`);
-        
-        // Take only the allowed number of files
-        if (allowedCount > 0) {
-          const allowedFiles = filesArray.slice(0, allowedCount);
-          setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...allowedFiles] }));
-        } else {
-          console.log('❌ No more interviews can be uploaded (limit reached)');
-          return;
-        }
-      } else {
-        setUploadedFiles(prev => ({ ...prev, interviews: [...prev.interviews, ...filesArray] }));
-      }
+        // Enhanced user feedback with clear reasoning
+        const message = `📊 Interview Upload Limit Applied
 
+✅ Processing ${allowedFiles.length} interviews (optimal batch size for quality)
+⚠️ Skipped ${excessCount} additional files to prevent processing issues
+
+💡 Why this limit?
+• Better quote extraction quality
+• Faster processing and feedback
+• Prevents system timeouts
+• More reliable results
+
+🔄 Next steps:
+• These ${allowedFiles.length} interviews will be processed now
+• Upload the remaining ${excessCount} interviews after this batch completes
+• All interviews will be stored in your Interview Library for future analysis`;
+        
+        alert(message);
+        
+        // Process only the allowed files
+        setUploadedFiles(prev => ({ ...prev, interviews: allowedFiles }));
+        await processInterviewBatch(allowedFiles);
+        } else {
+        // Process all files if within limit
+        setUploadedFiles(prev => ({ ...prev, interviews: filesArray }));
+        await processInterviewBatch(filesArray);
+        }
+      }
+  };
+
+  // PHASE 1.1: Extract interview processing logic for better organization
+  const processInterviewBatch = async (filesArray: File[]) => {
       console.log('🎙️ [BLOB] Starting interview upload process for', filesArray.length, 'files');
       setUploadingInterviews(true);
       setProcessError(null);
+    
+    // Track upload start time for processing time calculation
+    const uploadStartTime = performance.now();
+    
+    // PHASE 1.2: Enhanced logging for contribution tracking
+    console.log('📊 [CONTRIBUTION] Starting contribution tracking for batch:', {
+      fileCount: filesArray.length,
+      fileNames: filesArray.map(f => f.name),
+      assumptionCount: localBuyerMapData.length,
+      assumptions: localBuyerMapData.map(a => a.v1Assumption?.slice(0, 50))
+    });
       
       // Store files for conflict resolution
       setPendingFiles(filesArray);
@@ -744,13 +1082,112 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       
         console.log(`📊 [BLOB] Conflict check results: ${conflictFiles.length} conflicts, ${clearFiles.length} clear files`);
 
-        // Step 2: Upload files without conflicts immediately
-        const blobUrls: string[] = [];
-        if (clearFiles.length > 0) {
-          console.log(`✅ [BLOB] Uploading ${clearFiles.length} files without conflicts`);
-          for (let i = 0; i < clearFiles.length; i++) {
-            const file = clearFiles[i];
-            console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${clearFiles.length}:`, file.name);
+      // Step 2: Check for duplicates BEFORE uploading to blob storage
+      console.log('🔍 [FILE_TRACKING] Checking for duplicates before blob upload...');
+      const filesToUpload: File[] = [];
+      const duplicateFiles: { file: File; existingFile: any }[] = [];
+      const blobUrls: string[] = []; // Move declaration here
+      const existingAnalysisResults: any[] = []; // Store existing analysis results
+      
+      for (const file of clearFiles) {
+        try {
+          // Convert file to base64 for content hash generation
+          const fileBuffer = await file.arrayBuffer();
+          const fileContent = Buffer.from(fileBuffer).toString('base64');
+          
+          // Check for duplicates using the API
+          const duplicateCheckResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              fileSize: file.size,
+              blobUrl: '', // Will be set after upload
+              fileContent: fileContent
+            })
+          });
+          
+          if (duplicateCheckResponse.ok) {
+            const duplicateResult = await duplicateCheckResponse.json();
+            
+            if (duplicateResult.isDuplicate) {
+              console.log('🔄 [FILE_TRACKING] Duplicate detected before upload:', file.name);
+              duplicateFiles.push({ file, existingFile: duplicateResult.existingFile });
+              
+              // Check if the existing file has analysis results
+              const hasAnalysisResults = duplicateResult.existingFile.analysis_results && 
+                Object.keys(duplicateResult.existingFile.analysis_results).length > 0;
+              
+              let message = `📁 "${file.name}" has already been analyzed.\n\n`;
+              
+              if (hasAnalysisResults) {
+                message += `✅ This file has existing analysis results.\n\n` +
+                  `Would you like to:\n` +
+                  `• Click "OK" to use existing results\n` +
+                  `• Click "Cancel" to skip this file\n\n` +
+                  `Existing file: ${duplicateResult.existingFile.filename}\n` +
+                  `Uploaded: ${new Date(duplicateResult.existingFile.upload_date).toLocaleDateString()}`;
+              } else {
+                message += `⚠️ This file was uploaded before but doesn't have analysis results stored.\n\n` +
+                  `Would you like to:\n` +
+                  `• Click "OK" to re-analyze this file (recommended)\n` +
+                  `• Click "Cancel" to skip this file\n\n` +
+                  `Existing file: ${duplicateResult.existingFile.filename}\n` +
+                  `Uploaded: ${new Date(duplicateResult.existingFile.upload_date).toLocaleDateString()}`;
+              }
+              
+              const useExisting = confirm(message);
+              
+              if (useExisting) {
+                console.log('✅ [FILE_TRACKING] User chose to use existing file:', file.name);
+                // Add the existing file's blob URL to the processing list
+                if (duplicateResult.existingFile.blob_url) {
+                  blobUrls.push(duplicateResult.existingFile.blob_url);
+                  // Store the existing analysis result if available
+                  if (hasAnalysisResults) {
+                    existingAnalysisResults.push(duplicateResult.existingFile.analysis_results);
+                    console.log('💾 [DUPLICATE] Found existing analysis results for:', file.name);
+                  } else {
+                    console.log('⚠️ [DUPLICATE] No existing analysis results found for:', file.name);
+                    // If no analysis results, we'll need to re-analyze
+                    // Remove from blobUrls since we'll process it as a new file
+                    blobUrls.pop();
+                    filesToUpload.push(file);
+                  }
+                }
+              } else {
+                console.log('⏭️ [FILE_TRACKING] User chose to skip file:', file.name);
+              }
+            } else {
+              // No duplicate, add to upload list
+              filesToUpload.push(file);
+            }
+          } else {
+            // Check if it's a conflict error
+            if (duplicateCheckResponse.status === 409) {
+              const conflictMessage = `⚠️ "${file.name}" conflicts with an existing file.\n\nPlease rename the file or choose a different one.`;
+              alert(conflictMessage);
+            } else {
+              console.warn('⚠️ [FILE_TRACKING] Failed to check for duplicates:', await duplicateCheckResponse.text());
+              // Continue with upload anyway
+              filesToUpload.push(file);
+            }
+          }
+        } catch (error) {
+          console.error('❌ [FILE_TRACKING] Error checking for duplicates:', error);
+          // Continue with upload anyway
+          filesToUpload.push(file);
+        }
+      }
+
+      console.log(`📊 [FILE_TRACKING] Duplicate check results: ${duplicateFiles.length} duplicates, ${filesToUpload.length} files to upload`);
+
+      // Step 3: Upload only non-duplicate files to blob storage
+      if (filesToUpload.length > 0) {
+        console.log(`✅ [BLOB] Uploading ${filesToUpload.length} files without duplicates`);
+        for (let i = 0; i < filesToUpload.length; i++) {
+          const file = filesToUpload[i];
+          console.log(`🎙️ [BLOB] Uploading file ${i + 1}/${filesToUpload.length}:`, file.name);
             
             // Sanitize filename to avoid URL encoding issues
             const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -775,30 +1212,150 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
             const uploadDuration = (uploadEndTime - uploadStartTime) / 1000;
             const throughputMbps = (file.size / 1024 / 1024) / uploadDuration;
             console.log(`✅ [BLOB] Interview uploaded in ${uploadDuration.toFixed(2)}s (${throughputMbps.toFixed(2)} MB/s): ${file.name} -> ${blob.url}`);
+          
+          // Save interview record to database with blob URL
+          try {
+            console.log('💾 [DATABASE] About to save interview record for:', file.name);
+            
+            // Convert file to base64 for content hash generation
+            const fileBuffer = await file.arrayBuffer();
+            const fileContent = Buffer.from(fileBuffer).toString('base64');
+            
+            console.log('💾 [DATABASE] Save request data:', {
+              filename: file.name,
+              fileSize: file.size,
+              blobUrl: blob.url.substring(0, 50) + '...',
+              hasFileContent: !!fileContent
+            });
+            
+            console.log('💾 [DATABASE] Making fetch request to /api/save-interview-record...');
+            const saveResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                filename: file.name,
+                fileSize: file.size,
+                blobUrl: blob.url,
+                fileContent: fileContent
+              })
+            });
+            
+            console.log('💾 [DATABASE] Save response received:', {
+              status: saveResponse.status,
+              statusText: saveResponse.statusText,
+              ok: saveResponse.ok
+            });
+            
+            if (saveResponse.ok) {
+              const saveResult = await saveResponse.json();
+              console.log('💾 [DATABASE] Interview record saved successfully:', saveResult);
+            } else {
+              const errorText = await saveResponse.text();
+              console.warn('⚠️ [DATABASE] Failed to save interview record:', errorText);
+            }
+          } catch (error) {
+            console.error('❌ [DATABASE] Error saving interview record:', error);
+          }
             
             blobUrls.push(blob.url);
           }
         }
 
-        // Step 3: Handle conflicts if any exist
-        if (conflictFiles.length > 0) {
-          console.log(`⚠️ [BLOB] Found ${conflictFiles.length} file conflicts, will show dialog`);
+      // Step 4: Process all files (new uploads + existing duplicates)
+      if (blobUrls.length > 0) {
+        console.log(`🚀 [BLOB] Processing ${blobUrls.length} interview files...`);
+        
+        // If we have existing analysis results, use them instead of re-analyzing
+        if (existingAnalysisResults.length > 0 && existingAnalysisResults.length === blobUrls.length) {
+          console.log('🔄 [DUPLICATE] Using existing analysis results for all files');
           
-          // Set conflicts to trigger dialog display
-          setConflictsAndShow(conflictFiles);
+          // Get the most recent analysis result (they should all be the same for duplicates)
+          const existingResult = existingAnalysisResults[0];
           
-          // For now, we'll handle the first conflict and let the user resolve them one by one
-          // The actual resolution will be handled by the dialog component's onResolve callback
-          console.log('🔄 [BLOB] Dialog will be shown for conflict resolution');
+          if (existingResult && existingResult.assumptions) {
+            console.log('🔍 [DUPLICATE] Found existing analysis with assumptions:', existingResult.assumptions.length);
           
-          // Note: The actual file processing will continue after dialog resolution
-          // This is a simplified implementation - in a full implementation, you'd want to
-          // suspend this function and resume after all conflicts are resolved
+            // Use the existing analysis results directly
+            const processedAssumptions = existingResult.assumptions.map((assumption: any) => ({
+              ...assumption,
+              // Use the realityFromInterviews field from existing analysis
+              reality: assumption.realityFromInterviews || assumption.reality || 'No interview data available for this assumption.',
+              // Add quote count for debugging
+              quotesCount: assumption.quotes?.length || 0,
+              // Ensure we have interview data flag
+              hasInterviewData: !!(assumption.quotes && assumption.quotes.length > 0)
+            }));
+
+            console.log('🔍 [DUPLICATE] Processed existing assumptions:', {
+              count: processedAssumptions.length,
+              withQuotes: processedAssumptions.filter((a: any) => a.quotes && a.quotes.length > 0).length,
+              withReality: processedAssumptions.filter((a: any) => a.reality !== 'No interview data available for this assumption.').length
+            });
+
+            setLocalBuyerMapData(processedAssumptions);
+            
+            // Persist interview data to localStorage
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('interviewData', JSON.stringify(processedAssumptions));
+                // Also persist to backend for dashboard reliability
+                fetch('/api/user-results', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ results: processedAssumptions })
+                }).then(r => r.json()).then(r => {
+                  if (!r.success) console.warn('Failed to persist results to backend:', r.error);
+                }).catch(e => console.warn('Failed to persist results to backend:', e));
+              } catch (error) {
+                console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
+              }
         }
 
-        // Step 4: Process all uploaded files (for now, just the clear files)
-        if (blobUrls.length > 0) {
-          console.log(`🚀 [BLOB] Processing ${blobUrls.length} interview files...`);
+            // Update score if available
+            if (existingResult.overallAlignmentScore) {
+              setScore(existingResult.overallAlignmentScore);
+            }
+            
+            // Update score breakdown data if available
+            if (existingResult.scoreBreakdown) {
+              setScoreBreakdown(existingResult.scoreBreakdown.breakdown);
+              setOutcomeWeights(existingResult.scoreBreakdown.outcomeWeights);
+              setSummary(existingResult.scoreBreakdown.summary);
+            }
+            
+            setUploadingInterviews(false);
+            interviewProcessing.resetProcessing();
+            setCurrentStep(3);
+            setUploaded(true);
+            
+            // Mark interview data as ready after a short delay to ensure UI updates
+            setTimeout(() => {
+              setInterviewDataReady(true);
+            }, 500);
+            
+            console.log('✅ [DUPLICATE] Existing interview data integrated with buyer map');
+            
+            // Call the callback to notify parent component of updated data
+            if (onInterviewDataUpdated && processedAssumptions) {
+              const updatedData = processedAssumptions.map((assumption: any) => ({
+                ...assumption,
+                validationAttributes: [{
+                  reality: assumption.realityFromInterviews || assumption.reality || "Pending validation...",
+                  outcome: assumption.realityFromInterviews ? "Validated" : "Gap Identified",
+                  confidence: assumption.confidenceScore || 85,
+                  quotes: assumption.quotes || [],
+                  confidence_explanation: assumption.confidenceExplanation || "Based on interview analysis"
+                }]
+              }));
+              
+              onInterviewDataUpdated(updatedData);
+            }
+            
+            return; // Exit early since we used existing results
+          } else {
+            console.log('⚠️ [DUPLICATE] Existing analysis result is missing or invalid, proceeding with re-analysis');
+          }
+        }
           
           // Update progress indicator
           const resetProgress = interviewProcessing.startInterviewProcessing(blobUrls.length, localBuyerMapData.map(d => d.v1Assumption));
@@ -812,7 +1369,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
           console.log(`⏰ [BLOB] Starting analysis with ${timeoutMs/1000}s timeout...`);
           
-          const analysisPromise = fetch('/api/analyze-interviews', {
+        const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -835,6 +1392,57 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
           const payload = await analysisResponse.json();
           console.log('✅ [BLOB] Interview analysis completed:', payload);
+        
+        // PHASE 1.2: Enhanced logging for contribution tracking
+        console.log('📊 [CONTRIBUTION] Analysis results summary:', {
+          totalFiles: filesArray.length,
+          processedFiles: blobUrls.length,
+          totalQuotes: Object.values(payload.assumptions || {}).reduce((sum: number, assumption: any) => sum + (assumption.quotes?.length || 0), 0),
+          assumptionsWithQuotes: (payload.assumptions || []).filter((a: any) => a.quotes && a.quotes.length > 0).length,
+          totalAssumptions: localBuyerMapData.length
+        });
+        
+        // Update interview records in database with analysis results
+        for (let i = 0; i < filesArray.length; i++) {
+          const file = filesArray[i];
+          const totalQuotes = Object.values(payload.assumptions || {}).reduce((sum: number, assumption: any) => {
+            return sum + (assumption.quotes?.filter((q: any) => q.source === file.name)?.length || 0);
+          }, 0);
+          
+          const uniqueSpeakers = new Set();
+          Object.values(payload.assumptions || {}).forEach((assumption: any) => {
+            assumption.quotes?.forEach((q: any) => {
+              if (q.source === file.name && q.speaker) {
+                uniqueSpeakers.add(q.speaker);
+              }
+            });
+          });
+          
+          try {
+            const updateResponse = await fetch('http://localhost:3000/api/update-interview-record', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                filename: file.name,
+                quotesExtracted: totalQuotes,
+                processingTime: Math.round((performance.now() - uploadStartTime) / 1000), // Approximate processing time
+                uniqueSpeakers: Array.from(uniqueSpeakers),
+                vectorsStored: 1, // Assuming 1 vector per interview for now
+                status: 'completed',
+                analysisResults: payload // Store the full analysis results
+              })
+            });
+            
+            if (updateResponse.ok) {
+              const updateResult = await updateResponse.json();
+              console.log('🔄 [DATABASE] Interview record updated:', updateResult.interviewId);
+            } else {
+              console.warn('⚠️ [DATABASE] Failed to update interview record:', await updateResponse.text());
+            }
+          } catch (error) {
+            console.error('❌ [DATABASE] Error updating interview record:', error);
+          }
+        }
           
           // Process assumptions and add interview data 
           const processedAssumptions = payload.assumptions.map((assumption: any) => ({
@@ -859,6 +1467,36 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           });
 
           setLocalBuyerMapData(processedAssumptions);
+        
+        // Persist interview data to localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('interviewData', JSON.stringify(processedAssumptions));
+            // Also persist to backend for dashboard reliability
+            fetch('/api/user-results', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ results: processedAssumptions })
+            }).then(r => r.json()).then(r => {
+              if (!r.success) console.warn('Failed to persist results to backend:', r.error);
+            }).catch(e => console.warn('Failed to persist results to backend:', e));
+          } catch (error) {
+            console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
+          }
+        }
+        
+        // Debug logging for processed assumptions
+        console.log('🔍 [DEBUG] Processed assumptions after analysis:', {
+          count: processedAssumptions.length,
+          withQuotes: processedAssumptions.filter((a: any) => a.quotes && a.quotes.length > 0).length,
+          withReality: processedAssumptions.filter((a: any) => a.reality && a.reality !== 'No interview data available for this assumption.').length,
+          sampleAssumption: processedAssumptions[0] ? {
+            assumption: processedAssumptions[0].v1Assumption?.slice(0, 50),
+            quotesCount: processedAssumptions[0].quotes?.length || 0,
+            reality: processedAssumptions[0].reality?.slice(0, 100),
+            hasInterviewData: processedAssumptions[0].hasInterviewData
+          } : 'No assumptions'
+        });
           
           // Update score if available
           if (payload.overallAlignmentScore) {
@@ -876,6 +1514,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           interviewProcessing.resetProcessing();
           setCurrentStep(3);
           setUploaded(true);
+        
+        // Mark interview data as ready after a short delay to ensure UI updates
+        setTimeout(() => {
+          setInterviewDataReady(true);
+        }, 500);
+        
           console.log('✅ Interview data integrated with buyer map');
           
           // Call the callback to notify parent component of updated data
@@ -905,11 +1549,13 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       } catch (error: any) {
         console.error('❌ Interview upload error:', error);
         setProcessError(`Interview upload failed: ${error.message}`);
-        interviewProcessing.setError(error.message);
+      setIsProcessing(false);
+      setUploadingInterviews(false);
+      interviewProcessing.resetProcessing();
+      // Optionally, set a UI error state here
       } finally {
         setUploadingInterviews(false);
         interviewProcessing.resetProcessing();
-      }
     }
   };
 
@@ -967,13 +1613,52 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       if (resultUrl) {
         console.log(`✅ [BLOB] Conflict resolved, file available at: ${resultUrl}`);
         
+        // Save interview record to database for conflict resolution
+        try {
+          // Convert file to base64 for content hash generation
+          const fileBuffer = await originalFile.arrayBuffer();
+          const fileContent = Buffer.from(fileBuffer).toString('base64');
+          
+          const saveResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: currentConflict.fileName,
+              fileSize: originalFile.size,
+              blobUrl: resultUrl,
+              fileContent: fileContent // Pass file content for enhanced duplicate detection
+            })
+          });
+          
+          if (saveResponse.ok) {
+            const saveResult = await saveResponse.json();
+            console.log('💾 [DATABASE] Interview record saved (conflict resolution):', saveResult.interviewId);
+            
+            // Check if this was a duplicate
+            if (saveResult.isDuplicate) {
+              console.log('🔄 [FILE_TRACKING] Duplicate detected during conflict resolution:', saveResult.existingFile);
+              
+              // Show user-friendly duplicate message
+              const duplicateMessage = `📁 "${currentConflict.fileName}" has already been analyzed.\n\nThis file was previously uploaded and processed. You can find the results in your Interview Library.`;
+              alert(duplicateMessage);
+              
+              // Don't process this duplicate file
+              return;
+            }
+          } else {
+            console.warn('⚠️ [DATABASE] Failed to save interview record (conflict resolution):', await saveResponse.text());
+          }
+        } catch (error) {
+          console.error('❌ [DATABASE] Error saving interview record (conflict resolution):', error);
+        }
+        
         // Process the resolved file with timeout protection
         const timeoutMs = 5 * 60 * 1000; // 5 minutes
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Single file analysis timed out after 5 minutes')), timeoutMs)
         );
 
-        const analysisPromise = fetch('/api/analyze-interviews', {
+        const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -1015,6 +1700,19 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           setCurrentStep(3);
           setUploaded(true);
           console.log('✅ Interview data integrated with buyer map');
+          
+          // Persist interview data to localStorage
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('interviewData', JSON.stringify(processedAssumptions));
+              console.log('💾 [PERSISTENCE] Saved interview data to localStorage (conflict resolution):', {
+                count: processedAssumptions.length,
+                withQuotes: processedAssumptions.filter((a: any) => a.quotes && a.quotes.length > 0).length
+              });
+            } catch (error) {
+              console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
+            }
+          }
           
           // Call the callback to notify parent component of updated data
           if (onInterviewDataUpdated && processedAssumptions) {
@@ -1185,25 +1883,70 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     }
   }, [buyerMapData]);
 
+  // Show overlay when uploadingInterviews is true, and keep it for at least 2 seconds
+  useEffect(() => {
+    if (uploadingInterviews) {
+      setProcessingOverlayVisible(true);
+      setInterviewDataReady(false); // Reset data ready state when starting new upload
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+    } else if (processingOverlayVisible) {
+      // Only hide the overlay if we have interview data to show AND it's ready
+      const hasDataToShow = localBuyerMapData.some(assumption => 
+        assumption.quotes && assumption.quotes.length > 0
+      );
+      
+      if (hasDataToShow && interviewDataReady) {
+        // Wait at least 2 seconds after data is available and ready before hiding
+        overlayTimeoutRef.current = setTimeout(() => {
+          setProcessingOverlayVisible(false);
+        }, 2000);
+      } else if (!hasDataToShow) {
+        // If no data to show, keep overlay visible for longer
+        overlayTimeoutRef.current = setTimeout(() => {
+          setProcessingOverlayVisible(false);
+        }, 5000);
+      }
+    }
+    return () => {
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+    };
+  }, [uploadingInterviews, processingOverlayVisible, localBuyerMapData, interviewDataReady]);
+
   // Bypass logic for mock mode or when no data is available to show
   if (!uploaded && localBuyerMapData.length === 0 && buyerMapData.length === 0) {
-    return <UploadComponent onComplete={() => {
+    return (
+      <div>
+        {/* Resume Last Session Button */}
+        {hasPersistedSession && (
+          <div className="flex flex-col items-center mb-4">
+            <button
+              onClick={handleResumeSession}
+              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg font-semibold text-base shadow hover:from-green-700 hover:to-blue-700 transition-all duration-200 mb-2"
+            >
+              <span className="mr-2">🔄</span> Resume Last Session
+            </button>
+            <span className="text-xs text-green-200">Continue where you left off</span>
+          </div>
+        )}
+        <UploadComponent onComplete={() => {
       // Load mock data directly
-      setLocalBuyerMapData(sampleBuyerMapData as BuyerMapData[]);
+          setLocalBuyerMapData(sampleBuyerMapData as BuyerMapData[]);
       // Don't set score until interviews are processed (mock mode exception)
       if (isMock) {
-        setScore(calculateOverallScore(sampleBuyerMapData as BuyerMapData[]));
+            setScore(calculateOverallScore(sampleBuyerMapData as BuyerMapData[]));
       }
       setCurrentStep(3);
       setUploaded(true);
-    }} />;
+        }} />
+      </div>
+    );
   }
 
   // Add a test function for debugging
   const testInterviewAnalysis = async () => {
     console.log('🧪 Testing interview analysis with debugging...');
     try {
-      const response = await fetch('/api/analyze-interviews', {
+      const response = await fetch('http://localhost:3000/api/analyze-interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1227,7 +1970,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     setUploadingInterviews(true);
     try {
       // Re-run the analysis with the last upload's blobUrls and assumptions
-      const analysisResponse = await fetch('/api/analyze-interviews', {
+      const analysisResponse = await fetch('http://localhost:3000/api/analyze-interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1257,46 +2000,112 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     }
   };
 
+  // Function to clear all localStorage data and reset state
+  const clearSessionData = () => {
+    console.log('🧹 Clearing all session data from localStorage');
+    
+    // Clear all localStorage items
+    localStorage.removeItem('buyerMapData');
+    localStorage.removeItem('buyerMapScore');
+    localStorage.removeItem('buyerMapCurrentStep');
+    localStorage.removeItem('buyerMapUploaded');
+    localStorage.removeItem('buyerMapScoreBreakdown');
+    localStorage.removeItem('buyerMapOutcomeWeights');
+    localStorage.removeItem('buyerMapSummary');
+    localStorage.removeItem('buyerMapExpandedId');
+    localStorage.removeItem('buyerMapUploadedFiles');
+    localStorage.removeItem('interviewData'); // Clear interview data too
+    
+    // Reset all local state
+    setLocalBuyerMapData([]);
+    setScore(null);
+    setCurrentStep(1);
+    setUploaded(false);
+    setScoreBreakdown(undefined);
+    setOutcomeWeights(undefined);
+    setSummary(undefined);
+    setExpandedId(null);
+    setUploadedFiles({ deck: [], interviews: [] });
+    setProcessError(null);
+    setUploadingInterviews(false);
+    interviewProcessing.resetProcessing();
+    
+    console.log('✅ Session data cleared, returning to initial state');
+  };
+
   // Always render the main results UI, but conditionally show content based on state
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
       <div className="max-w-7xl mx-auto p-6">
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 border border-white/20 p-6">
-          {/* Compact Deck Analysis Header */}
-          <div className="flex flex-col items-center justify-center mb-2">
-            <div className="inline-flex items-center justify-center w-10 h-10 bg-green-100 rounded-full mb-1 shadow-md">
-              <CheckCircle className="w-5 h-5 text-green-600" />
+          {/* Option 4: Hero Section (Bold, Centered) */}
+          <div className="text-center py-8 mb-8">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+                Validate Your Buyer Assumptions
+              </h1>
+              <p className="text-xl text-blue-100 mb-8 leading-relaxed">
+                Your sales deck analysis is complete! Now upload customer interviews to validate your assumptions and discover actionable insights.
+              </p>
+              {/* Primary CTA - Upload Interview Files */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6 relative">
+                <label
+                  htmlFor="interview-upload"
+                  onMouseEnter={() => setShowFileInfo(true)}
+                  onMouseLeave={() => setShowFileInfo(false)}
+                  onFocus={() => setShowFileInfo(true)}
+                  onBlur={() => setShowFileInfo(false)}
+                  tabIndex={0}
+                  className={`cursor-pointer inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold text-lg shadow-lg transition-all duration-200 transform
+                    hover:from-blue-700 hover:to-purple-700 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400
+                    ${showFileInfo ? 'ring-2 ring-blue-400 scale-105' : ''}
+                  `}
+                  style={{ position: 'relative', zIndex: 10 }}
+                >
+                  <span className="mr-3 text-xl">📁</span>
+                  Upload Interview Files
+                  <span className="ml-2 text-base opacity-70">→</span>
+                  {showFileInfo && (
+                    <div
+                      className="absolute z-50 left-full top-1/2 -translate-y-1/2 ml-4 w-80 bg-blue-900/95 text-blue-100 text-xs rounded-lg shadow-lg p-4 text-left animate-fade-in"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      <div className="mb-1">📊 <b>Supported:</b> .docx, .doc, .pdf, .txt files</div>
+                      <div className="mb-1">• <b>Limit:</b> 5 interviews per batch for optimal quality</div>
+                    </div>
+                  )}
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".docx,.doc,.pdf,.txt"
+                  onChange={(e) => { 
+                    if (e.target.files) {
+                      handleFileUpload('interviews', e.target.files);
+                    }
+                  }}
+                  className="hidden"
+                  id="interview-upload"
+                />
+                {/* Secondary CTA - New Session */}
+                <button
+                  onClick={clearSessionData}
+                  className="inline-flex items-center px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold text-base shadow hover:bg-gray-700 transition-all duration-200"
+                  title="Clear all data and start a new session"
+                >
+                  <span className="mr-2">🔄</span> Start New Session
+                </button>
+              </div>
+              {/* Remove always-visible supporting text for upload info */}
+              {/* Remove Authentication Status Indicator */}
+              {/* Remove localStorage Status Indicator */}
             </div>
-            <h1 className="text-xl font-extrabold text-white mb-0.5 drop-shadow">Deck Analysis Complete!</h1>
-            <p className="text-xs text-blue-100 mb-2">We've analyzed your deck and generated {buyerMapData?.length || 7} buyer assumptions</p>
-            <div className="flex flex-row gap-2 mt-2">
-              <label htmlFor="interview-upload" className="cursor-pointer inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-base shadow hover:from-blue-700 hover:to-purple-700 transition-all duration-200">
-                <span className="mr-2 text-lg">📁</span> Upload Interview Files
-              </label>
-              <input
-                type="file"
-                multiple
-                accept=".docx,.doc,.pdf,.txt"
-                onChange={(e) => { 
-                  if (e.target.files) {
-                    handleFileUpload('interviews', e.target.files);
-                  }
-                }}
-                className="hidden"
-                id="interview-upload"
-              />
-              {/* Removed Replay Last Upload Button */}
-            </div>
-            {!hasInterviewData && (
-              <p className="text-xs text-blue-200 mt-2">Upload customer interviews to validate your assumptions.</p>
-            )}
-            <p className="text-[11px] text-blue-200 mt-0.5">Supports .docx, .doc, .pdf, .txt files</p>
           </div>
 
           {/* Loading overlays for interview upload */}
-          {uploadingInterviews && (
+          {processingOverlayVisible && (
             <InterviewProcessingOverlay
-              isVisible={uploadingInterviews}
+              isVisible={true}
               progress={interviewProcessing.progress}
               stats={interviewProcessing.stats}
               assumptions={localBuyerMapData.map(a => a.v1Assumption || '')}
