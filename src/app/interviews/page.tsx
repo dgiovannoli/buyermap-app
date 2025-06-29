@@ -15,10 +15,14 @@ import {
   FileText,
   MapPin,
   Briefcase,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 import { StoredInterview, InterviewFilterCriteria } from '../../types/buyermap';
-import { getUserInterviewsClient } from '../../lib/database';
 
 interface InterviewLibraryProps {
   // Will be populated from database
@@ -33,16 +37,39 @@ export default function InterviewLibraryPage() {
   const [selectedInterviews, setSelectedInterviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingInterview, setDeletingInterview] = useState<string | null>(null);
 
   // Load user's interviews from database
   useEffect(() => {
     const loadInterviews = async () => {
       try {
         setLoading(true);
-        const userInterviews = await getUserInterviewsClient();
+        console.log('🔍 [INTERVIEWS] Loading interviews from API...');
+        
+        // Use the new API route instead of client-side function
+        const response = await fetch('http://localhost:3000/api/get-user-interviews');
+        
+        if (!response.ok) {
+          // Check if it's an authentication error
+          if (response.status === 401) {
+            throw new Error('Authentication required: Please log in to access your interview library');
+          }
+          throw new Error(`Failed to fetch interviews: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('🔍 [INTERVIEWS] API response:', result);
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch interviews');
+        }
+        
+        const userInterviews = result.interviews;
+        
+        console.log('🔍 [INTERVIEWS] Raw database response:', userInterviews);
         
         // Convert database format to StoredInterview format
-        const convertedInterviews: StoredInterview[] = userInterviews.map(interview => ({
+        const convertedInterviews: StoredInterview[] = userInterviews.map((interview: any) => ({
           id: interview.id,
           filename: interview.filename,
           uploadDate: new Date(interview.upload_date),
@@ -55,14 +82,36 @@ export default function InterviewLibraryPage() {
           processingTime: interview.processing_time,
           uniqueSpeakers: interview.unique_speakers,
           vectorsStored: interview.vectors_stored,
-          tags: interview.tags || []
+          tags: interview.tags || [],
+          blobUrl: interview.blob_url
         }));
+        
+        console.log('🔍 [INTERVIEWS] Converted interviews:', convertedInterviews.map(i => ({
+          id: i.id,
+          filename: i.filename,
+          hasBlobUrl: !!i.blobUrl,
+          blobUrl: i.blobUrl ? `${i.blobUrl.substring(0, 50)}...` : 'null'
+        })));
         
         setInterviews(convertedInterviews);
         setError(null);
-      } catch (error) {
-        console.error('Failed to load interviews:', error);
-        setError('Failed to load interviews. Please try again.');
+      } catch (error: any) {
+        console.error('❌ [INTERVIEWS] Failed to load interviews:', error);
+        
+        // Check if it's an authentication error
+        if (error instanceof Error && (
+          error.message.includes('401') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('Authentication required')
+        )) {
+          setError('Please log in to access your interview library. You will be redirected to the login page.');
+          // Redirect to auth debug page after a short delay
+          setTimeout(() => {
+            window.location.href = '/auth-debug';
+          }, 2000);
+        } else {
+          setError('Failed to load interviews. Please try again.');
+        }
         setInterviews([]);
       } finally {
         setLoading(false);
@@ -71,6 +120,61 @@ export default function InterviewLibraryPage() {
 
     loadInterviews();
   }, []);
+
+  // Enhanced status detection for better filtering
+  const getInterviewStatus = (interview: StoredInterview) => {
+    // Check for various invalid states
+    if (interview.status === 'failed') {
+      return { status: 'error' as const, label: 'Processing Failed', description: 'Interview failed to process' };
+    }
+    
+    if (interview.quotesExtracted === 0) {
+      return { status: 'no-quotes' as const, label: 'No Quotes Found', description: 'No relevant quotes extracted' };
+    }
+    
+    if (interview.status === 'processing') {
+      return { status: 'processing' as const, label: 'Processing', description: 'Currently being analyzed' };
+    }
+    
+    if (interview.quotesExtracted > 0 && interview.status === 'completed') {
+      return { status: 'valid' as const, label: 'Valid', description: 'Successfully processed with quotes' };
+    }
+    
+    // Default fallback
+    return { status: 'unknown' as const, label: 'Unknown', description: 'Status unclear' };
+  };
+
+  // Delete interview functionality
+  const handleDeleteInterview = async (interviewId: string) => {
+    if (!confirm('Are you sure you want to delete this interview? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeletingInterview(interviewId);
+    
+    try {
+      const response = await fetch(`http://localhost:3000/api/delete-interview`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interviewId })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete interview: ${response.status}`);
+      }
+
+      // Remove from local state
+      setInterviews(prev => prev.filter(i => i.id !== interviewId));
+      setSelectedInterviews(prev => prev.filter(id => id !== interviewId));
+      
+      console.log('✅ [DELETE] Interview deleted successfully:', interviewId);
+    } catch (error: any) {
+      console.error('❌ [DELETE] Failed to delete interview:', error);
+      alert(`Failed to delete interview: ${error.message}`);
+    } finally {
+      setDeletingInterview(null);
+    }
+  };
 
   // Filter interviews based on search and criteria
   useEffect(() => {
@@ -84,6 +188,14 @@ export default function InterviewLibraryPage() {
         interview.industry?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         interview.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       );
+    }
+
+    // Status filter
+    if (selectedFilters.status?.length) {
+      filtered = filtered.filter(interview => {
+        const status = getInterviewStatus(interview);
+        return selectedFilters.status!.includes(status.status);
+      });
     }
 
     // Company size filter
@@ -128,21 +240,62 @@ export default function InterviewLibraryPage() {
   };
 
   const handleAnalyzeSelected = () => {
-    // This will trigger the analysis with selected interviews
-    console.log('Analyzing selected interviews:', selectedInterviews);
-    // Navigate to analysis page with filter criteria
+    if (selectedInterviews.length === 0) {
+      alert('Please select at least one interview to analyze.');
+      return;
+    }
+
+    // Get the selected interview data
+    const selectedInterviewData = interviews.filter(interview => 
+      selectedInterviews.includes(interview.id)
+    );
+
+    console.log('🔍 [ANALYZE] Selected interviews for analysis:', selectedInterviewData.map(i => ({
+      id: i.id,
+      filename: i.filename,
+      hasBlobUrl: !!i.blobUrl,
+      blobUrl: i.blobUrl ? `${i.blobUrl.substring(0, 50)}...` : 'null'
+    })));
+
+    // Store the selected interviews in localStorage for the main page to use
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedInterviewsForAnalysis', JSON.stringify(selectedInterviewData));
+      console.log('💾 [ANALYZE] Stored selected interviews in localStorage:', {
+        count: selectedInterviewData.length,
+        interviews: selectedInterviewData.map(i => i.filename)
+      });
+    }
+
+    // Navigate to the main page to trigger analysis
+    window.location.href = '/';
   };
 
-  const getStatusBadge = (status: StoredInterview['status']) => {
-    const colors = {
-      processing: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800'
+  // Enhanced status badge with better visual indicators
+  const getStatusBadge = (interview: StoredInterview) => {
+    const status = getInterviewStatus(interview);
+    
+    const badgeStyles: Record<string, string> = {
+      'valid': 'bg-green-100 text-green-800 border-green-200',
+      'processing': 'bg-blue-100 text-blue-800 border-blue-200',
+      'error': 'bg-red-100 text-red-800 border-red-200',
+      'no-quotes': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'unknown': 'bg-gray-100 text-gray-800 border-gray-200'
     };
+
+    const icons: Record<string, React.ComponentType<any>> = {
+      'valid': CheckCircle,
+      'processing': Clock,
+      'error': XCircle,
+      'no-quotes': AlertTriangle,
+      'unknown': AlertCircle
+    };
+
+    const Icon = icons[status.status];
     
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeStyles[status.status]}`}>
+        <Icon className="w-3 h-3 mr-1" />
+        {status.label}
       </span>
     );
   };
@@ -158,6 +311,26 @@ export default function InterviewLibraryPage() {
     }
   };
 
+  // Calculate statistics for different status types
+  const getStatusStats = () => {
+    const stats: Record<string, number> = {
+      valid: 0,
+      processing: 0,
+      error: 0,
+      'no-quotes': 0,
+      unknown: 0
+    };
+
+    interviews.forEach(interview => {
+      const status = getInterviewStatus(interview);
+      stats[status.status]++;
+    });
+
+    return stats;
+  };
+
+  const statusStats = getStatusStats();
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -167,17 +340,40 @@ export default function InterviewLibraryPage() {
   }
 
   if (error) {
+    const isAuthError = error.includes('log in') || error.includes('401') || error.includes('Unauthorized');
+    
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Error Loading Interviews</h2>
+          <h2 className="text-2xl font-bold text-white mb-4">
+            {isAuthError ? 'Authentication Required' : 'Error Loading Interviews'}
+          </h2>
           <p className="text-red-400 mb-4">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Try Again
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            {isAuthError ? (
+              <>
+                <button 
+                  onClick={() => window.location.href = '/auth-debug'}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Log In
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/'}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Go to Home
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => window.location.reload()}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+              >
+                Try Again
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -210,8 +406,8 @@ export default function InterviewLibraryPage() {
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* Enhanced Stats Overview with Status Breakdown */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
@@ -232,14 +428,44 @@ export default function InterviewLibraryPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <Users className="h-6 w-6 text-gray-400" />
+                  <CheckCircle className="h-6 w-6 text-green-400" />
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Unique Speakers</dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {new Set(interviews.flatMap(i => i.uniqueSpeakers)).size}
-                    </dd>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Valid</dt>
+                    <dd className="text-lg font-medium text-gray-900">{statusStats.valid}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <AlertTriangle className="h-6 w-6 text-yellow-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">No Quotes</dt>
+                    <dd className="text-lg font-medium text-gray-900">{statusStats['no-quotes']}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <XCircle className="h-6 w-6 text-red-400" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Errors</dt>
+                    <dd className="text-lg font-medium text-gray-900">{statusStats.error}</dd>
                   </dl>
                 </div>
               </div>
@@ -257,24 +483,6 @@ export default function InterviewLibraryPage() {
                     <dt className="text-sm font-medium text-gray-500 truncate">Total Quotes</dt>
                     <dd className="text-lg font-medium text-gray-900">
                       {interviews.reduce((sum, i) => sum + i.quotesExtracted, 0)}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Clock className="h-6 w-6 text-gray-400" />
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Processing Time</dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {Math.round(interviews.reduce((sum, i) => sum + i.processingTime, 0) / 60)}m
                     </dd>
                   </dl>
                 </div>
@@ -310,7 +518,32 @@ export default function InterviewLibraryPage() {
 
             {showFilters && (
               <div className="border-t pt-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {/* Status Filter */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Status</h4>
+                    <div className="space-y-2">
+                      {[
+                        { value: 'valid', label: 'Valid', count: statusStats.valid },
+                        { value: 'no-quotes', label: 'No Quotes', count: statusStats['no-quotes'] },
+                        { value: 'error', label: 'Errors', count: statusStats.error },
+                        { value: 'processing', label: 'Processing', count: statusStats.processing }
+                      ].map(status => (
+                        <label key={status.value} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              onChange={(e) => handleFilterChange('status', status.value, e.target.checked)}
+                            />
+                            <span className="ml-2 text-sm text-gray-700">{status.label}</span>
+                          </div>
+                          <span className="text-xs text-gray-500">({status.count})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Company Size Filter */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Company Size</h4>
@@ -413,7 +646,7 @@ export default function InterviewLibraryPage() {
                             <h4 className="text-sm font-medium text-gray-900 truncate">
                               {interview.filename}
                             </h4>
-                            {getStatusBadge(interview.status)}
+                            {getStatusBadge(interview)}
                           </div>
                           
                           <div className="flex items-center space-x-6 text-sm text-gray-500">
@@ -462,6 +695,18 @@ export default function InterviewLibraryPage() {
                         <span className="text-xs text-gray-500">
                           {interview.vectorsStored} vectors
                         </span>
+                        <button
+                          onClick={() => handleDeleteInterview(interview.id)}
+                          disabled={deletingInterview === interview.id}
+                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete interview"
+                        >
+                          {deletingInterview === interview.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>

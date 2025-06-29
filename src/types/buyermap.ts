@@ -147,6 +147,7 @@ export interface InterviewFilterCriteria {
   industries?: string[];
   regions?: string[];
   tags?: string[];
+  status?: string[];
   dateRange?: {
     start: Date;
     end: Date;
