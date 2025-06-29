@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+import { createServerClient } from '../../../lib/supabase-server';
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -19,35 +14,28 @@ export async function DELETE(request: NextRequest) {
 
     console.log('🗑️ [DELETE] Attempting to delete interview:', interviewId);
 
-    // Get the current user from the request
-    const authHeader = request.headers.get('authorization');
-    let userId: string | null = null;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-        if (user && !error) {
-          userId = user.id;
-        }
-      } catch (error) {
-        console.error('❌ [DELETE] Auth error:', error);
-      }
-    }
-
-    if (!userId) {
+    // Use the server-side Supabase client (same as get-user-interviews)
+    const supabase = await createServerClient(request);
+    
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      console.error('❌ [DELETE] User authentication failed:', userError);
       return NextResponse.json(
-        { success: false, error: 'Authentication required' },
+        { success: false, error: 'User not authenticated' },
         { status: 401 }
       );
     }
 
+    console.log('✅ [DELETE] User authenticated:', user.id);
+
     // First, get the interview to check ownership and get blob URL
     const { data: interview, error: fetchError } = await supabase
-      .from('interview_records')
+      .from('user_interviews')
       .select('*')
       .eq('id', interviewId)
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .single();
 
     if (fetchError || !interview) {
@@ -66,10 +54,10 @@ export async function DELETE(request: NextRequest) {
 
     // Delete from database
     const { error: deleteError } = await supabase
-      .from('interview_records')
+      .from('user_interviews')
       .delete()
       .eq('id', interviewId)
-      .eq('user_id', userId);
+      .eq('user_id', user.id);
 
     if (deleteError) {
       console.error('❌ [DELETE] Database deletion failed:', deleteError);
