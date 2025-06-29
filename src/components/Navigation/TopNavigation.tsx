@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Brain, Menu, X, Home, Library, Play, LogOut } from 'lucide-react';
+import { Brain, Menu, X, Home, Library, Play, LogOut, BarChart3 } from 'lucide-react';
 import FeedbackButton from './FeedbackButton';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase-client';
@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase-client';
 export default function TopNavigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [hasResults, setHasResults] = useState(false);
   const pathname = usePathname();
   // supabase client is already imported and ready to use
 
@@ -31,6 +32,14 @@ export default function TopNavigation() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  // Check for persisted results in localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const buyerMapData = localStorage.getItem('buyerMapData');
+      setHasResults(!!buyerMapData && buyerMapData !== '[]');
+    }
+  }, []);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     // Clear beta access from localStorage
@@ -40,10 +49,10 @@ export default function TopNavigation() {
 
   const menuItems = [
     {
-      href: '/',
+      href: hasResults ? '/results' : '/',
       label: 'Home',
       icon: <Home className="h-5 w-5" />,
-      description: 'BuyerMap Dashboard'
+      description: hasResults ? 'BuyerMap Dashboard' : 'Get Started'
     },
     {
       href: '/interviews',
@@ -51,12 +60,19 @@ export default function TopNavigation() {
       icon: <Library className="h-5 w-5" />,
       description: 'Interview Library'
     },
+    // Results button is always visible
+    {
+      href: '/results',
+      label: 'Results',
+      icon: <BarChart3 className="h-5 w-5" />,
+      description: 'Analysis Results',
+      isResults: true
+    },
     {
       href: '/',
       label: 'Start Analysis',
       icon: <Play className="h-5 w-5" />,
-      description: 'Create New Analysis',
-      isAction: true
+      description: 'Upload Sales Deck'
     }
   ];
 
@@ -84,9 +100,18 @@ export default function TopNavigation() {
             </div>
           </Link>
 
-          {/* Right Section - Feedback Button + Hamburger */}
+          {/* Right Section - Feedback Button + Demo Link + Hamburger */}
           <div className="flex items-center space-x-3">
             <FeedbackButton variant="inline" />
+            
+            {/* Demo Buyer Map Link */}
+            <Link
+              href="/demo"
+              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-lg shadow-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-200 transform hover:scale-105 border border-purple-400/30"
+            >
+              <span className="mr-2">🎯</span>
+              Demo Buyer Map
+            </Link>
             
             {/* Hamburger Menu Button */}
             <button
@@ -148,18 +173,18 @@ export default function TopNavigation() {
                     onClick={() => setIsMenuOpen(false)}
                     className={`
                       flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200
-                      ${item.isAction 
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg hover:from-blue-700 hover:to-purple-700' 
+                      ${item.isResults
+                        ? 'border border-blue-400 bg-blue-50 text-blue-700'
                         : isActive(item.href)
                           ? 'bg-blue-50 text-blue-700 border border-blue-200'
                           : 'text-gray-700 hover:bg-gray-50'
-                      }
+                    }
                     `}
                   >
                     {item.icon}
                     <div className="flex-1">
-                      <div className={item.isAction ? 'text-white' : ''}>{item.label}</div>
-                      <div className={`text-xs ${item.isAction ? 'text-white/80' : 'text-gray-500'}`}>
+                      <div>{item.label}</div>
+                      <div className="text-xs text-gray-500">
                         {item.description}
                       </div>
                     </div>

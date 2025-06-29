@@ -38,6 +38,7 @@ export default function InterviewLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingInterview, setDeletingInterview] = useState<string | null>(null);
+  const [analyzedInterviewIds, setAnalyzedIds] = useState<string[]>(getAnalyzedInterviewIds());
 
   // Load user's interviews from database
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function InterviewLibraryPage() {
         console.log('🔍 [INTERVIEWS] Loading interviews from API...');
         
         // Use the new API route instead of client-side function
-        const response = await fetch('http://localhost:3000/api/get-user-interviews');
+        const response = await fetch('/api/get-user-interviews');
         
         if (!response.ok) {
           // Check if it's an authentication error
@@ -94,6 +95,10 @@ export default function InterviewLibraryPage() {
         })));
         
         setInterviews(convertedInterviews);
+        // Save to localStorage for results page summary
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('allUserInterviews', JSON.stringify(convertedInterviews));
+        }
         setError(null);
       } catch (error: any) {
         console.error('❌ [INTERVIEWS] Failed to load interviews:', error);
@@ -119,6 +124,11 @@ export default function InterviewLibraryPage() {
     };
 
     loadInterviews();
+  }, []);
+
+  // Update analyzedInterviewIds from localStorage on mount
+  useEffect(() => {
+    setAnalyzedIds(getAnalyzedInterviewIds());
   }, []);
 
   // Enhanced status detection for better filtering
@@ -153,7 +163,7 @@ export default function InterviewLibraryPage() {
     setDeletingInterview(interviewId);
     
     try {
-      const response = await fetch(`http://localhost:3000/api/delete-interview`, {
+      const response = await fetch(`/api/delete-interview`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ interviewId })
@@ -239,33 +249,24 @@ export default function InterviewLibraryPage() {
     );
   };
 
+  // When Analyze Selected is clicked, update analyzedInterviewIds
   const handleAnalyzeSelected = () => {
     if (selectedInterviews.length === 0) {
       alert('Please select at least one interview to analyze.');
       return;
     }
-
     // Get the selected interview data
     const selectedInterviewData = interviews.filter(interview => 
       selectedInterviews.includes(interview.id)
     );
-
-    console.log('🔍 [ANALYZE] Selected interviews for analysis:', selectedInterviewData.map(i => ({
-      id: i.id,
-      filename: i.filename,
-      hasBlobUrl: !!i.blobUrl,
-      blobUrl: i.blobUrl ? `${i.blobUrl.substring(0, 50)}...` : 'null'
-    })));
-
     // Store the selected interviews in localStorage for the main page to use
     if (typeof window !== 'undefined') {
       localStorage.setItem('selectedInterviewsForAnalysis', JSON.stringify(selectedInterviewData));
-      console.log('💾 [ANALYZE] Stored selected interviews in localStorage:', {
-        count: selectedInterviewData.length,
-        interviews: selectedInterviewData.map(i => i.filename)
-      });
+      // Update analyzedInterviewIds
+      const newAnalyzed = Array.from(new Set([...analyzedInterviewIds, ...selectedInterviews]));
+      setAnalyzedInterviewIds(newAnalyzed);
+      setAnalyzedIds(newAnalyzed);
     }
-
     // Navigate to the main page to trigger analysis
     window.location.href = '/';
   };
@@ -331,6 +332,61 @@ export default function InterviewLibraryPage() {
 
   const statusStats = getStatusStats();
 
+  // Helper to parse name, role, and company from filename
+  function parseInterviewDetails(filename: string) {
+    // Example: Interview_with_John_Doe__CEO_at_Acme_Corp-abc123.docx
+    // or _Interview_with_Yusuf_Elmarakby__Paralegal_at_Bruce_Harvey_Law_Firm-xyz.docx
+    const match = filename.match(/Interview_with[_ ]([\w]+)_([\w]+)__([\w ]+)_at_([\w _]+)-/i);
+    if (match) {
+      const firstName = match[1].replace(/_/g, ' ');
+      const lastName = match[2].replace(/_/g, ' ');
+      const role = match[3].replace(/_/g, ' ');
+      const company = match[4].replace(/_/g, ' ');
+      return {
+        name: `${firstName} ${lastName}`.replace(/([A-Z])/g, ' $1').trim(),
+        role,
+        company
+      };
+    }
+    // Fallback: try to extract at least role and company
+    const fallback = filename.match(/__([\w ]+)_at_([\w _]+)-/i);
+    if (fallback) {
+      const role = fallback[1].replace(/_/g, ' ');
+      const company = fallback[2].replace(/_/g, ' ');
+      return {
+        name: '',
+        role,
+        company
+      };
+    }
+    return { name: '', role: '', company: '' };
+  }
+
+  // Helper to get analyzed interview IDs from localStorage
+  function getAnalyzedInterviewIds(): string[] {
+    if (typeof window === 'undefined') return [];
+    const analyzed = localStorage.getItem('analyzedInterviewIds');
+    if (!analyzed) return [];
+    try {
+      return JSON.parse(analyzed);
+    } catch {
+      return [];
+    }
+  }
+
+  // Helper to set analyzed interview IDs in localStorage
+  function setAnalyzedInterviewIds(ids: string[]) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('analyzedInterviewIds', JSON.stringify(ids));
+  }
+
+  // Also, add a useEffect to keep localStorage in sync if interviews change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('allUserInterviews', JSON.stringify(interviews));
+    }
+  }, [interviews]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -379,6 +435,10 @@ export default function InterviewLibraryPage() {
     );
   }
 
+  // Update Analyze Selected button to show summary
+  const newToAnalyze = selectedInterviews.filter(id => !analyzedInterviewIds.includes(id)).length;
+  const alreadyAnalyzed = selectedInterviews.length - newToAnalyze;
+
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
@@ -397,11 +457,13 @@ export default function InterviewLibraryPage() {
             </button>
             <button 
               onClick={handleAnalyzeSelected}
-              disabled={selectedInterviews.length === 0}
+              disabled={selectedInterviews.length === 0 || newToAnalyze === 0}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
             >
               <BarChart3 className="w-4 h-4 mr-2" />
-              Analyze Selected ({selectedInterviews.length})
+              {newToAnalyze > 0
+                ? `Analyze Selected (${newToAnalyze} new${alreadyAnalyzed > 0 ? ", "+alreadyAnalyzed+" already analyzed" : ""})`
+                : `All selected already analyzed`}
             </button>
           </div>
         </div>
@@ -630,87 +692,97 @@ export default function InterviewLibraryPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredInterviews.map((interview) => (
-                  <div key={interview.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <input
-                          type="checkbox"
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          checked={selectedInterviews.includes(interview.id)}
-                          onChange={(e) => handleInterviewSelect(interview.id, e.target.checked)}
-                        />
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h4 className="text-sm font-medium text-gray-900 truncate">
-                              {interview.filename}
-                            </h4>
-                            {getStatusBadge(interview)}
-                          </div>
-                          
-                          <div className="flex items-center space-x-6 text-sm text-gray-500">
-                            <div className="flex items-center space-x-1">
-                              <Calendar className="w-4 h-4" />
-                              <span>{interview.uploadDate.toLocaleDateString()}</span>
+                {filteredInterviews.map((interview) => {
+                  const details = parseInterviewDetails(interview.filename);
+                  const isAnalyzed = analyzedInterviewIds.includes(interview.id);
+                  return (
+                    <div key={interview.id} className={`border border-gray-200 rounded-lg p-4 hover:bg-gray-50 ${isAnalyzed ? 'bg-green-50/40' : ''}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            checked={selectedInterviews.includes(interview.id)}
+                            onChange={(e) => handleInterviewSelect(interview.id, e.target.checked)}
+                            disabled={isAnalyzed} // Optionally disable if already analyzed
+                          />
+                          <div className="flex-1 min-w-0">
+                            {/* Main display: Name, Role, Company */}
+                            <div className="flex items-center space-x-3 mb-1">
+                              <h4 className="text-base font-semibold text-gray-900 truncate" title={interview.filename}>
+                                {details.name || 'Unknown Name'}
+                                {details.role && (
+                                  <span className="ml-2 text-sm text-gray-500 font-normal">{details.role}</span>
+                                )}
+                                {details.company && (
+                                  <span className="ml-2 text-sm text-gray-500 font-normal">@ {details.company}</span>
+                                )}
+                              </h4>
+                              {getStatusBadge(interview)}
+                              {isAnalyzed && (
+                                <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-200 text-green-800 border border-green-300">Analyzed</span>
+                              )}
                             </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <Briefcase className="w-4 h-4" />
-                              <span>{interview.role || 'Unknown Role'}</span>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <Building className="w-4 h-4" />
-                              <span className="capitalize">{getCompanySizeIcon(interview.companySize)} {interview.companySize || 'Unknown'}</span>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <MessageSquare className="w-4 h-4" />
-                              <span>{interview.quotesExtracted} quotes</span>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <Clock className="w-4 h-4" />
-                              <span>{interview.processingTime}s</span>
-                            </div>
-                          </div>
-                          
-                          {interview.tags && interview.tags.length > 0 && (
-                            <div className="flex items-center space-x-2 mt-2">
-                              <Tag className="w-4 h-4 text-gray-400" />
-                              <div className="flex space-x-1">
-                                {interview.tags.map(tag => (
-                                  <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                    {tag}
-                                  </span>
-                                ))}
+                            {/* Secondary: filename as subtext */}
+                            <div className="text-xs text-gray-400 truncate" title={interview.filename}>{interview.filename}</div>
+                            {/* Details row */}
+                            <div className="flex items-center space-x-6 text-sm text-gray-500 mt-1">
+                              <div className="flex items-center space-x-1">
+                                <Calendar className="w-4 h-4" />
+                                <span>{interview.uploadDate.toLocaleDateString()}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Briefcase className="w-4 h-4" />
+                                <span>{interview.role || details.role || 'Unknown Role'}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Building className="w-4 h-4" />
+                                <span className="capitalize">{getCompanySizeIcon(interview.companySize)} {interview.companySize || 'Unknown'}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <MessageSquare className="w-4 h-4" />
+                                <span>{interview.quotesExtracted} quotes</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{interview.processingTime}s</span>
                               </div>
                             </div>
-                          )}
+                            {interview.tags && interview.tags.length > 0 && (
+                              <div className="flex items-center space-x-2 mt-2">
+                                <Tag className="w-4 h-4 text-gray-400" />
+                                <div className="flex space-x-1">
+                                  {interview.tags.map(tag => (
+                                    <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500">
+                            {interview.vectorsStored} vectors
+                          </span>
+                          <button
+                            onClick={() => handleDeleteInterview(interview.id)}
+                            disabled={deletingInterview === interview.id}
+                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete interview"
+                          >
+                            {deletingInterview === interview.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500">
-                          {interview.vectorsStored} vectors
-                        </span>
-                        <button
-                          onClick={() => handleDeleteInterview(interview.id)}
-                          disabled={deletingInterview === interview.id}
-                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Delete interview"
-                        >
-                          {deletingInterview === interview.id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

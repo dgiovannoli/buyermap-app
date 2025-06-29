@@ -1,135 +1,219 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, Download, Upload, Library, TrendingUp, Users, MessageSquare, Target } from 'lucide-react';
+import { BarChart3, Download, Upload, Library, ChevronDown, ChevronUp } from 'lucide-react';
+import ModernBuyerMapLanding from '../../components/modern-buyermap-landing';
+import { BuyerMapData } from '../../types/buyermap';
+import sampleBuyerMapData from '../../mocks/sampleBuyerMapData.json';
+
+// Helper to parse name, role, and company from filename
+function parseInterviewDetails(filename: string) {
+  const match = filename.match(/Interview_with[_ ]([\w]+)_([\w]+)__([\w ]+)_at_([\w _]+)-/i);
+  if (match) {
+    const firstName = match[1].replace(/_/g, ' ');
+    const lastName = match[2].replace(/_/g, ' ');
+    const role = match[3].replace(/_/g, ' ');
+    const company = match[4].replace(/_/g, ' ');
+    return {
+      name: `${firstName} ${lastName}`.replace(/([A-Z])/g, ' $1').trim(),
+      role,
+      company
+    };
+  }
+  const fallback = filename.match(/__([\w ]+)_at_([\w _]+)-/i);
+  if (fallback) {
+    const role = fallback[1].replace(/_/g, ' ');
+    const company = fallback[2].replace(/_/g, ' ');
+    return {
+      name: '',
+      role,
+      company
+    };
+  }
+  return { name: '', role: '', company: '' };
+}
 
 export default function ResultsPage() {
-  return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Analysis Results</h1>
-            <p className="text-gray-300">
-              ICP validation results from 3 customer interviews
-            </p>
-          </div>
-          <div className="flex space-x-4">
-            <Link
-              href="/upload"
-              className="inline-flex items-center px-4 py-2 border border-white/20 rounded-lg text-sm font-medium text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-200"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload More
-            </Link>
-            <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-200">
-              <Download className="w-4 h-4 mr-2" />
-              Export Results
-            </button>
-          </div>
-        </div>
+  const [buyerMapData, setBuyerMapData] = useState<BuyerMapData[] | null>(null);
+  const [isDemoData, setIsDemoData] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [contributingInterviews, setContributingInterviews] = useState<any[]>([]);
+  const [showInterviewSummary, setShowInterviewSummary] = useState(false);
 
-        {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-500 rounded-lg mr-4">
-                <Target className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-300">Overall Alignment</p>
-                <p className="text-2xl font-bold text-white">78%</p>
-              </div>
-            </div>
-          </div>
+  // Load from localStorage first for fast UX
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const buyerMapData = localStorage.getItem('buyerMapData');
+      const interviewData = localStorage.getItem('interviewData');
+      
+      // Check if we have any real data
+      const hasRealData = (buyerMapData && buyerMapData !== '[]') || 
+                         (interviewData && interviewData !== '[]');
+      
+      if (hasRealData) {
+        // Use real data from localStorage
+        if (buyerMapData && buyerMapData !== '[]') {
+          setBuyerMapData(JSON.parse(buyerMapData));
+        } else if (interviewData && interviewData !== '[]') {
+          setBuyerMapData(JSON.parse(interviewData));
+        }
+        setIsDemoData(false);
+      } else {
+        // Use demo data when no real data exists
+        setBuyerMapData(sampleBuyerMapData as unknown as BuyerMapData[]);
+        setIsDemoData(true);
+      }
+      setChecked(true);
+    }
+  }, []);
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-500 rounded-lg mr-4">
-                <MessageSquare className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-300">Total Quotes</p>
-                <p className="text-2xl font-bold text-white">35</p>
-              </div>
-            </div>
-          </div>
+  // Load contributing interviews from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const analyzed = localStorage.getItem('analyzedInterviewIds');
+      const allInterviews = localStorage.getItem('allUserInterviews'); // Optionally store all interview metadata
+      let interviewList: any[] = [];
+      if (analyzed && allInterviews) {
+        try {
+          const analyzedIds = JSON.parse(analyzed);
+          const all = JSON.parse(allInterviews);
+          interviewList = all.filter((i: any) => analyzedIds.includes(i.id));
+        } catch {}
+      } else if (analyzed) {
+        // Fallback: try to get interview metadata from interviewData
+        const analyzedIds = JSON.parse(analyzed);
+        const interviewData = localStorage.getItem('interviewData');
+        if (interviewData) {
+          try {
+            const all = JSON.parse(interviewData);
+            interviewList = all.filter((i: any) => analyzedIds.includes(i.id));
+          } catch {}
+        }
+      }
+      setContributingInterviews(interviewList);
+    }
+  }, []);
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-500 rounded-lg mr-4">
-                <Users className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-300">Interviews</p>
-                <p className="text-2xl font-bold text-white">3</p>
-              </div>
-            </div>
-          </div>
+  // In the background, fetch latest results from backend
+  useEffect(() => {
+    async function fetchResults() {
+      try {
+        const res = await fetch('/api/user-results');
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.success && payload.results && Array.isArray(payload.results) && payload.results.length > 0) {
+            setBuyerMapData(payload.results);
+            setIsDemoData(false);
+            // Optionally update localStorage for future fast loads
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('buyerMapData', JSON.stringify(payload.results));
+            }
+          } else {
+            // Only show demo data if we don't have any real data from localStorage
+            const buyerMapData = localStorage.getItem('buyerMapData');
+            const interviewData = localStorage.getItem('interviewData');
+            const hasRealData = (buyerMapData && buyerMapData !== '[]') || 
+                               (interviewData && interviewData !== '[]');
+            
+            if (!hasRealData) {
+              setBuyerMapData(sampleBuyerMapData as unknown as BuyerMapData[]);
+              setIsDemoData(true);
+            } else {
+              // Use existing real data from localStorage
+              if (buyerMapData && buyerMapData !== '[]') {
+                setBuyerMapData(JSON.parse(buyerMapData));
+              } else if (interviewData && interviewData !== '[]') {
+                setBuyerMapData(JSON.parse(interviewData));
+              }
+              setIsDemoData(false);
+            }
+          }
+        }
+      } catch (err) {
+        // On error, check if we have real data in localStorage before falling back to demo
+        const buyerMapData = localStorage.getItem('buyerMapData');
+        const interviewData = localStorage.getItem('interviewData');
+        const hasRealData = (buyerMapData && buyerMapData !== '[]') || 
+                           (interviewData && interviewData !== '[]');
+        
+        if (!hasRealData) {
+          setBuyerMapData(sampleBuyerMapData as unknown as BuyerMapData[]);
+          setIsDemoData(true);
+        } else {
+          // Use existing real data from localStorage
+          if (buyerMapData && buyerMapData !== '[]') {
+            setBuyerMapData(JSON.parse(buyerMapData));
+          } else if (interviewData && interviewData !== '[]') {
+            setBuyerMapData(JSON.parse(interviewData));
+          }
+          setIsDemoData(false);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchResults();
+  }, []);
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-500 rounded-lg mr-4">
-                <TrendingUp className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-300">New Insights</p>
-                <p className="text-2xl font-bold text-white">7</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Results Placeholder */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-8 text-center">
-          <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <BarChart3 className="h-10 w-10 text-white" />
-          </div>
-          <h3 className="text-2xl font-bold text-white mb-4">Analysis Results</h3>
-          <p className="text-gray-300 mb-8 max-w-2xl mx-auto">
-            Your ICP validation results would appear here. This page will show detailed analysis of how your assumptions align with customer interview data.
-          </p>
-          
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <div className="bg-white/10 rounded-lg p-6 text-left">
-              <h4 className="text-lg font-semibold text-white mb-3">✅ Validated Assumptions</h4>
-              <ul className="space-y-2 text-gray-300">
-                <li>• Company size targeting is accurate</li>
-                <li>• Pain points align with reality</li>
-                <li>• Desired outcomes are confirmed</li>
-              </ul>
-            </div>
-
-            <div className="bg-white/10 rounded-lg p-6 text-left">
-              <h4 className="text-lg font-semibold text-white mb-3">🔍 New Insights</h4>
-              <ul className="space-y-2 text-gray-300">
-                <li>• Different messaging resonates better</li>
-                <li>• Additional triggers identified</li>
-                <li>• Barriers we hadn't considered</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="mt-8 space-x-4">
-            <Link
-              href="/interviews"
-              className="inline-flex items-center px-6 py-3 border border-white/20 rounded-lg text-sm font-medium text-white bg-white/10 hover:bg-white/20 transition-all duration-200"
-            >
-              <Library className="w-4 h-4 mr-2" />
-              View Interview Library
-            </Link>
-            <Link
-              href="/upload"
-              className="inline-flex items-center px-6 py-3 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload More Interviews
-            </Link>
-          </div>
+  if (!checked || loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Loading your results...</p>
         </div>
       </div>
+    );
+  }
+
+  // Always show the buyer cards structure with demo data as fallback
+  return (
+    <div className="relative">
+      {/* Collapsible Contributing Interviews Summary */}
+      {contributingInterviews.length > 0 && (
+        <div className="max-w-4xl mx-auto mt-8 mb-4 bg-white/10 border border-white/20 rounded-xl p-4 shadow text-white">
+          <button
+            className="flex items-center font-semibold text-lg focus:outline-none hover:underline"
+            onClick={() => setShowInterviewSummary((v) => !v)}
+            aria-expanded={showInterviewSummary}
+          >
+            Analysis based on {contributingInterviews.length} interview{contributingInterviews.length > 1 ? 's' : ''}
+            {showInterviewSummary ? (
+              <ChevronUp className="ml-2 w-5 h-5" />
+            ) : (
+              <ChevronDown className="ml-2 w-5 h-5" />
+            )}
+          </button>
+          {showInterviewSummary && (
+            <div className="mt-3 space-y-2">
+              {contributingInterviews.map((interview, idx) => {
+                const details = parseInterviewDetails(interview.filename);
+                return (
+                  <div key={interview.id || idx} className="flex flex-col text-sm text-blue-100 bg-blue-900/40 rounded px-3 py-1">
+                    <span className="font-medium text-white">{details.name || 'Unknown Name'}</span>
+                    <span className="text-blue-200">{details.role && `(${details.role})`} {details.company && `@ ${details.company}`}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {isDemoData && (
+        <div className="absolute top-4 right-4 z-10">
+          <div className="bg-yellow-500/90 backdrop-blur-sm text-yellow-900 px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+            🎯 Demo Data
+          </div>
+        </div>
+      )}
+      <ModernBuyerMapLanding 
+        buyerMapData={buyerMapData || (sampleBuyerMapData as unknown as BuyerMapData[])} 
+        overallScore={0} 
+        currentStep={3} 
+        setCurrentStep={() => {}} 
+      />
     </div>
   );
 } 

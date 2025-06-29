@@ -32,6 +32,8 @@ interface ValidationData {
     quotes: Quote[];
   }>;
   displayOutcome?: string;
+  keyFinding?: string;
+  displayReality?: string;
 }
 
 interface DetailedValidationCardProps {
@@ -193,7 +195,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
 
         {/* Assumption Text */}
         <div className="text-sm text-gray-800 leading-relaxed">
-          {showNoData ? 'No Data' : subtitle || reality}
+          {showNoData ? 'No Data' : subtitle || (validation?.displayReality || reality)}
         </div>
         {showLowConfidenceWarning && hasInterviewData && (
           <div className="mt-2 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-1">
@@ -206,9 +208,33 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
       {isExpanded && validation && !showNoData && (
         <div className="border-t border-gray-200 bg-gradient-to-b from-gray-50/30 to-white">
           <div className="p-6 space-y-6">
-            
+            {/* Key Finding Section (Demo Only) */}
+            {validation.keyFinding && (
+              <div className={`mb-4 p-4 rounded-lg flex flex-col gap-2 ${
+                validation.displayOutcome === 'Validated' ? 'bg-green-50 border border-green-200' :
+                validation.displayOutcome === 'Gap Identified' ? 'bg-amber-50 border border-amber-200' :
+                validation.displayOutcome === 'Contradicted' ? 'bg-red-50 border border-red-200' :
+                'bg-gray-50 border border-gray-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-1">
+                  {validation.displayOutcome === 'Validated' && (
+                    <span className="inline-flex items-center text-green-600 font-semibold text-sm"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Validated</span>
+                  )}
+                  {validation.displayOutcome === 'Gap Identified' && (
+                    <span className="inline-flex items-center text-amber-600 font-semibold text-sm"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>Gap Identified</span>
+                  )}
+                  {validation.displayOutcome === 'Contradicted' && (
+                    <span className="inline-flex items-center text-red-600 font-semibold text-sm"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>Contradicted</span>
+                  )}
+                  {validation.displayOutcome !== 'Validated' && validation.displayOutcome !== 'Gap Identified' && validation.displayOutcome !== 'Contradicted' && (
+                    <span className="inline-flex items-center text-gray-600 font-semibold text-sm">Key Finding</span>
+                  )}
+                </div>
+                <div className="text-base text-gray-900 whitespace-pre-line">{validation.keyFinding?.replace(/^(GAP IDENTIFIED:|VALIDATED:|CONTRADICTED:|INSUFFICIENT DATA:|ALIGNED:|MISALIGNED:|CHALLENGED:|NEW DATA ADDED:|REFINED:)\s*/i, '')}</div>
+              </div>
+            )}
             {/* Hero Insight Section */}
-            {reality && (
+            {validation.displayReality && (
               <div className="relative">
                 <div 
                   className="rounded-xl p-6 border-l-4 shadow-lg"
@@ -235,7 +261,7 @@ const DetailedValidationCard: React.FC<DetailedValidationCardProps> = ({
                         Key Finding
                       </h5>
                       <p className="text-base text-gray-900 leading-relaxed font-medium">
-                        {reality}
+                        {validation.displayReality}
                       </p>
                     </div>
                   </div>

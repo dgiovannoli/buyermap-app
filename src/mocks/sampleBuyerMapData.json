@@ -1,19 +1,183 @@
 [
   {
     "id": 1,
-    "icpAttribute": "Buyer Titles",
-    "icpTheme": "Criminal Defense Attorney",
-    "v1Assumption": "Attorneys are primary users",
-    "whyAssumption": "Based on sales deck",
-    "realityFromInterviews": "Paralegals manage transcription",
-    "comparisonOutcome": "Gap Identified",
-    "waysToAdjustMessaging": "Include paralegals in messaging",
-    "confidenceScore": 85,
-    "confidenceExplanation": "Clear evidence from 3 interviews",
-    "evidenceFromDeck": "Sales deck mentions attorneys as primary users",
+    "icpAttribute": "Company Size",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "$50-200M revenue companies with 100+ SKUs and multi-warehouse operations are the ideal target market",
+    "whyAssumption": "Based on Return Treasure's sales deck ICP definition and case study examples showing companies in this revenue range. Our current customers like Fashion Forward ($85M) and Home Essentials ($120M) fall within this bracket. Our sales team has found that companies below $25M typically don't have the operational complexity to justify our solution, while companies above $300M often have custom enterprise systems that are harder to displace.",
+    "realityFromInterviews": "GAP IDENTIFIED: The interviews reveal that successful customers actually span a broader range - from $25M companies with 50 SKUs to $300M companies with 200+ SKUs. The key factor isn't revenue size but complexity of operations. Companies with complex multi-location setups, regardless of revenue, see the most value from Return Treasure.",
+    "keyFinding": "GAP IDENTIFIED: While our deck targets $50-200M revenue companies, interviews reveal that operational complexity, not revenue size, is the true indicator of need. Companies with $35M revenue but 180 SKUs across three warehouses face more acute pain points than larger companies with simpler operations. Return Treasure should expand targeting to include companies with complex multi-location setups regardless of revenue, and develop specific messaging for smaller companies with high SKU counts.",
+    "confidenceScore": 70,
     "quotes": [
-      { "text": "Paralegals handle transcription daily", "speaker": "Betty Behrens", "role": "Paralegal" },
-      { "text": "Attorneys rarely use this feature",  "speaker": "Marcus Rivera", "role": "Attorney" }
-    ]
+      {
+        "text": "We're a $35M brand but have 180 SKUs and three warehouses. Our returns process is a nightmare compared to some bigger brands I know.",
+        "speaker": "Emily Tran",
+        "role": "VP Operations",
+        "companySnapshot": "DTC apparel, 180 SKUs, 3 warehouses"
+      },
+      {
+        "text": "It's not just about revenue. The more SKUs and locations, the more headaches with returns.",
+        "speaker": "Marcus Lee",
+        "role": "Head of Logistics",
+        "companySnapshot": "Home goods, 120 SKUs, 2 DCs"
+      }
+    ],
+    "evidenceFromDeck": "Slide 3 'Target Market Definition' specifies 'Ideal Customer Profile: $50-200M revenue, 100+ SKUs, multi-warehouse operations' with supporting data showing 85% of current customers fall within this range. Case study examples include Fashion Forward ($85M, 150 SKUs) and Home Essentials ($120M, 200 SKUs) as success stories."
+  },
+  {
+    "id": 2,
+    "icpAttribute": "Buyer Titles",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Operations managers and logistics coordinators are the primary decision makers for return processing solutions",
+    "whyAssumption": "Our sales deck and CRM data show that most initial demos are booked by operations or logistics roles. 60% of closed deals list these titles as the main point of contact.",
+    "realityFromInterviews": "CONTRADICTED: Interviews reveal that while operations managers are champions, final decisions are made by C-suite (COO, CFO). Operations teams recommend solutions, but executives approve purchases based on ROI and strategic fit.",
+    "keyFinding": "CONTRADICTED: Our assumption that operations managers are primary decision makers is incorrect. Interviews reveal that C-suite executives (CFOs, COOs) make final purchasing decisions due to the strategic impact of returns on margins and customer experience. However, Operations Directors and Logistics Managers are key influencers and champions during the evaluation process. Messaging should be tailored for both audiences.",
+    "confidenceScore": 60,
+    "quotes": [
+      {
+        "text": "As COO, I'm ultimately responsible for operational efficiency. The operations team can recommend solutions, but I need to see the strategic impact on our customer experience and bottom line.",
+        "speaker": "David Rodriguez",
+        "role": "COO",
+        "companySnapshot": "DTC electronics, $90M revenue"
+      },
+      {
+        "text": "I'm the one who has to live with the system day-to-day, but the CFO makes the final call. They're looking at the ROI and how it impacts our customer satisfaction scores.",
+        "speaker": "Sarah Chen",
+        "role": "Director of Supply Chain",
+        "companySnapshot": "DTC apparel, $60M revenue"
+      }
+    ],
+    "evidenceFromDeck": "Slide 5 'Decision Maker Persona' identifies 'Primary Buyer: Operations Manager / Logistics Coordinator' with supporting data showing 60% of closed deals involve these roles. The deck includes a buyer journey map showing operations managers as the 'champion' who evaluates and recommends solutions to executives."
+  },
+  {
+    "id": 3,
+    "icpAttribute": "Pain Points",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Manual return processing is the biggest operational pain point",
+    "whyAssumption": "85% of prospects in our CRM cite manual returns as a top challenge. Our sales deck highlights case studies where automation reduced processing time by 50%.",
+    "realityFromInterviews": "VALIDATED: Interviewees consistently cited manual returns as a major bottleneck, causing 3-7 day delays, customer complaints, and significant staff time spent on repetitive tasks. Peak season backlogs and lack of process visibility were top frustrations.",
+    "keyFinding": "VALIDATED: Manual return processing is a major operational bottleneck, leading to 3-7 day delays, increased customer complaints, and significant staff time spent on repetitive tasks. Interviewees consistently cited peak season backlogs and lack of process visibility as top frustrations. Return Treasure's automation directly addresses these pain points, but prospects also want better analytics and integration with existing WMS systems.",
+    "confidenceScore": 85,
+    "quotes": [
+      {
+        "text": "During the holidays, our returns pile up and it takes up to a week to process everything by hand.",
+        "speaker": "Priya Patel",
+        "role": "Returns Supervisor",
+        "companySnapshot": "DTC fashion, 2 fulfillment centers"
+      },
+      {
+        "text": "We spend at least 20 hours a week just sorting and logging returns. It's a huge time sink.",
+        "speaker": "Marcus Lee",
+        "role": "Head of Logistics",
+        "companySnapshot": "Home goods, 120 SKUs, 2 DCs"
+      }
+    ],
+    "evidenceFromDeck": "Slide 7 'Pain Points' highlights 'Manual processing delays refunds by 3-7 days' and includes a testimonial from Fashion Forward: 'We reduced return processing time by 50% after automating with Return Treasure.'"
+  },
+  {
+    "id": 4,
+    "icpAttribute": "Desired Outcomes",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Faster processing and cost savings are the main desired outcomes",
+    "whyAssumption": "Our product messaging focuses on 'Save $8-12 per return' and '50% faster processing'. 60% of deals close after a cost savings calculator is shared.",
+    "realityFromInterviews": "GAP IDENTIFIED: While cost savings and speed are important, buyers also want accuracy, real-time status updates, and improved customer satisfaction. Several interviewees emphasized the need for seamless refunds to reduce support tickets.",
+    "keyFinding": "GAP IDENTIFIED: While cost savings and faster processing are important, interviews show that accuracy and customer satisfaction are equally critical. Several buyers emphasized the need for real-time status updates and seamless refunds to reduce support tickets. Return Treasure should highlight its impact on both operational efficiency and customer experience in future messaging.",
+    "confidenceScore": 65,
+    "quotes": [
+      {
+        "text": "We want to process returns faster, but it's just as important that refunds are accurate and customers get notified right away.",
+        "speaker": "Jenna Lee",
+        "role": "Customer Service Manager",
+        "companySnapshot": "DTC beauty, $40M revenue"
+      },
+      {
+        "text": "Reducing support tickets about 'where's my refund?' would be a huge win for us.",
+        "speaker": "Tom Nguyen",
+        "role": "Head of CX",
+        "companySnapshot": "DTC electronics, $90M revenue"
+      }
+    ],
+    "evidenceFromDeck": "Slide 9 'Desired Outcomes' lists 'Faster processing', 'Cost savings', and 'Improved customer satisfaction' as key benefits, with a case study showing a 30% reduction in support tickets."
+  },
+  {
+    "id": 5,
+    "icpAttribute": "Triggers",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Peak season volume and new executive mandates are the main triggers for evaluating returns solutions",
+    "whyAssumption": "60% of deals in our CRM are initiated in Q4 or after a new executive joins. Our sales deck highlights 'inflection points' as key triggers.",
+    "realityFromInterviews": "VALIDATED: The most common trigger is a spike in return volume during Q4 or after a product launch, which overwhelms existing manual processes. Additional triggers include new executive mandates to reduce costs, and negative customer feedback about slow refunds.",
+    "keyFinding": "VALIDATED: The most common trigger for evaluating a returns solution is a spike in return volume during Q4 or after a product launch, which overwhelms existing manual processes. Additional triggers include new executive mandates to reduce costs, and negative customer feedback about slow refunds. Marketing should focus on these inflection points in outreach campaigns.",
+    "confidenceScore": 85,
+    "quotes": [
+      {
+        "text": "Every Q4, our returns double and we realize our old process can't keep up.",
+        "speaker": "Marcus Lee",
+        "role": "Head of Logistics",
+        "companySnapshot": "Home goods, 120 SKUs, 2 DCs"
+      },
+      {
+        "text": "Our new COO wanted to see a plan for reducing return costs within 90 days of joining.",
+        "speaker": "David Rodriguez",
+        "role": "COO",
+        "companySnapshot": "DTC electronics, $90M revenue"
+      },
+      {
+        "text": "We started looking for a new solution after a spike in customer complaints about slow refunds last January.",
+        "speaker": "Jenna Lee",
+        "role": "Customer Service Manager",
+        "companySnapshot": "DTC beauty, $40M revenue"
+      }
+    ],
+    "evidenceFromDeck": "Slide 11 'Triggers' highlights 'Peak season volume', 'New executive mandates', and 'Customer complaints' as common reasons for evaluating new solutions."
+  },
+  {
+    "id": 6,
+    "icpAttribute": "Barriers",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Integration complexity is the main barrier to adoption",
+    "whyAssumption": "Our sales team frequently hears concerns about integrating with existing WMS and ERP systems. 40% of lost deals cite integration as a blocker.",
+    "realityFromInterviews": "CONTRADICTED: Interviews reveal that upfront costs and internal change management are bigger barriers than integration. Several buyers mentioned failed past software rollouts and skepticism from IT teams.",
+    "keyFinding": "CONTRADICTED: Contrary to our assumption, integration complexity is not the main barrier. Instead, buyers are most concerned about upfront costs and internal change management. Several interviewees mentioned failed past software rollouts and skepticism from IT teams. Return Treasure should offer clear ROI calculators and implementation support to address these concerns.",
+    "confidenceScore": 55,
+    "quotes": [
+      {
+        "text": "Integration is important, but the bigger issue is getting buy-in from our team and justifying the upfront cost.",
+        "speaker": "Sarah Chen",
+        "role": "Director of Supply Chain",
+        "companySnapshot": "DTC apparel, $60M revenue"
+      },
+      {
+        "text": "We've had two failed software rollouts in the last three years. There's a lot of skepticism from IT whenever we bring in something new.",
+        "speaker": "Tom Nguyen",
+        "role": "Head of CX",
+        "companySnapshot": "DTC electronics, $90M revenue"
+      }
+    ],
+    "evidenceFromDeck": "Slide 13 'Barriers' lists 'Integration complexity' as the top concern, with a chart showing 40% of lost deals cite this as a blocker."
+  },
+  {
+    "id": 7,
+    "icpAttribute": "Messaging Emphasis",
+    "icpTheme": "DTC Returns Management",
+    "v1Assumption": "Cost savings and efficiency should be the primary messaging focus",
+    "whyAssumption": "Our most successful campaigns lead with 'Save $8-12 per return' and '50% faster processing'. Testimonials highlight financial impact.",
+    "realityFromInterviews": "VALIDATED: Messaging that emphasizes cost savings and efficiency resonates strongly, but buyers also respond to stories about improved customer satisfaction and reduced support workload. Case studies and testimonials from similar brands are especially persuasive.",
+    "keyFinding": "VALIDATED: Messaging that emphasizes cost savings and efficiency resonates strongly, but buyers also respond to stories about improved customer satisfaction and reduced support workload. Case studies and testimonials from similar brands are especially persuasive. Marketing should continue to lead with financial impact, but always include customer experience proof points.",
+    "confidenceScore": 80,
+    "quotes": [
+      {
+        "text": "The cost savings are great, but what really sold us was hearing how another brand cut their support tickets in half.",
+        "speaker": "Emily Tran",
+        "role": "VP Operations",
+        "companySnapshot": "DTC apparel, 180 SKUs, 3 warehouses"
+      },
+      {
+        "text": "We want to see both the numbers and the customer stories. That's what gets our execs on board.",
+        "speaker": "David Rodriguez",
+        "role": "COO",
+        "companySnapshot": "DTC electronics, $90M revenue"
+      }
+    ],
+    "evidenceFromDeck": "Slide 15 'Messaging' features 'Save $8-12 per return' and '50% faster processing' as headline benefits, with testimonials from Fashion Forward and Home Essentials."
   }
 ]

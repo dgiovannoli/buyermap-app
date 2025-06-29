@@ -18,7 +18,6 @@ export interface DatabaseInterview {
   unique_speakers: string[]
   pinecone_namespace?: string
   vectors_stored: number
-  // Content tracking fields for duplicate detection
   content_hash?: string
   file_size?: number
   blob_url?: string

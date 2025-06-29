@@ -195,7 +195,107 @@ export default function BuyerMapApp() {
     const storedInterview = localStorage.getItem('lastInterviewResult');
     if (storedDeck) setLastDeckResult(JSON.parse(storedDeck));
     if (storedInterview) setLastInterviewResult(JSON.parse(storedInterview));
-  }, []);
+    
+    // Check for selected interviews from interview library
+    const selectedInterviews = localStorage.getItem('selectedInterviewsForAnalysis');
+    if (selectedInterviews) {
+      try {
+        const parsedSelectedInterviews = JSON.parse(selectedInterviews);
+        if (parsedSelectedInterviews.length > 0) {
+          console.log('🎯 [BuyerMapApp] Found selected interviews, setting stage to deck-results');
+          
+          // If we don't have existing buyer map data, create some default assumptions
+          // This provides a foundation for the ModernBuyerMapLanding component to work with
+          // The selected interviews will be analyzed against these assumptions
+          if (!buyerMapData) {
+            const defaultAssumptions = [
+              {
+                id: 1,
+                icpAttribute: 'Buyer Title',
+                icpTheme: 'WHO',
+                v1Assumption: 'Target buyers include criminal defense attorneys and legal professionals',
+                whyAssumption: 'Based on deck analysis of target market',
+                evidenceFromDeck: 'Deck mentions legal professionals and attorneys',
+                realityFromInterviews: undefined,
+                reality: undefined,
+                comparisonOutcome: 'Gap Identified' as const,
+                waysToAdjustMessaging: undefined,
+                confidenceScore: 85,
+                confidenceExplanation: 'Default assumption from deck analysis',
+                quotes: [],
+                validationAttributes: [{
+                  assumption: 'Target buyers include criminal defense attorneys and legal professionals',
+                  reality: 'Pending validation...',
+                  outcome: 'Insufficient Data' as const,
+                  confidence: 85,
+                  confidence_explanation: 'Default assumption from deck analysis',
+                  quotes: []
+                }]
+              },
+              {
+                id: 2,
+                icpAttribute: 'Pain Points',
+                icpTheme: 'WHAT',
+                v1Assumption: 'Manual transcription is time-consuming and error-prone',
+                whyAssumption: 'Based on deck analysis of customer pain points',
+                evidenceFromDeck: 'Deck highlights transcription challenges',
+                realityFromInterviews: undefined,
+                reality: undefined,
+                comparisonOutcome: 'Gap Identified' as const,
+                waysToAdjustMessaging: undefined,
+                confidenceScore: 80,
+                confidenceExplanation: 'Default assumption from deck analysis',
+                quotes: [],
+                validationAttributes: [{
+                  assumption: 'Manual transcription is time-consuming and error-prone',
+                  reality: 'Pending validation...',
+                  outcome: 'Insufficient Data' as const,
+                  confidence: 80,
+                  confidence_explanation: 'Default assumption from deck analysis',
+                  quotes: []
+                }]
+              },
+              {
+                id: 3,
+                icpAttribute: 'Desired Outcomes',
+                icpTheme: 'WHAT',
+                v1Assumption: 'Need accurate, fast transcription to save time and improve efficiency',
+                whyAssumption: 'Based on deck analysis of customer goals',
+                evidenceFromDeck: 'Deck emphasizes time savings and accuracy',
+                realityFromInterviews: undefined,
+                reality: undefined,
+                comparisonOutcome: 'Gap Identified' as const,
+                waysToAdjustMessaging: undefined,
+                confidenceScore: 90,
+                confidenceExplanation: 'Default assumption from deck analysis',
+                quotes: [],
+                validationAttributes: [{
+                  assumption: 'Need accurate, fast transcription to save time and improve efficiency',
+                  reality: 'Pending validation...',
+                  outcome: 'Insufficient Data' as const,
+                  confidence: 90,
+                  confidence_explanation: 'Default assumption from deck analysis',
+                  quotes: []
+                }]
+              }
+            ];
+            
+            setBuyerMapData({
+              assumptions: defaultAssumptions,
+              overallAlignmentScore: 85,
+              validatedCount: 0,
+              partiallyValidatedCount: 0,
+              pendingCount: defaultAssumptions.length
+            });
+          }
+          
+          setCurrentStage('deck-results');
+        }
+      } catch (error) {
+        console.error('❌ [BuyerMapApp] Failed to parse selected interviews:', error);
+      }
+    }
+  }, [buyerMapData]);
 
   // Persist lastDeckResult to localStorage
   useEffect(() => {

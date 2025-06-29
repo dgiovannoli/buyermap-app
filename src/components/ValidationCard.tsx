@@ -259,7 +259,7 @@ const ValidationCard: React.FC<React.PropsWithChildren<{ data: ValidationDataObj
                           Key Finding
                         </div>
                         <div className="text-base text-gray-900 leading-relaxed font-medium">
-                          {data.reality}
+                          {data.reality?.replace(/^(GAP IDENTIFIED:|VALIDATED:|CONTRADICTED:|INSUFFICIENT DATA:|ALIGNED:|MISALIGNED:|CHALLENGED:|NEW DATA ADDED:|REFINED:)\s*/i, '')}
                         </div>
                       </div>
                     </div>

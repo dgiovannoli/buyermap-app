@@ -13,13 +13,14 @@ interface BreadcrumbItem {
 interface BreadcrumbsProps {
   items: BreadcrumbItem[];
   className?: string;
+  homeHref?: string;
 }
 
-export default function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
+export default function Breadcrumbs({ items, className = '', homeHref = '/' }: BreadcrumbsProps) {
   return (
     <nav className={`flex items-center space-x-2 text-sm ${className}`} aria-label="Breadcrumb">
       <Link
-        href="/"
+        href={homeHref}
         className="flex items-center text-gray-400 hover:text-white transition-colors"
       >
         <Home className="h-4 w-4" />

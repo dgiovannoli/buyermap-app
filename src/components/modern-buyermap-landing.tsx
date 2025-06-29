@@ -453,7 +453,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
         }
       }
       
-      // Restore interview data if it exists
+      // Restore interview data if it exists and clean it
       if (interviewData) {
         try {
           const parsedInterviewData = JSON.parse(interviewData);
@@ -470,7 +470,28 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
               validationReality: parsedInterviewData[0].validationAttributes?.[0]?.reality?.slice(0, 50)
             } : 'No data'
           });
-          setLocalBuyerMapData(parsedInterviewData);
+          
+          // Clean the interview data by applying transformAssumptionForCard to each assumption
+          const cleanedInterviewData = parsedInterviewData.map((assumption: any) => {
+            const transformed = transformAssumptionForCard(assumption);
+            return {
+              ...assumption,
+              displayReality: transformed.displayReality,
+              displayOutcome: transformed.displayOutcome,
+              displayConfidence: transformed.displayConfidence
+            };
+          });
+          
+          console.log('🧹 [PERSISTENCE] Cleaned interview data:', {
+            beforeSample: parsedInterviewData[0]?.reality?.slice(0, 50),
+            afterSample: cleanedInterviewData[0]?.displayReality?.slice(0, 50)
+          });
+          
+          setLocalBuyerMapData(cleanedInterviewData);
+          
+          // Update localStorage with cleaned data
+          localStorage.setItem('interviewData', JSON.stringify(cleanedInterviewData));
+          
         } catch (error) {
           console.error('❌ [PERSISTENCE] Failed to parse interview data from localStorage:', error);
         }
@@ -515,7 +536,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
       console.log(`⏰ [SELECTED_INTERVIEWS] Starting analysis with ${timeoutMs/1000}s timeout...`);
       
-      const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
+      const analysisPromise = fetch('/api/analyze-interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -575,6 +596,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           }).then(r => r.json()).then(r => {
             if (!r.success) console.warn('Failed to persist results to backend:', r.error);
           }).catch(e => console.warn('Failed to persist results to backend:', e));
+
+          // --- NEW: Update analyzedInterviewIds for results summary ---
+          const processedIds = processedAssumptions.map((a: any) => a.id).filter(Boolean);
+          localStorage.setItem('analyzedInterviewIds', JSON.stringify(processedIds));
+          // Optionally, if you have interview metadata, update allUserInterviews here as well
+          // (If not, the Interview Library page will update it on next visit)
         } catch (error) {
           console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
         }
@@ -660,7 +687,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       setUploaded(true);
       setCurrentStep(3);
       // Set mock score based on the mock data (mock mode exception)
-      const mockScore = calculateOverallScore(sampleBuyerMapData as BuyerMapData[]);
+      const mockScore = calculateOverallScore(sampleBuyerMapData as unknown as BuyerMapData[]);
       setScore(mockScore);
     }
   }, [isMock, uploaded, setCurrentStep]);
@@ -712,7 +739,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       
       if (!hasInterviewDataInLocal && !hasInterviewDataInStorage) {
         console.log('🔄 [SYNC] Updating localBuyerMapData with buyerMapData (no interview data to preserve)');
-      setLocalBuyerMapData(buyerMapData);
+        setLocalBuyerMapData(buyerMapData);
       } else {
         console.log('🔄 [SYNC] Preserving interview data in localBuyerMapData (not overwriting with buyerMapData)', {
           hasInterviewDataInLocal,
@@ -827,80 +854,6 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     return Math.round(total / data.length);
   };
 
-  // Process deck with real API endpoint
-  const handleProcessDeck = async (files: File[]) => {
-    if (!files.length) {
-      console.log('No deck files to process');
-      return;
-    }
-
-    try {
-      console.log('🚀 [BLOB] Starting deck upload process...');
-      setIsProcessing(true);
-      setProcessError(null);
-
-      const file = files[0];
-      console.log(`📊 [BLOB] Processing deck: ${file.name}`);
-      
-      // Step 1: Check for file conflicts with enhanced handling
-      const conflict = await checkFileExists(file.name);
-      
-      let blobUrl: string | null = null;
-      let shouldUpload = true;
-      
-      if (conflict) {
-        console.log(`🔍 [BLOB] Deck conflict detected for "${file.name}"`);
-        
-        // Set up conflict for resolution
-        setConflictsAndShow([conflict]);
-        
-        // Wait for user resolution
-        return new Promise<void>((resolve, reject) => {
-          const handleResolution = async (resolution: FileConflictResolution) => {
-            try {
-              let processFile = file; // Create mutable reference
-              
-              switch (resolution.action) {
-                case 'use-existing':
-                  console.log(`🔄 [BLOB] Using existing deck: ${resolution.url}`);
-                  blobUrl = resolution.url!;
-                  shouldUpload = false;
-                  break;
-                case 'overwrite':
-                  console.log(`🔄 [BLOB] User chose to overwrite deck: ${file.name}`);
-                  shouldUpload = true;
-                  break;
-                case 'rename':
-                  console.log(`🔄 [BLOB] User chose to rename deck: ${resolution.fileName}`);
-                  // Update file name for upload
-                  processFile = new File([file], resolution.fileName, { type: file.type });
-                  shouldUpload = true;
-                  break;
-              }
-              
-              // Continue with upload process
-              await continueProcessDeck(processFile, blobUrl, shouldUpload);
-              resolve();
-            } catch (error) {
-              reject(error);
-            }
-          };
-          
-          // Store resolution handler for conflict dialog
-          (window as any).deckConflictResolver = handleResolution;
-        });
-      } else {
-        console.log(`📁 [BLOB] Deck "${file.name}" doesn't exist, proceeding with upload`);
-        await continueProcessDeck(file, blobUrl, shouldUpload);
-      }
-      
-    } catch (err) {
-      console.error('❌ Deck upload error', err);
-      setProcessError(`Deck processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      setIsProcessing(false);
-    }
-  };
-
   // Continue deck processing after conflict resolution
   const continueProcessDeck = async (file: File, existingBlobUrl: string | null, shouldUpload: boolean) => {
     try {
@@ -923,7 +876,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
       // Step 2: Send blob URL to analysis API
       console.log('📊 [BLOB] Sending deck blob URL to analysis API...');
-      const res = await fetch('http://localhost:3000/api/analyze-deck', {
+      const res = await fetch('/api/analyze-deck', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -976,7 +929,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   // Add this before the handleFileUpload function
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/test-auth');
+      const response = await fetch('/api/test-auth');
       const data = await response.json();
       console.log('🔐 [AUTH] Current auth status:', data);
       setAuthStatus(data.authenticated ? 'authenticated' : 'unauthenticated');
@@ -1096,7 +1049,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           const fileContent = Buffer.from(fileBuffer).toString('base64');
           
           // Check for duplicates using the API
-          const duplicateCheckResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+          const duplicateCheckResponse = await fetch('/api/save-interview-record', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1229,7 +1182,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
             });
             
             console.log('💾 [DATABASE] Making fetch request to /api/save-interview-record...');
-            const saveResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+            const saveResponse = await fetch('/api/save-interview-record', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1306,6 +1259,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
                 }).then(r => r.json()).then(r => {
                   if (!r.success) console.warn('Failed to persist results to backend:', r.error);
                 }).catch(e => console.warn('Failed to persist results to backend:', e));
+
+                // --- NEW: Update analyzedInterviewIds for results summary ---
+                const processedIds = processedAssumptions.map((a: any) => a.id).filter(Boolean);
+                localStorage.setItem('analyzedInterviewIds', JSON.stringify(processedIds));
+                // Optionally, if you have interview metadata, update allUserInterviews here as well
+                // (If not, the Interview Library page will update it on next visit)
               } catch (error) {
                 console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
               }
@@ -1369,7 +1328,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
 
           console.log(`⏰ [BLOB] Starting analysis with ${timeoutMs/1000}s timeout...`);
           
-        const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
+        const analysisPromise = fetch('/api/analyze-interviews', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -1419,7 +1378,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           });
           
           try {
-            const updateResponse = await fetch('http://localhost:3000/api/update-interview-record', {
+            const updateResponse = await fetch('/api/update-interview-record', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1480,6 +1439,12 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
             }).then(r => r.json()).then(r => {
               if (!r.success) console.warn('Failed to persist results to backend:', r.error);
             }).catch(e => console.warn('Failed to persist results to backend:', e));
+
+            // --- NEW: Update analyzedInterviewIds for results summary ---
+            const processedIds = processedAssumptions.map((a: any) => a.id).filter(Boolean);
+            localStorage.setItem('analyzedInterviewIds', JSON.stringify(processedIds));
+            // Optionally, if you have interview metadata, update allUserInterviews here as well
+            // (If not, the Interview Library page will update it on next visit)
           } catch (error) {
             console.error('❌ [PERSISTENCE] Failed to save interview data to localStorage:', error);
           }
@@ -1619,7 +1584,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           const fileBuffer = await originalFile.arrayBuffer();
           const fileContent = Buffer.from(fileBuffer).toString('base64');
           
-          const saveResponse = await fetch('http://localhost:3000/api/save-interview-record', {
+          const saveResponse = await fetch('/api/save-interview-record', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1658,7 +1623,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
           setTimeout(() => reject(new Error('Single file analysis timed out after 5 minutes')), timeoutMs)
         );
 
-        const analysisPromise = fetch('http://localhost:3000/api/analyze-interviews', {
+        const analysisPromise = fetch('/api/analyze-interviews', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -1815,15 +1780,37 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
       if (hasInterviewValidation && item.validationAttributes) {
         // Show interview validation results with green styling
         const validation = item.validationAttributes[0];
+        
+        // Transform the assumption to get cleaned reality
+        const transformedAssumption = transformAssumptionForCard({
+          ...item,
+          realityFromInterviews: validation.reality
+        });
+        
+        console.log(`🔍 [REALITY_CLEANUP] Assumption "${item.v1Assumption?.substring(0, 50)}...":`, {
+          originalReality: validation.reality?.substring(0, 100),
+          cleanedReality: transformedAssumption.displayReality?.substring(0, 100),
+          hasPrefix: validation.reality?.startsWith('GAP IDENTIFIED:') || validation.reality?.startsWith('VALIDATED:') || validation.reality?.startsWith('CONTRADICTED:')
+        });
+        
+        // Debug logging for quote availability
+        console.log(`🔍 [QUOTES_DEBUG] Assumption "${item.v1Assumption?.substring(0, 50)}...":`, {
+          validationQuotesLength: validation.quotes?.length || 0,
+          itemQuotesLength: item.quotes?.length || 0,
+          hasValidationQuotes: !!(validation.quotes && validation.quotes.length > 0),
+          hasItemQuotes: !!(item.quotes && item.quotes.length > 0),
+          finalQuotesLength: ((validation.quotes && validation.quotes.length > 0 ? validation.quotes : item.quotes) || []).length
+        });
+        
         return {
           id: item.id,
           icpAttribute: item.icpAttribute || '',
           title: item.v1Assumption || item.whyAssumption || '', // Keep original assumption as title
-          outcome: mapOutcome(item.displayOutcome || validation.outcome || ''),
-          confidence: item.displayConfidence || validation.confidence || 0,
+          outcome: mapOutcome(transformedAssumption.displayOutcome || validation.outcome || ''),
+          confidence: transformedAssumption.displayConfidence || validation.confidence || 0,
           confidenceExplanation: validation.confidence_explanation || '',
-          reality: item.displayReality || validation.reality, // Use pre-processed display reality
-          quotes: (validation.quotes || []).map((q, qIndex) => ({
+          reality: transformedAssumption.displayReality, // Use cleaned display reality
+          quotes: ((validation.quotes && validation.quotes.length > 0 ? validation.quotes : item.quotes) || []).map((q, qIndex) => ({
             text: q.text || (q as any).quote || (q as any).quoteText || '',
             author: q.speaker || (q as any).author || (q as any).speakerName || 'Anonymous',
             role: q.role || (q as any).speakerRole || '',
@@ -1836,14 +1823,16 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
         };
       } else if (hasDeckData) {
         // Show deck analysis data with blue styling as fallback
+        const transformedAssumption = transformAssumptionForCard(item);
+        
         return {
           id: item.id,
           icpAttribute: item.icpAttribute || '',
           title: item.v1Assumption || item.whyAssumption || '',
-          outcome: mapOutcome(item.displayOutcome || 'New Data Added'), // Use pre-processed display outcome
-          confidence: item.displayConfidence || item.confidenceScore || 0,
+          outcome: mapOutcome(transformedAssumption.displayOutcome || 'New Data Added'), // Use pre-processed display outcome
+          confidence: transformedAssumption.displayConfidence || item.confidenceScore || 0,
           confidenceExplanation: 'Analysis based on sales deck content',
-          reality: item.displayReality || item.v1Assumption || item.evidenceFromDeck || '', // Use pre-processed display reality
+          reality: transformedAssumption.displayReality, // Use cleaned display reality
           quotes: [],
           confidenceBreakdown: undefined,
           isPending: false,
@@ -1930,10 +1919,10 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
         )}
         <UploadComponent onComplete={() => {
       // Load mock data directly
-          setLocalBuyerMapData(sampleBuyerMapData as BuyerMapData[]);
+          setLocalBuyerMapData(sampleBuyerMapData as unknown as BuyerMapData[]);
       // Don't set score until interviews are processed (mock mode exception)
       if (isMock) {
-            setScore(calculateOverallScore(sampleBuyerMapData as BuyerMapData[]));
+            setScore(calculateOverallScore(sampleBuyerMapData as unknown as BuyerMapData[]));
       }
       setCurrentStep(3);
       setUploaded(true);
@@ -1946,7 +1935,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
   const testInterviewAnalysis = async () => {
     console.log('🧪 Testing interview analysis with debugging...');
     try {
-      const response = await fetch('http://localhost:3000/api/analyze-interviews', {
+      const response = await fetch('/api/analyze-interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1970,7 +1959,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     setUploadingInterviews(true);
     try {
       // Re-run the analysis with the last upload's blobUrls and assumptions
-      const analysisResponse = await fetch('http://localhost:3000/api/analyze-interviews', {
+      const analysisResponse = await fetch('/api/analyze-interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2015,6 +2004,7 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     localStorage.removeItem('buyerMapExpandedId');
     localStorage.removeItem('buyerMapUploadedFiles');
     localStorage.removeItem('interviewData'); // Clear interview data too
+    localStorage.removeItem('analyzedInterviewIds'); // Clear analyzed interview IDs too
     
     // Reset all local state
     setLocalBuyerMapData([]);
@@ -2031,6 +2021,89 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
     interviewProcessing.resetProcessing();
     
     console.log('✅ Session data cleared, returning to initial state');
+  };
+
+  // Function to force refresh localStorage data (for testing the cleanup fix)
+  const forceRefreshLocalStorage = () => {
+    console.log('🔄 Force refreshing localStorage data to apply cleanup fix');
+    
+    // Clear and reload the page to force fresh data
+    localStorage.clear();
+    window.location.reload();
+  };
+
+  // Process deck with real API endpoint
+  const handleProcessDeck = async (files: File[]) => {
+    if (!files.length) {
+      console.log('No deck files to process');
+      return;
+    }
+
+    try {
+      console.log('🚀 [BLOB] Starting deck upload process...');
+      setIsProcessing(true);
+      setProcessError(null);
+
+      const file = files[0];
+      console.log(`📊 [BLOB] Processing deck: ${file.name}`);
+      
+      // Step 1: Check for file conflicts with enhanced handling
+      const conflict = await checkFileExists(file.name);
+      
+      let blobUrl: string | null = null;
+      let shouldUpload = true;
+      
+      if (conflict) {
+        console.log(`🔍 [BLOB] Deck conflict detected for "${file.name}"`);
+        
+        // Set up conflict for resolution
+        setConflictsAndShow([conflict]);
+        
+        // Wait for user resolution
+        return new Promise<void>((resolve, reject) => {
+          const handleResolution = async (resolution: FileConflictResolution) => {
+            try {
+              let processFile = file; // Create mutable reference
+              
+              switch (resolution.action) {
+                case 'use-existing':
+                  console.log(`🔄 [BLOB] Using existing deck: ${resolution.url}`);
+                  blobUrl = resolution.url!;
+                  shouldUpload = false;
+                  break;
+                case 'overwrite':
+                  console.log(`🔄 [BLOB] User chose to overwrite deck: ${file.name}`);
+                  shouldUpload = true;
+                  break;
+                case 'rename':
+                  console.log(`🔄 [BLOB] User chose to rename deck: ${resolution.fileName}`);
+                  // Update file name for upload
+                  processFile = new File([file], resolution.fileName, { type: file.type });
+                  shouldUpload = true;
+                  break;
+              }
+              
+              // Continue with upload process
+              await continueProcessDeck(processFile, blobUrl, shouldUpload);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
+          };
+          
+          // Store resolution handler for conflict dialog
+          (window as any).deckConflictResolver = handleResolution;
+        });
+      } else {
+        console.log(`📁 [BLOB] Deck "${file.name}" doesn't exist, proceeding with upload`);
+        await continueProcessDeck(file, blobUrl, shouldUpload);
+      }
+      
+    } catch (err) {
+      console.error('❌ Deck upload error', err);
+      setProcessError(`Deck processing failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setIsProcessing(false);
+    }
   };
 
   // Always render the main results UI, but conditionally show content based on state
@@ -2094,6 +2167,14 @@ const ModernBuyerMapLanding: React.FC<ModernBuyerMapLandingProps & { onInterview
                   title="Clear all data and start a new session"
                 >
                   <span className="mr-2">🔄</span> Start New Session
+                </button>
+                {/* Test button for localStorage cleanup fix */}
+                <button
+                  onClick={forceRefreshLocalStorage}
+                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg font-semibold text-sm shadow hover:bg-red-700 transition-all duration-200"
+                  title="Force refresh localStorage to apply cleanup fix"
+                >
+                  <span className="mr-2">🧹</span> Fix Labels
                 </button>
               </div>
               {/* Remove always-visible supporting text for upload info */}
