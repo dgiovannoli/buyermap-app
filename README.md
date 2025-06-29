@@ -1,48 +1,129 @@
 # BuyerMap App
 
-A Next.js application for analyzing sales decks and customer interviews to validate market assumptions using AI-powered analysis.
+AI-powered buyer persona validation tool that analyzes sales decks and customer interviews to validate business assumptions.
 
-## Features
+## 🚀 Quick Start
 
-- **Deck Analysis**: Upload sales presentations (PDF, PowerPoint) to extract market assumptions
-- **Interview Validation**: Upload customer interviews to validate extracted assumptions
-- **Buyer Map Visualization**: Interactive visualization of assumption validation results
-- **Real-time Progress**: Live progress tracking during file processing
-- **Smart File Handling**: Conflict resolution for duplicate uploads
-- **High-Performance Uploads**: Optimized for files up to 500MB
+### Prerequisites
 
-## ⚡ Performance Optimizations
+- Node.js 18+
+- npm, yarn, or pnpm
+- Vercel account for deployment
 
-### Upload Performance Improvements (30s → 5-15s)
+### Installation
 
-We've implemented comprehensive optimizations to dramatically improve upload performance:
+```bash
+# Clone the repository
+git clone [repository-url]
+cd buyermap-app
 
-#### 🚀 **Multipart Upload Strategy**
-- **Automatic detection**: Files >10MB automatically use parallel chunk uploads
-- **Smart chunking**: Large files split and uploaded simultaneously  
-- **Resume capability**: Failed chunks automatically retried
-- **Real-time progress**: Live throughput and percentage tracking
+# Install dependencies  
+npm install
 
-#### 📊 **Performance Monitoring**
-```javascript
-// Example console output during upload:
-🔄 Upload strategy: multipart for 32.45MB file
-📈 Upload progress: 45% (14.50MB / 32.45MB)
-✅ Upload completed in 8.2s (3.96 MB/s throughput)
+# Set up environment variables
+cp env.example .env.local
+# Edit .env.local with your API keys
+
+# Run development server
+npm run dev
 ```
 
-#### 🔧 **Network Optimizations**
-- **500MB file limit**: Increased from 50MB for large presentations
-- **Global CDN**: Vercel Blob's worldwide edge network
-- **Optimized caching**: 1-year cache headers for faster delivery
-- **Smart routing**: Automatic region selection for lowest latency
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-### Performance Benchmarks
+### Environment Variables
 
-| File Size | Upload Strategy | Expected Time | Typical Throughput |
-|-----------|----------------|---------------|-------------------|
-| < 10MB    | Single upload  | 2-5 seconds   | 5-15 MB/s        |
-| 10-50MB   | Multipart      | 5-12 seconds  | 8-20 MB/s        |
+Copy `env.example` to `.env.local` and configure:
+
+```bash
+# Required for production
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
+OPENAI_API_KEY=your_openai_api_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+BETA_ACCESS_PASSWORD=your_chosen_password
+
+# Set to false for production
+NEXT_PUBLIC_USE_MOCK=false
+```
+
+### Local Development with Blob Storage
+
+For testing the full upload flow locally, you'll need to expose your localhost:
+
+```bash
+# Install ngrok (if not already installed)
+npm install -g ngrok
+
+# In terminal 1: Start your app
+npm run dev
+
+# In terminal 2: Expose localhost  
+ngrok http 3000
+
+# Use the ngrok URL for testing uploads
+```
+
+## Technology Stack
+
+- **Frontend**: Next.js 15, React 18, TypeScript
+- **Styling**: Tailwind CSS, Lucide React icons
+- **Storage**: Vercel Blob (S3-backed, globally distributed)
+- **AI**: OpenAI GPT-4 for content analysis
+- **Database**: Supabase (PostgreSQL with real-time features)
+- **Authentication**: Supabase Auth
+- **Deployment**: Vercel (with automatic CI/CD)
+
+## 🚀 Production Deployment
+
+### Quick Deploy to Vercel
+
+1. **Connect repository** to Vercel
+2. **Configure environment variables** in Vercel dashboard (use `env.example` as reference)
+3. **Create Blob storage** in Vercel dashboard under Storage tab
+4. **Deploy** - automatic builds from main branch
+
+### Production Checklist
+
+See [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md) for a comprehensive deployment guide.
+
+### Manual Deployment
+
+```bash
+# Build the application
+npm run build
+
+# Start production server
+npm start
+```
+
+## 🎯 Features
+
+### Core Functionality
+- **Deck Analysis**: Upload sales decks (PDF, PPTX) for AI-powered assumption extraction
+- **Interview Validation**: Upload customer interviews to validate assumptions
+- **Cumulative Analysis**: Build insights over time by adding more interviews
+- **Interview Library**: Manage and organize uploaded interviews with status tracking
+
+### Advanced Features
+- **Duplicate Detection**: Smart file deduplication with content hashing
+- **Quote Extraction**: AI-powered extraction of relevant customer quotes
+- **Confidence Scoring**: Validation confidence with detailed breakdowns
+- **Real-time Processing**: Live progress tracking during analysis
+
+### User Experience
+- **Beta Access Control**: Password-protected access for controlled rollout
+- **Magic Link Authentication**: Secure, passwordless authentication via Supabase
+- **Responsive Design**: Works seamlessly on desktop and mobile
+- **Progress Tracking**: Visual feedback during file processing
+
+## 📊 Performance
+
+### Upload Performance
+| File Size | Upload Strategy | Time | Speed |
+|-----------|----------------|------|-------|
+| <10MB     | Single upload  | 2-8 seconds | 5-15 MB/s |
+| 10-50MB   | Multipart      | 8-15 seconds | 8-20 MB/s |
 | 50-200MB  | Multipart + optimization | 12-30 seconds | 10-25 MB/s |
 | 200MB+    | Full optimization | 30-60 seconds | 15-30 MB/s |
 
@@ -91,96 +172,6 @@ If uploads are taking longer than expected:
 
 5. **Check for errors** in the Network tab of Developer Tools
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm, yarn, or pnpm
-- Vercel account for deployment
-
-### Installation
-
-```bash
-# Clone the repository
-git clone [repository-url]
-cd buyermap-app
-
-# Install dependencies  
-npm install
-
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your API keys
-
-# Run development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to view the application.
-
-### Environment Variables
-
-Create a `.env.local` file with:
-
-```bash
-# Vercel Blob Storage (for file uploads)
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
-
-# OpenAI (for AI analysis)
-OPENAI_API_KEY=your_openai_api_key
-
-# Supabase (for authentication and data)
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### Local Development with Blob Storage
-
-For testing the full upload flow locally, you'll need to expose your localhost:
-
-```bash
-# Install ngrok (if not already installed)
-npm install -g ngrok
-
-# In terminal 1: Start your app
-npm run dev
-
-# In terminal 2: Expose localhost  
-ngrok http 3000
-
-# Use the ngrok URL for testing uploads
-```
-
-## Technology Stack
-
-- **Frontend**: Next.js 15, React 18, TypeScript
-- **Styling**: Tailwind CSS, Lucide React icons
-- **Storage**: Vercel Blob (S3-backed, globally distributed)
-- **AI**: OpenAI GPT-4 for content analysis
-- **Database**: Supabase (PostgreSQL with real-time features)
-- **Authentication**: Supabase Auth
-- **Deployment**: Vercel (with automatic CI/CD)
-
-## Deployment
-
-### Vercel Deployment (Recommended)
-
-1. **Connect repository** to Vercel
-2. **Configure environment variables** in Vercel dashboard
-3. **Create Blob storage** in Vercel dashboard under Storage tab
-4. **Deploy** - automatic builds from main branch
-
-### Manual Deployment
-
-```bash
-# Build the application
-npm run build
-
-# Start production server
-npm start
-```
-
 ## Architecture
 
 ```
@@ -188,43 +179,54 @@ npm start
 │   Client App    │────│  Vercel Blob     │────│   OpenAI API    │
 │  (Next.js)      │    │  (File Storage)  │    │  (AI Analysis)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                                              │
-         └──────────────────┐              ┌───────────┘
-                           │              │
-                  ┌─────────────────┐    ┌─────────────────┐
-                  │   Supabase      │    │  Vercel Edge    │
-                  │  (Database)     │    │  (CDN/Hosting)  │
-                  └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Supabase      │    │   Pinecone       │    │   Vercel Edge   │
+│  (Auth + DB)    │    │  (Vector DB)     │    │   Functions     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## Contributing
+## 🔧 Development
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and test upload performance
-4. Commit your changes: `git commit -m 'Add amazing feature'`
-5. Push to the branch: `git push origin feature/amazing-feature`
-6. Open a pull request
-
-### Performance Testing
-
-When contributing, please test upload performance:
+### Available Scripts
 
 ```bash
-# Test with different file sizes
-# Small: <10MB, Medium: 10-50MB, Large: 50MB+
-
-# Monitor console for performance metrics
-# Ensure throughput is reasonable for your network
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
+npm run test         # Run tests
+npm run test:watch   # Run tests in watch mode
 ```
 
-## License
+### Mock Mode
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+For development without external APIs:
 
-## Support
+```bash
+# Set in .env.local
+NEXT_PUBLIC_USE_MOCK=true
+```
 
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review console logs for specific error messages  
-3. Open an issue with performance metrics and browser details
+See [MOCK_MODE_USAGE.md](./MOCK_MODE_USAGE.md) for details.
+
+## 📚 Documentation
+
+- [Production Deployment Guide](./PRODUCTION_CHECKLIST.md)
+- [Supabase Auth Setup](./SUPABASE_AUTH_SETUP.md)
+- [Mock Mode Usage](./MOCK_MODE_USAGE.md)
+- [Database Migration Instructions](./DATABASE_MIGRATION_INSTRUCTIONS.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
